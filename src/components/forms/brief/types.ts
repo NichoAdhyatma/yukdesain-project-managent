@@ -45,6 +45,7 @@ export interface MenuItem {
   price?: string;
   image?: string;
   caption?: string;
+  file?: File; // local file for preview, uploaded on form submit
 }
 
 export interface BoxReference {

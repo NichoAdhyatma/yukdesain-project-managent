@@ -61,25 +61,32 @@ function JsonTableField({ label, data }: { label: string; data: unknown }) {
     return (
       <div className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
-        <div className="rounded-lg border overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50">
-              <tr>
-                <th className="text-left px-3 py-2 font-medium text-muted-foreground">Nama</th>
-                <th className="text-right px-3 py-2 font-medium text-muted-foreground">Harga</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((item: { id: string; name: string; price?: string }, idx: number) => (
-                <tr key={item.id || idx} className="border-t">
-                  <td className="px-3 py-2">{item.name || "-"}</td>
-                  <td className="px-3 py-2 text-right text-muted-foreground">
-                    {item.price ? formatCurrency(parseInt(item.price, 10) || 0) : "-"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {data.map((item: { id: string; name: string; price?: string; image?: string; caption?: string }, idx: number) => (
+            <div key={item.id || idx} className="rounded-lg border overflow-hidden">
+              {item.image && (
+                <div className="aspect-square bg-muted/50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={item.image}
+                    alt={item.name || `Menu ${idx + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+              <div className="p-2">
+                <p className="text-sm font-medium truncate">{item.name || "-"}</p>
+                {item.price && (
+                  <p className="text-xs text-muted-foreground">
+                    {formatCurrency(parseInt(item.price, 10) || 0)}
+                  </p>
+                )}
+                {item.caption && (
+                  <p className="text-xs text-muted-foreground mt-0.5">{item.caption}</p>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     );

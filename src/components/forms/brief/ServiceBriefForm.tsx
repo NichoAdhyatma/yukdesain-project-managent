@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, Loader2 } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import {
   SERVICE_BRIEF_CONFIGS,
   type BriefResponses,
@@ -26,6 +26,7 @@ import { SingleImageUploader } from "./SingleImageUploader";
 import { BoxReferenceBuilder } from "./BoxReferenceBuilder";
 import { CartReferenceBuilder } from "./CartReferenceBuilder";
 import { KopiMenuBuilder } from "./KopiMenuBuilder";
+import { MenuItemBuilder } from "./MenuItemBuilder";
 import type { BoxReference, CartReference, KopiMenuItem } from "./types";
 
 interface ServiceBriefFormProps {
@@ -172,6 +173,9 @@ export function ServiceBriefForm({
     cartReferences
       .filter((item) => item.imageUrl?.startsWith("blob:"))
       .forEach((item) => { if (item.imageUrl) URL.revokeObjectURL(item.imageUrl); });
+    menuItems
+      .filter((item) => item.image?.startsWith("blob:"))
+      .forEach((item) => { if (item.image) URL.revokeObjectURL(item.image); });
     if (brandLogoUrl?.startsWith("blob:")) URL.revokeObjectURL(brandLogoUrl);
     if (vendorLogoUrl?.startsWith("blob:")) URL.revokeObjectURL(vendorLogoUrl);
 
@@ -199,9 +203,24 @@ export function ServiceBriefForm({
       responses.brand_logo_url = finalBrandLogoUrl;
     }
 
+    // Upload menu item images
+    const uploadedMenuItems = await Promise.all(
+      menuItems.filter((m) => m.name.trim()).map(async (item) => {
+        if (item.file) {
+          const uploaded = await uploadFile(item.file, "brief-menu-item");
+          return {
+            ...item,
+            image: uploaded?.publicUrl ?? item.image,
+            file: undefined,
+          };
+        }
+        return item;
+      })
+    );
+
     // Menu items for SVC-03/04/05
     if (serviceCode === "SVC-03" || serviceCode === "SVC-04" || serviceCode === "SVC-05") {
-      responses.menu_items_json = menuItems.filter((m) => m.name.trim());
+      responses.menu_items_json = uploadedMenuItems.filter((m) => m.name.trim());
     }
 
     // Cart sides for SVC-11
@@ -469,56 +488,18 @@ export function ServiceBriefForm({
             </CardContent>
           </Card>
 
-          {/* Menu Items - Repeatable */}
+          {/* Menu Items with image upload */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Daftar Menu / Produk</CardTitle>
-              <CardDescription>Tambahkan item yang ingin ditampilkan</CardDescription>
+              <CardDescription>Tambahkan item dengan gambar yang ingin ditampilkan</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {menuItems.map((item, idx) => (
-                <div key={item.id} className="flex gap-2 items-start">
-                  <Input
-                    placeholder="Nama item"
-                    value={item.name}
-                    onChange={(e) => {
-                      const updated = [...menuItems];
-                      updated[idx].name = e.target.value;
-                      setMenuItems(updated);
-                    }}
-                    className="flex-1"
-                  />
-                  <CurrencyInput
-                    value={parseInt(item.price ?? "", 10) || 0}
-                    onChange={(v) => {
-                      const updated = [...menuItems];
-                      updated[idx].price = String(v);
-                      setMenuItems(updated);
-                    }}
-                    placeholder="Rp 0"
-                  />
-                  {menuItems.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => setMenuItems(menuItems.filter((_, i) => i !== idx))}
-                      aria-label="Hapus menu item"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-              ))}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setMenuItems([...menuItems, { id: String(Date.now()), name: "", price: "" }])}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Tambah Item
-              </Button>
+              <MenuItemBuilder
+                items={menuItems}
+                onChange={setMenuItems}
+                disabled={isSubmitting}
+              />
             </CardContent>
           </Card>
         </>
