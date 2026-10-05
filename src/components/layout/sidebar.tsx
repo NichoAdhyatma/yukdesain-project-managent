@@ -14,6 +14,7 @@ import {
   Settings,
   Wallet,
   ChevronLeft,
+  PanelLeft,
   LogOut,
   ChevronDown,
   Package,
@@ -310,14 +311,9 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
           size="sm"
           onClick={onToggle}
           className="w-full justify-center"
-        >
           aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          <ChevronLeft
-            className={cn(
-              "w-4 h-4 transition-transform",
-              collapsed && "rotate-180"
-            )}
-          />
+        >
+          <PanelLeft className={cn("w-4 h-4", collapsed && "rotate-180")} />
           {!collapsed && <span className="ml-2 text-xs">Collapse</span>}
         </Button>
       </div>
