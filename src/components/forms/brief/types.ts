@@ -51,12 +51,14 @@ export interface BoxReference {
   id: string;
   description: string;
   imageUrl?: string;
+  file?: File; // local file for preview, uploaded on form submit
 }
 
 export interface CartReference {
   id: string;
-  imageUrl: string;
+  imageUrl?: string;
   description?: string;
+  file?: File; // local file for preview, uploaded on form submit
 }
 
 export interface CartSide {

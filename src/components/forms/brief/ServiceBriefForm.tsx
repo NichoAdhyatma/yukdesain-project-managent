@@ -130,10 +130,48 @@ export function ServiceBriefForm({
     );
     const allItems = [...uploadedItems, ...urlItems];
 
-    // Clean up local blob URLs
+    // Clean up local blob URLs from referenceItems
     referenceItems
       .filter((item) => item.type === "image" && item.url.startsWith("blob:"))
       .forEach((item) => URL.revokeObjectURL(item.url));
+
+    // Upload box reference files
+    const uploadedBoxRefs: typeof boxReferences = [];
+    for (const item of boxReferences) {
+      if (item.file) {
+        const uploaded = await uploadFile(item.file, "brief-box-reference");
+        if (uploaded) {
+          uploadedBoxRefs.push({ ...item, imageUrl: uploaded.publicUrl, file: undefined });
+        } else {
+          uploadedBoxRefs.push(item);
+        }
+      } else if (item.imageUrl) {
+        uploadedBoxRefs.push(item);
+      }
+    }
+
+    // Upload cart reference files
+    const uploadedCartRefs: typeof cartReferences = [];
+    for (const item of cartReferences) {
+      if (item.file) {
+        const uploaded = await uploadFile(item.file, "brief-cart-reference");
+        if (uploaded) {
+          uploadedCartRefs.push({ ...item, imageUrl: uploaded.publicUrl, file: undefined });
+        } else {
+          uploadedCartRefs.push(item);
+        }
+      } else if (item.imageUrl) {
+        uploadedCartRefs.push(item);
+      }
+    }
+
+    // Clean up local blob URLs
+    boxReferences
+      .filter((item) => item.imageUrl?.startsWith("blob:"))
+      .forEach((item) => { if (item.imageUrl) URL.revokeObjectURL(item.imageUrl); });
+    cartReferences
+      .filter((item) => item.imageUrl?.startsWith("blob:"))
+      .forEach((item) => { if (item.imageUrl) URL.revokeObjectURL(item.imageUrl); });
     if (brandLogoUrl?.startsWith("blob:")) URL.revokeObjectURL(brandLogoUrl);
     if (vendorLogoUrl?.startsWith("blob:")) URL.revokeObjectURL(vendorLogoUrl);
 
@@ -169,13 +207,13 @@ export function ServiceBriefForm({
     // Cart sides for SVC-11
     if (serviceCode === "SVC-11") {
       responses.cart_sides_json = cartSides.filter((s) => s.textBrief.trim());
-      responses.cart_references_json = cartReferences.filter((c) => c.imageUrl);
+      responses.cart_references_json = uploadedCartRefs.filter((c) => c.imageUrl);
       responses.kopi_menu_items_json = kopiMenuItems.filter((k) => k.name.trim());
     }
 
     // Box references for SVC-07
     if (serviceCode === "SVC-07") {
-      responses.box_references_json = boxReferences.filter((b) => b.imageUrl || b.description);
+      responses.box_references_json = uploadedBoxRefs.filter((b) => b.imageUrl || b.description);
     }
 
     // Vendor logo URL for SVC-09

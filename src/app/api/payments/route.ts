@@ -90,6 +90,12 @@ export async function POST(request: Request) {
       },
     });
 
+    // Auto-update invoice status to match payment
+    await prisma.invoice.updateMany({
+      where: { projectId },
+      data: { status: paymentStatus },
+    });
+
     // Log activity
     await prisma.activityLog.create({
       data: {

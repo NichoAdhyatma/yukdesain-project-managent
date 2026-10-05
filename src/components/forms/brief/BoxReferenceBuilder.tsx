@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useEffect } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Plus, Trash2, Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
+import { Plus, Trash2, Upload, X, Image as ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BoxReference } from "./types";
 
@@ -23,18 +23,48 @@ interface BoxReferenceBuilderProps {
 export function BoxReferenceBuilder({
   items,
   onChange,
-  projectId,
-  clientToken,
   disabled,
 }: BoxReferenceBuilderProps) {
-  const [uploadingId, setUploadingId] = useState<string | null>(null);
-  const [error, setError] = useState<string>();
+  const itemsRef = useRef(items);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  // Cleanup blob URLs on unmount
+  useEffect(() => {
+    return () => {
+      itemsRef.current.forEach((item) => {
+        if (item.imageUrl?.startsWith("blob:")) {
+          URL.revokeObjectURL(item.imageUrl);
+        }
+      });
+    };
+  }, []);
+
+  const handleFileSelect = (id: string, file: File) => {
+    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      return;
+    }
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      return;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    onChange(itemsRef.current.map((item) =>
+      item.id === id ? { ...item, imageUrl: previewUrl, file } : item
+    ));
+  };
 
   const addItem = () => {
     onChange([...items, { id: String(Date.now()), description: "" }]);
   };
 
   const removeItem = (id: string) => {
+    const item = itemsRef.current.find((item) => item.id === id);
+    if (item?.imageUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(item.imageUrl);
+    }
     onChange(items.filter((item) => item.id !== id));
   };
 
@@ -42,50 +72,13 @@ export function BoxReferenceBuilder({
     onChange(items.map((item) => (item.id === id ? { ...item, description } : item)));
   };
 
-  const uploadImage = async (id: string, file: File) => {
-    if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-      setError("Format file tidak didukung. Gunakan JPG, PNG, WebP, atau SVG.");
-      return;
-    }
-    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-      setError(`Ukuran file maksimal ${MAX_SIZE_MB}MB.`);
-      return;
-    }
-
-    setError(undefined);
-    setUploadingId(id);
-
-    const uploadUrl = clientToken
-      ? `/api/client-links/${clientToken}/upload`
-      : "/api/upload";
-
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("projectId", projectId);
-      formData.append("category", "brief-box-reference");
-
-      const res = await fetch(uploadUrl, { method: "POST", body: formData });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Upload gagal");
-        return;
-      }
-
-      onChange(items.map((item) =>
-        item.id === id ? { ...item, imageUrl: data.publicUrl } : item
-      ));
-    } catch {
-      setError("Upload gagal. Coba lagi.");
-    } finally {
-      setUploadingId(null);
-    }
-  };
-
   const removeImage = (id: string) => {
+    const item = itemsRef.current.find((item) => item.id === id);
+    if (item?.imageUrl?.startsWith("blob:")) {
+      URL.revokeObjectURL(item.imageUrl);
+    }
     onChange(items.map((item) =>
-      item.id === id ? { ...item, imageUrl: undefined } : item
+      item.id === id ? { ...item, imageUrl: undefined, file: undefined } : item
     ));
   };
 
@@ -133,6 +126,7 @@ export function BoxReferenceBuilder({
                           type="button"
                           onClick={() => removeImage(item.id)}
                           className="absolute -top-2 -right-2 bg-destructive text-destructive-foreground rounded-full p-1 hover:bg-destructive/80"
+                          aria-label="Hapus gambar"
                         >
                           <X className="h-3 w-3" />
                         </button>
@@ -150,25 +144,16 @@ export function BoxReferenceBuilder({
                         type="file"
                         accept={ACCEPTED_IMAGE_TYPES.join(",")}
                         className="hidden"
-                        disabled={disabled || uploadingId === item.id}
+                        disabled={disabled}
                         onChange={(e) => {
                           const file = e.target.files?.[0];
-                          if (file) uploadImage(item.id, file);
+                          if (file) handleFileSelect(item.id, file);
                         }}
                       />
-                      {uploadingId === item.id ? (
-                        <>
-                          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                          <p className="text-xs text-muted-foreground">Mengupload...</p>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="h-5 w-5 text-muted-foreground" />
-                          <p className="text-xs text-muted-foreground text-center">
-                            Seret gambar atau klik untuk upload
-                          </p>
-                        </>
-                      )}
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground text-center">
+                        Seret gambar atau klik untuk upload
+                      </p>
                     </label>
                   )}
 
@@ -213,8 +198,6 @@ export function BoxReferenceBuilder({
           )}
         </>
       )}
-
-      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }

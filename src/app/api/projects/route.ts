@@ -105,6 +105,7 @@ export async function POST(request: Request) {
       include: {
         client: true,
         service: true,
+        invoices: true,
       },
     });
 
@@ -119,7 +120,50 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json({ project }, { status: 201 });
+    // Auto-create invoice with service as line item
+    const now = new Date();
+    const year = now.getFullYear();
+    const lastInvoice = await prisma.invoice.findFirst({
+      where: { invoiceNumber: { startsWith: `INV-${year}-` } },
+      orderBy: { invoiceNumber: "desc" },
+    });
+    let nextInvoiceNum = 1;
+    if (lastInvoice?.invoiceNumber) {
+      const lastNum = parseInt(lastInvoice.invoiceNumber.replace(`INV-${year}-`, ""));
+      nextInvoiceNum = lastNum + 1;
+    }
+    const invoiceNumber = `INV-${year}-${String(nextInvoiceNum).padStart(4, "0")}`;
+
+    const invoice = await prisma.invoice.create({
+      data: {
+        projectId: project.id,
+        invoiceNumber,
+        items: [{
+          description: `${project.service?.name || "Jasa"} — ${projectNumber}`,
+          quantity: 1,
+          unitPrice: project.agreedPrice,
+          total: project.agreedPrice,
+        }],
+        subtotal: project.agreedPrice,
+        total: project.agreedPrice,
+        status: project.paymentStatus as "UNPAID" | "PARTIALLY_PAID" | "PAID",
+        issuedAt: now,
+      },
+    });
+
+    // Auto-create payment record if paidAmount > 0 (DP recorded upfront)
+    if (project.paidAmount > 0) {
+      await prisma.payment.create({
+        data: {
+          projectId: project.id,
+          amount: project.paidAmount,
+          date: now,
+          recordedBy: user.id,
+        },
+      });
+    }
+
+    return NextResponse.json({ project, invoice }, { status: 201 });
   } catch (error) {
     console.error("Error creating project:", error);
     return NextResponse.json({ error: "Failed to create project" }, { status: 500 });
