@@ -1,0 +1,497 @@
+// YukDesain Studio Portal - Database Schema
+// Simplified: Project = Order (merged entity)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// STATUS LABELS (Configurable)
+// ============================================
+
+model StatusLabel {
+  id        String   @id @default(cuid())
+  value     String   @unique  // enum value: DRAFT, BELUM_DIKERJAKAN, etc.
+  label     String            // Display label: "Draft", "Menunggu Brief"
+  variant   String   @default("secondary")  // Badge variant: default, secondary, outline, destructive
+  type      String   @default("PROJECT")   // PROJECT, PAYMENT, LINK, etc.
+  order     Int      @default(0)           // Sort order
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("status_labels")
+}
+
+model PaymentStatusLabel {
+  id        String   @id @default(cuid())
+  value     String   @unique
+  label     String
+  variant   String   @default("secondary")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payment_status_labels")
+}
+
+// ============================================
+// PAGE ACCESS CONTROL (page → roles mapping)
+// ============================================
+
+model PageRole {
+  id        String   @id @default(cuid())
+  path      String   @unique  // Route path: "/dashboard", "/projects", "/designer"
+  roles     String[]           // Roles that can access: ["OWNER"], ["DESIGNER"], or ["OWNER","DESIGNER"]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("page_roles")
+}
+
+// ============================================
+// NAVIGATION MENUS (Admin-configurable)
+// ============================================
+
+model MenuItem {
+  id        String   @id @default(cuid())
+  name      String            // "Dashboard", "Projects", "Workspace"
+  href      String            // Route path: "/dashboard", "/projects", "/designer"
+  icon      String            // Lucide icon name: "LayoutDashboard", "Briefcase"
+  group     String            // "Overview", "Work Management", "Finance"
+  order     Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  menu2Roles Menu2Role[]
+
+  @@map("menu_items")
+}
+
+model Menu2Role {
+  id        String   @id @default(cuid())
+  menuId    String
+  role      String            // "OWNER" or "DESIGNER"
+  createdAt DateTime @default(now())
+
+  // Relations
+  menu MenuItem @relation(fields: [menuId], references: [id], onDelete: Cascade)
+
+  @@unique([menuId, role])
+  @@map("menu2roles")
+}
+
+// ============================================
+// USERS & AUTHENTICATION
+// ============================================
+
+enum UserRole {
+  OWNER
+  DESIGNER
+}
+// Note: roles is stored as String[] to support multi-role users (e.g., owner+designer)
+
+enum ProjectStatus {
+  DRAFT              // Initial state - brief not submitted
+  BELUM_DIKERJAKAN   // Brief submitted - waiting to start
+  SEDANG_DIKERJAKAN  // In progress
+  SELESAI            // Completed
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+}
+
+enum LinkStatus {
+  ACTIVE
+  SUBMITTED
+  LOCKED
+  EXPIRED
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum RevisionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum WorkerClassification {
+  FULL_TIME
+  FREELANCER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  roles          String[]  @default(["DESIGNER"])  // Multi-role: ["OWNER"], ["DESIGNER"], or ["OWNER","DESIGNER"]
+  classification WorkerClassification @default(FULL_TIME)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  projects      Project[]         @relation("ProjectOwner")
+  assignments   ProjectAssignment[]
+  updates      ProjectUpdate[]
+  payments     Payment[]
+  activityLogs ActivityLog[]
+  sessions     Session[]
+
+  @@map("users")
+}
+
+// ============================================
+// CLIENTS
+// ============================================
+
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  projects Project[]
+
+  @@map("clients")
+}
+
+// ============================================
+// SERVICES (Service Catalog)
+// ============================================
+
+model Service {
+  id           String   @id @default(cuid())
+  code         String   @unique  // e.g., "SVC-01"
+  name         String
+  description  String?
+  outputFormat String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  projects Project[]
+
+  @@map("services")
+}
+
+// ============================================
+// PROJECTS (Merged Order + Project)
+// ============================================
+
+model Project {
+  id            String        @id @default(cuid())
+  projectNumber String        @unique  // e.g., "PRJ-001"
+
+  // Client info
+  clientId      String
+  clientName    String
+
+  // Service info
+  serviceId     String
+
+  // Pricing
+  agreedPrice   Int           // in cents
+  paidAmount    Int           @default(0)
+
+  // Dates
+  projectDate   DateTime      @default(now())
+  deadline      DateTime
+
+  // Status
+  status        ProjectStatus @default(DRAFT)
+  priority      Priority      @default(NORMAL)
+  paymentStatus PaymentStatus @default(UNPAID)
+
+  // Internal
+  ownerId       String        // Owner who created this project
+  notes         String?       // Internal notes
+
+  // Final Approval (BRD Section 21)
+  finalSubmittedAt DateTime?   // Designer submitted final work
+  finalApprovedAt  DateTime?   // Client approved final work
+
+  // Metadata
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  // Relations
+  client       Client       @relation(fields: [clientId], references: [id])
+  service      Service      @relation(fields: [serviceId], references: [id])
+  owner       User        @relation("ProjectOwner", fields: [ownerId], references: [id])
+  brief       Brief?
+  attachments Attachment[]   @relation("ProjectAttachments")
+  clientLinks ClientLink[]
+  assignments ProjectAssignment[]
+  updates    ProjectUpdate[]
+  revisions  Revision[]
+  payments   Payment[]
+  invoices   Invoice[]
+
+  @@index([clientId])
+  @@index([serviceId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([deadline])
+  @@map("projects")
+}
+
+// ============================================
+// BRIEF (Client's submission via one-time link)
+// ============================================
+
+model Brief {
+  id          String   @id @default(cuid())
+  projectId   String   @unique
+  responses   Json     // Array of { questionId, question, answer }
+  submittedAt DateTime @default(now())
+
+  // Relations
+  project     Project @relation(fields: [projectId], references: [id])
+  attachments Attachment[] @relation("BriefAttachments")
+
+  @@map("briefs")
+}
+
+// ============================================
+// CLIENT LINKS (One-time access tokens)
+// ============================================
+
+model ClientLink {
+  id        String     @id @default(cuid())
+  token     String     @unique  // 16-char alphanumeric
+  projectId String
+  status    LinkStatus @default(ACTIVE)
+  expiresAt DateTime?
+  usedAt    DateTime?
+  createdAt DateTime   @default(now())
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@index([token])
+  @@index([status])
+  @@map("client_links")
+}
+
+// ============================================
+// PROJECT ASSIGNMENT (Designer assignment)
+// ============================================
+
+model ProjectAssignment {
+  id              String   @id @default(cuid())
+  projectId       String
+  designerId      String
+  assignedAt      DateTime @default(now())
+  assignedBy      String   // User who assigned
+  freelancerPayout Int?    // in cents, only for FREELANCER
+
+  // Relations
+  project  Project @relation(fields: [projectId], references: [id])
+  designer User    @relation(fields: [designerId], references: [id])
+
+  @@unique([projectId]) // Only one active assignment
+  @@index([designerId])
+  @@map("project_assignments")
+}
+
+// ============================================
+// PROJECT UPDATES (Progress updates)
+// ============================================
+
+model ProjectUpdate {
+  id          String   @id @default(cuid())
+  projectId   String
+  progress    Int?     // 0-100
+  description String
+  authorId    String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  project    Project     @relation(fields: [projectId], references: [id])
+  author     User        @relation(fields: [authorId], references: [id])
+  attachment Attachment? @relation("UpdateAttachments")
+
+  @@index([projectId])
+  @@map("project_updates")
+}
+
+// ============================================
+// REVISIONS (3x quota)
+// ============================================
+
+model Revision {
+  id              String          @id @default(cuid())
+  projectId       String
+  number          Int             // 1, 2, or 3
+  description     String
+  status          RevisionStatus  @default(PENDING)
+  remainingQuota  Int             @default(2)  // After this revision: 2, 1, 0
+  requestedAt     DateTime        @default(now())
+  handledAt      DateTime?
+
+  // Relations
+  project     Project      @relation(fields: [projectId], references: [id])
+  attachments Attachment[] @relation("RevisionAttachments")
+
+  @@unique([projectId, number])
+  @@index([projectId])
+  @@map("revisions")
+}
+
+// ============================================
+// ATTACHMENT CATEGORIES
+// ============================================
+
+enum AttachmentCategory {
+  CLIENT_ASSET
+  BRIEF_REFERENCE
+  LOGO
+  PROGRESS
+  FINAL
+  REVISION
+  INVOICE
+}
+
+// ============================================
+// ATTACHMENTS (File metadata)
+// ============================================
+
+model Attachment {
+  id          String   @id @default(cuid())
+  filename    String
+  mimeType    String
+  size        Int      // bytes
+  storageKey  String   // R2/S3 key
+  caption     String?
+  category    AttachmentCategory @default(CLIENT_ASSET)
+
+  // Polymorphic relations via foreign keys
+  briefId     String?  @unique
+  projectId   String?
+  updateId    String?  @unique
+  revisionId  String?
+
+  uploaderId  String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  brief       Brief?        @relation("BriefAttachments", fields: [briefId], references: [id])
+  project     Project?      @relation("ProjectAttachments", fields: [projectId], references: [id])
+  update      ProjectUpdate? @relation("UpdateAttachments", fields: [updateId], references: [id])
+  revision    Revision?     @relation("RevisionAttachments", fields: [revisionId], references: [id])
+
+  @@index([briefId])
+  @@index([projectId])
+  @@index([updateId])
+  @@index([revisionId])
+  @@map("attachments")
+}
+
+// ============================================
+// PAYMENTS
+// ============================================
+
+model Payment {
+  id          String   @id @default(cuid())
+  projectId   String
+  amount      Int      // in cents
+  date        DateTime @default(now())
+  method      String?  // e.g., "Bank Transfer"
+  reference   String?  // e.g., bank slip number
+  notes       String?
+  recordedBy   String
+  createdAt   DateTime @default(now())
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [recordedBy], references: [id])
+
+  @@index([projectId])
+  @@map("payments")
+}
+
+// ============================================
+// INVOICES
+// ============================================
+
+model Invoice {
+  id            String        @id @default(cuid())
+  projectId     String        @unique
+  invoiceNumber String        @unique  // e.g., "INV-2026-0001"
+  items         Json          // Array of { description, quantity, unitPrice, total }
+  subtotal      Int
+  tax           Int?
+  total         Int
+  status        PaymentStatus @default(UNPAID)
+  issuedAt      DateTime      @default(now())
+  dueDate       DateTime?
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id])
+
+  @@map("invoices")
+}
+
+// ============================================
+// ACTIVITY LOGS (Audit Trail)
+// ============================================
+
+model ActivityLog {
+  id            String   @id @default(cuid())
+  entityType    String   // e.g., "Project", "Revision"
+  entityId      String
+  action        String   // e.g., "CREATED", "STATUS_CHANGED"
+  actorId       String
+  previousValue Json?    // Snapshot of previous state
+  newValue      Json?    // Snapshot of new state
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  // Relations
+  actor User @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// ============================================
+// SESSIONS (For auth)
+// ============================================
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  activeRole String?             // Current active role for this session: "OWNER" or "DESIGNER"
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}

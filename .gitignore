@@ -1,0 +1,59 @@
+# Dependencies
+node_modules/
+
+# Build output
+.next/
+out/
+dist/
+build/
+
+# Environment — never commit secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Prisma
+prisma/migrations/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Supabase
+.supabase/
+supabase/.temp/
+
+# Checkpoints (dev notes only, not deployed)
+checkpoints/
+
+# Vercel
+.vercel/
+
+# TypeScript
+*.tsbuildinfo
+
+# Claude Code settings (local session state)
+.claude/
+
+# Agent scaffolds (not project files)
+.agents/
+.cursor/
+.devin/
+yukdesain_studio_portal_merged_agent_spec.md
+
+# Misc
+*.pid
+*.seed
