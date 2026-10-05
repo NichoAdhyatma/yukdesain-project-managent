@@ -57,3 +57,5 @@ yukdesain_studio_portal_merged_agent_spec.md
 # Misc
 *.pid
 *.seed
+.vercel
+.env*

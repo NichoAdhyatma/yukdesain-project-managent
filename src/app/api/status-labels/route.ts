@@ -20,10 +20,17 @@ export async function GET() {
       orderBy: { id: "asc" },
     });
 
-    return NextResponse.json({
-      projectStatuses,
-      paymentStatuses,
-    });
+    return NextResponse.json(
+      {
+        projectStatuses,
+        paymentStatuses,
+      },
+      {
+        headers: {
+          "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
+        },
+      }
+    );
   } catch (error) {
     console.error("Error fetching status labels:", error);
     return NextResponse.json({ error: "Failed to fetch status labels" }, { status: 500 });

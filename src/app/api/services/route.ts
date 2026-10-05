@@ -13,7 +13,15 @@ export async function GET() {
       orderBy: { code: "asc" },
     });
 
-    return NextResponse.json({ services });
+    return NextResponse.json(
+      { services },
+      {
+        headers: {
+          // Cache for 1 hour on client, revalidate in background for up to 24h
+          "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
+        },
+      }
+    );
   } catch (error) {
     console.error("Error fetching services:", error);
     return NextResponse.json(
