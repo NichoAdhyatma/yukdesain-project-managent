@@ -153,7 +153,7 @@ const projectStatusConfig: Record<string, {
     bgColor: "bg-blue-100",
     bgColorDark: "dark:bg-blue-900/50",
     textColor: "text-blue-800",
-    textColorDark: "dark:text-blue-200",
+    textColorDark: "dark:text-blue-100",
     description: "Designer sedang mengerjakan project"
   },
   SELESAI: {
@@ -163,7 +163,7 @@ const projectStatusConfig: Record<string, {
     bgColor: "bg-emerald-100",
     bgColorDark: "dark:bg-emerald-900/50",
     textColor: "text-emerald-800",
-    textColorDark: "dark:text-emerald-200",
+    textColorDark: "dark:text-emerald-100",
     description: "Project telah selesai"
   },
 };
@@ -183,7 +183,7 @@ const paymentStatusConfig: Record<string, {
     bgColor: "bg-red-100",
     bgColorDark: "dark:bg-red-900/50",
     textColor: "text-red-800",
-    textColorDark: "dark:text-red-200",
+    textColorDark: "dark:text-red-100",
     description: "Segera lakukan pembayaran"
   },
   PARTIALLY_PAID: {
@@ -201,7 +201,7 @@ const paymentStatusConfig: Record<string, {
     bgColor: "bg-emerald-100",
     bgColorDark: "dark:bg-emerald-900/50",
     textColor: "text-emerald-800",
-    textColorDark: "dark:text-emerald-200",
+    textColorDark: "dark:text-emerald-100",
     description: "Pembayaran lunas"
   },
 };
@@ -232,6 +232,7 @@ function HeroBanner({ project, paymentPct, deadlineStr, statusCfg, paymentCfg }:
   const Icon = statusCfg.icon;
 
   return (
+    /* Purpose: visual hierarchy — separates hero section from page background, frames primary service info */
     <div className="rounded-2xl bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 border border-primary/20 p-4 sm:p-5 space-y-4">
       {/* Top row: Service name + Status badge */}
       <div className="flex items-start justify-between gap-3">
@@ -297,20 +298,22 @@ function HeroBanner({ project, paymentPct, deadlineStr, statusCfg, paymentCfg }:
 
 // ── Quick Action Cards ─────────────────────────────────────────────────────────
 
-function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhausted, latestInvoice, paymentCfg }: {
+function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhausted, latestInvoice, paymentCfg, onPaymentClick, onInvoiceClick }: {
   project: NonNullable<ClientLink["project"]>;
   paymentPct: number;
   remainingQuota: number;
   isQuotaExhausted: boolean;
   latestInvoice?: NonNullable<ClientLink["project"]>["invoices"][number];
   paymentCfg: typeof paymentStatusConfig[string];
+  onPaymentClick?: () => void;
+  onInvoiceClick?: () => void;
 }) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
       {/* Payment Status Card */}
       <button
         className="rounded-xl border bg-card text-left p-4 hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98] cursor-pointer"
-        onClick={() => {}}
+        onClick={onPaymentClick}
       >
         <div className="flex items-center gap-2 mb-2">
           <CreditCard className="h-4 w-4 text-muted-foreground" />
@@ -323,17 +326,14 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
       </button>
 
       {/* Revision Quota Card */}
-      <button
-        className="rounded-xl border bg-card text-left p-4 hover:border-orange-400/40 hover:shadow-sm transition-all active:scale-[0.98]"
-        onClick={() => {}}
-      >
+      <div className="rounded-xl border bg-card text-left p-4">
         <div className="flex items-center gap-2 mb-2">
           <RefreshCw className="h-4 w-4 text-muted-foreground" />
           <span className="text-xs font-medium text-muted-foreground">Revisi</span>
         </div>
         {isQuotaExhausted ? (
           <>
-            <Badge className="text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 mb-2">Habis</Badge>
+            <Badge className="text-xs font-medium bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100 mb-2">Habis</Badge>
             <p className="text-xs text-muted-foreground mt-1">Kuota revisi sudah terpakai semua</p>
           </>
         ) : (
@@ -345,12 +345,12 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
             <p className="text-xs text-muted-foreground">Ajukan revisi jika perlu perubahan</p>
           </>
         )}
-      </button>
+      </div>
 
       {/* Invoice Card */}
       <button
         className="rounded-xl border bg-card text-left p-4 hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98]"
-        onClick={() => {}}
+        onClick={onInvoiceClick}
       >
         <div className="flex items-center gap-2 mb-2">
           <Receipt className="h-4 w-4 text-muted-foreground" />
@@ -359,7 +359,7 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
         {latestInvoice ? (
           <>
             <p className="text-lg font-bold text-foreground mb-1">{formatCurrency(latestInvoice.total)}</p>
-            <Badge className="text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
+            <Badge className="text-xs font-medium bg-blue-100 text-blue-950 dark:bg-blue-900 dark:text-blue-100">
               {latestInvoice.invoiceNumber}
             </Badge>
           </>
@@ -383,9 +383,9 @@ function TimelineStep({ event, isActive, isCompleted }: { event: TimelineEvent; 
   return (
     <div className="flex flex-col items-center text-center min-w-[70px] sm:min-w-[80px]">
       <div className={cn(
-        "w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-300",
+        "w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ring-4 ring-primary/30 bg-primary text-primary-foreground",
         isActive
-          ? "ring-4 ring-primary/25 bg-primary text-primary-foreground shadow-lg scale-110 z-10"
+          ? "ring-4 ring-primary/30 bg-primary text-primary-foreground"
           : isCompleted
             ? cn(config.bgColor, config.bgColorDark, "ring-2 ring-primary/20")
             : "bg-muted text-muted-foreground"
@@ -425,8 +425,8 @@ function HorizontalTimeline({ events, activeProgress }: { events: TimelineEvent[
   return (
     <div className="space-y-3">
       {/* Timeline steps */}
-      <div className="w-full overflow-x-auto pb-1 -mx-1 px-1">
-        <div className="flex items-start min-w-max px-1">
+      <div className="w-full overflow-x-auto">
+        <div className="flex items-start min-w-max px-2 py-1">
           {events.map((event, idx) => (
             <div key={event.id} className="flex items-center">
               <TimelineStep
@@ -720,26 +720,43 @@ function BriefTab({ project }: { project: BriefTabProject }) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Sisi Gerobak</CardTitle>
           </CardHeader>
-          <CardContent className="overflow-auto">
-            <div className="min-w-[400px]">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50">
-                  <tr>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Sisi</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Ukuran</th>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Deskripsi</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cartSides.map((side, idx) => (
-                    <tr key={idx} className="border-t">
-                      <td className="px-3 py-2.5 font-medium text-sm">{side.sideName}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground text-sm">{side.dimensions}</td>
-                      <td className="px-3 py-2.5 text-sm">{side.textBrief || "-"}</td>
+          <CardContent>
+            {/* Mobile: stacked cards */}
+            <div className="sm:hidden space-y-2">
+              {cartSides.map((side, idx) => (
+                <div key={idx} className="rounded-lg border bg-card p-3 space-y-1.5">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-sm font-semibold text-foreground">{side.sideName}</p>
+                    <p className="text-xs text-muted-foreground">{side.dimensions}</p>
+                  </div>
+                  {side.textBrief && (
+                    <p className="text-xs text-muted-foreground">{side.textBrief}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+            {/* Desktop: table */}
+            <div className="hidden sm:block overflow-auto">
+              <div className="min-w-[400px]">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Sisi</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Ukuran</th>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Deskripsi</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {cartSides.map((side, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="px-3 py-2.5 font-medium text-sm">{side.sideName}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground text-sm">{side.dimensions}</td>
+                        <td className="px-3 py-2.5 text-sm">{side.textBrief || "-"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -842,10 +859,10 @@ function InvoiceTab({
   }
 
   const statusConfig: Record<string, { label: string; color: string; bgColor: string; bgColorDark: string; textColor: string; textColorDark: string }> = {
-    DRAFT: { label: "Draft", color: "text-gray-500", bgColor: "bg-gray-100", bgColorDark: "dark:bg-gray-800/60", textColor: "text-gray-700", textColorDark: "dark:text-gray-200" },
-    ISSUED: { label: "Issued", color: "text-blue-600", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900/50", textColor: "text-blue-700", textColorDark: "dark:text-blue-200" },
-    PAID: { label: "Lunas", color: "text-emerald-600", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900/50", textColor: "text-emerald-700", textColorDark: "dark:text-emerald-200" },
-    CANCELLED: { label: "Cancelled", color: "text-red-600", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900/50", textColor: "text-red-700", textColorDark: "dark:text-red-200" },
+    DRAFT: { label: "Draft", color: "text-gray-500", bgColor: "bg-gray-100", bgColorDark: "dark:bg-gray-800/60", textColor: "text-gray-900", textColorDark: "dark:text-gray-100" },
+    ISSUED: { label: "Issued", color: "text-blue-600", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900/50", textColor: "text-blue-950", textColorDark: "dark:text-blue-100" },
+    PAID: { label: "Lunas", color: "text-emerald-600", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900/50", textColor: "text-emerald-950", textColorDark: "dark:text-emerald-100" },
+    CANCELLED: { label: "Cancelled", color: "text-red-600", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900/50", textColor: "text-red-950", textColorDark: "dark:text-red-100" },
   };
   const statusCfg = statusConfig[latestInvoice.status] || statusConfig.DRAFT;
 
@@ -986,8 +1003,8 @@ function PaymentTab({
             <div className="flex items-start gap-3">
               <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <div className="space-y-1.5">
-                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Segera Lakukan Pembayaran</p>
-                <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+                <p className="text-sm font-semibold text-amber-950 dark:text-amber-100">Segera Lakukan Pembayaran</p>
+                <p className="text-xs text-amber-950 dark:text-amber-300 leading-relaxed">
                   Transfer ke rekening yang tertera pada invoice resmi. Setelah transfer, kirim bukti ke admin via WhatsApp untuk konfirmasi.
                 </p>
               </div>
@@ -1040,7 +1057,7 @@ function FinalApprovalCard({
             </div>
             <div>
               <p className="font-semibold text-emerald-900 dark:text-emerald-100">Project Selesai!</p>
-              <p className="text-sm text-emerald-700 dark:text-emerald-300">
+              <p className="text-sm text-emerald-900 dark:text-emerald-100">
                 Disetujui pada {formatDate(project.finalApprovedAt)}
               </p>
             </div>
@@ -1062,7 +1079,7 @@ function FinalApprovalCard({
             </div>
             <div className="flex-1">
               <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">Final Work Sudah Disubmit!</p>
-              <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+              <p className="text-xs text-blue-950 dark:text-blue-100 mt-0.5">
                 Designer sudah submit hasil akhir. Review dan approve jika sudah sesuai.
               </p>
             </div>
@@ -1085,7 +1102,7 @@ function FinalApprovalCard({
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 p-3">
-              <p className="text-sm text-emerald-800 dark:text-emerald-200">
+              <p className="text-sm text-emerald-950 dark:text-emerald-100">
                 Dengan menekan <strong>&quot;Ya, Approve&quot;</strong>, project akan ditandai SELESAI. Pastikan kamu sudah puas dengan hasilnya. Jika ada revisi, gunakan tombol Request Revision di atas.
               </p>
             </div>
@@ -1143,7 +1160,7 @@ function RevisionForm({
         <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+            <p className="text-xs text-amber-950 dark:text-amber-300 leading-relaxed">
               Isi revisi se-detail mungkin. Pengajuan tidak lengkap tetap terhitung 1x.
             </p>
           </div>
@@ -1432,6 +1449,8 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
           isQuotaExhausted={isQuotaExhausted}
           latestInvoice={latestInvoice}
           paymentCfg={paymentCfg}
+          onPaymentClick={() => setActiveTab("payment")}
+          onInvoiceClick={() => setActiveTab("invoice")}
         />
 
         {/* Horizontal Timeline */}
