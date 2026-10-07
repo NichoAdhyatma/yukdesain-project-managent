@@ -453,6 +453,24 @@ model Invoice {
 }
 
 // ============================================
+// STUDIO PAYMENT ACCOUNTS (Bank & E-Wallet)
+// ============================================
+
+model PaymentAccount {
+  id        String   @id @default(cuid())
+  type      String   // "BANK" | "EWALLET"
+  name      String   // e.g., "BCA", "GoPay", "OVO"
+  accountNumber String
+  accountHolder String
+  isActive  Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("payment_accounts")
+}
+
+// ============================================
 // ACTIVITY LOGS (Audit Trail)
 // ============================================
 
