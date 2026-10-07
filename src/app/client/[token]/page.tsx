@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, type Dispatch, type SetStateAction } from "react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,16 +20,19 @@ import {
   History,
   Receipt,
   CreditCard,
+  CalendarDays,
+  ChevronRight,
 } from "lucide-react";
 import { ServiceBriefForm } from "@/components/forms/brief/ServiceBriefForm";
 import type { BriefResponses } from "@/components/forms/brief/types";
+import { FileUploadField } from "@/components/ui/file-upload-field";
+import { toast } from "@/components/ui/toast";
 
 type BriefResponseItem = {
   questionId: string;
   question: string;
   answer: string;
 };
-import { toast } from "@/components/ui/toast";
 
 type ClientLink = {
   id: string;
@@ -90,6 +93,7 @@ type TimelineEvent = {
   id: string;
   type: "brief_submitted" | "designer_assigned" | "progress" | "revision" | "final_submitted" | "final_approved";
   title: string;
+  titleShort: string;
   description?: string;
   date: string;
   author?: string;
@@ -99,180 +103,433 @@ type TimelineEvent = {
   revisionNumber?: number;
 };
 
-const eventConfig: Record<TimelineEvent["type"], { icon: React.ElementType; color: string; bgColor: string }> = {
-  brief_submitted: { icon: Send, color: "text-blue-600", bgColor: "bg-blue-100 dark:bg-blue-900" },
-  designer_assigned: { icon: UserCheck, color: "text-purple-600", bgColor: "bg-purple-100 dark:bg-purple-900" },
-  progress: { icon: TrendingUp, color: "text-green-600", bgColor: "bg-green-100 dark:bg-green-900" },
-  revision: { icon: RefreshCw, color: "text-orange-600", bgColor: "bg-orange-100 dark:bg-orange-900" },
-  final_submitted: { icon: Star, color: "text-yellow-600", bgColor: "bg-yellow-100 dark:bg-yellow-900" },
-  final_approved: { icon: CheckCircle2, color: "text-emerald-600", bgColor: "bg-emerald-100 dark:bg-emerald-900" },
+const eventConfig: Record<TimelineEvent["type"], { icon: React.ElementType; color: string; bgColor: string; bgColorDark: string }> = {
+  brief_submitted: { icon: Send, color: "text-blue-600", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900/50" },
+  designer_assigned: { icon: UserCheck, color: "text-purple-600", bgColor: "bg-purple-100", bgColorDark: "dark:bg-purple-900/50" },
+  progress: { icon: TrendingUp, color: "text-green-600", bgColor: "bg-green-100", bgColorDark: "dark:bg-green-900/50" },
+  revision: { icon: RefreshCw, color: "text-orange-600", bgColor: "bg-orange-100", bgColorDark: "dark:bg-orange-900/50" },
+  final_submitted: { icon: Star, color: "text-amber-600", bgColor: "bg-amber-100", bgColorDark: "dark:bg-amber-900/50" },
+  final_approved: { icon: CheckCircle2, color: "text-emerald-600", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900/50" },
 };
 
 const MAX_REVISION_QUOTA = 3;
 
-function TimelineItem({ event, isLast }: { event: TimelineEvent; isLast: boolean }) {
-  const config = eventConfig[event.type];
-  const Icon = config.icon;
-  return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center">
-        <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0", config.bgColor)}>
-          <Icon className={cn("h-4 w-4", config.color)} />
-        </div>
-        {!isLast && <div className="w-px flex-1 bg-border mt-1" />}
-      </div>
-      <div className={cn("flex-1 pb-6", isLast && "pb-0")}>
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-medium">{event.title}</p>
-          <span className="text-xs text-muted-foreground shrink-0">
-            {new Date(event.date).toLocaleDateString("id-ID", { day: "numeric", month: "short" })}
-          </span>
-        </div>
-        {event.description && (
-          <p className="text-sm text-muted-foreground mt-0.5">{event.description}</p>
-        )}
-        {event.progress !== undefined && event.progress !== null && (
-          <div className="mt-2">
-            <div className="flex justify-between text-xs text-muted-foreground mb-1">
-              <span>Progress</span>
-              <span>{event.progress}%</span>
-            </div>
-            <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-primary rounded-full transition-all"
-                style={{ width: `${event.progress}%` }}
-              />
-            </div>
-          </div>
-        )}
-        {event.attachments && event.attachments.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {event.attachments.map((att) => (
-              <a
-                key={att.id}
-                href={`${process.env.NEXT_PUBLIC_STORAGE_URL || ""}/${att.storageKey}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-primary hover:underline bg-muted/50 px-2 py-1 rounded-md"
-              >
-                <Paperclip className="h-3 w-3" />
-                {att.filename}
-              </a>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
+// ── Status Config ──────────────────────────────────────────────────────────────
 
-function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEvent[] {
-  const events: TimelineEvent[] = [];
-
-  // Brief submitted
-  if (project.brief) {
-    events.push({
-      id: `brief-${project.brief.id}`,
-      type: "brief_submitted",
-      title: "Brief submitted",
-      description: "Brief berhasil disubmit. Project siap diproses.",
-      date: (project.brief as { submittedAt?: string }).submittedAt || project.brief.id,
-    });
-  }
-
-  // Designer assigned
-  if (project.assignments && project.assignments.length > 0) {
-    events.push({
-      id: `assigned-${project.assignments[0].designer.id}`,
-      type: "designer_assigned",
-      title: "Designer ditugaskan",
-      description: `${project.assignments[0].designer.name} telah ditugaskan untuk project ini.`,
-      date: (project.assignments[0] as unknown as { assignedAt?: string }).assignedAt || new Date().toISOString(),
-    });
-  }
-
-  // Progress updates (sorted oldest first)
-  const sortedUpdates = [...(project.updates || [])].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-  );
-  for (const update of sortedUpdates) {
-    events.push({
-      id: `progress-${update.id}`,
-      type: "progress",
-      title: "Progress update",
-      description: update.description,
-      date: update.createdAt,
-      author: update.author.name,
-      progress: update.progress,
-      attachments: update.attachment ? [update.attachment] : [],
-    });
-  }
-
-  // Revisions (sorted oldest first)
-  const sortedRevisions = [...project.revisions].sort(
-    (a, b) => new Date(a.requestedAt).getTime() - new Date(b.requestedAt).getTime()
-  );
-  for (const rev of sortedRevisions) {
-    events.push({
-      id: `revision-${rev.id}`,
-      type: "revision",
-      title: `Revisi #${rev.number}`,
-      description: rev.description,
-      date: rev.requestedAt,
-      status: rev.status,
-      revisionNumber: rev.number,
-      attachments: rev.attachments,
-    });
-  }
-
-  // Final submitted
-  if (project.finalSubmittedAt) {
-    events.push({
-      id: "final-submitted",
-      type: "final_submitted",
-      title: "Final work submitted",
-      description: "Designer telah submit hasil akhir. Menunggu approval kamu.",
-      date: project.finalSubmittedAt,
-    });
-  }
-
-  // Final approved
-  if (project.finalApprovedAt) {
-    events.push({
-      id: "final-approved",
-      type: "final_approved",
-      title: "Project selesai!",
-      description: "Final work telah disetujui. Terima kasih!",
-      date: project.finalApprovedAt,
-    });
-  }
-
-  // Sort by date
-  return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-}
-
-const statusMap: Record<string, { label: string; variant: string; class: string }> = {
-  DRAFT: { label: "Draft", variant: "secondary", class: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300" },
-  BELUM_DIKERJAKAN: { label: "Menunggu Brief", variant: "secondary", class: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-  SEDANG_DIKERJAKAN: { label: "Sedang Dikerjakan", variant: "default", class: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
-  SELESAI: { label: "Selesai", variant: "default", class: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+const projectStatusConfig: Record<string, {
+  label: string;
+  icon: React.ElementType;
+  color: string;
+  bgColor: string;
+  bgColorDark: string;
+  textColor: string;
+  textColorDark: string;
+  description: string;
+}> = {
+  DRAFT: {
+    label: "Draft",
+    icon: FileText,
+    color: "text-gray-500",
+    bgColor: "bg-gray-100",
+    bgColorDark: "dark:bg-gray-800/60",
+    textColor: "text-gray-700",
+    textColorDark: "dark:text-gray-200",
+    description: "Project sedang dibuat"
+  },
+  BELUM_DIKERJAKAN: {
+    label: "Menunggu Brief",
+    icon: Clock,
+    color: "text-yellow-600",
+    bgColor: "bg-yellow-100",
+    bgColorDark: "dark:bg-yellow-900/50",
+    textColor: "text-yellow-800",
+    textColorDark: "dark:text-yellow-200",
+    description: "Menunggu brief dari client"
+  },
+  SEDANG_DIKERJAKAN: {
+    label: "Sedang Dikerjakan",
+    icon: TrendingUp,
+    color: "text-blue-600",
+    bgColor: "bg-blue-100",
+    bgColorDark: "dark:bg-blue-900/50",
+    textColor: "text-blue-800",
+    textColorDark: "dark:text-blue-200",
+    description: "Designer sedang mengerjakan project"
+  },
+  SELESAI: {
+    label: "Selesai",
+    icon: CheckCircle2,
+    color: "text-emerald-600",
+    bgColor: "bg-emerald-100",
+    bgColorDark: "dark:bg-emerald-900/50",
+    textColor: "text-emerald-800",
+    textColorDark: "dark:text-emerald-200",
+    description: "Project telah selesai"
+  },
 };
 
-const paymentStatusMap: Record<string, { label: string; class: string }> = {
-  UNPAID: { label: "Belum Bayar", class: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" },
-  PARTIALLY_PAID: { label: "DP", class: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
-  PAID: { label: "Lunas", class: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+const paymentStatusConfig: Record<string, {
+  label: string;
+  color: string;
+  bgColor: string;
+  bgColorDark: string;
+  textColor: string;
+  textColorDark: string;
+  description: string;
+}> = {
+  UNPAID: {
+    label: "Belum Bayar",
+    color: "text-red-600",
+    bgColor: "bg-red-100",
+    bgColorDark: "dark:bg-red-900/50",
+    textColor: "text-red-800",
+    textColorDark: "dark:text-red-200",
+    description: "Segera lakukan pembayaran"
+  },
+  PARTIALLY_PAID: {
+    label: "DP",
+    color: "text-yellow-600",
+    bgColor: "bg-yellow-100",
+    bgColorDark: "dark:bg-yellow-900/50",
+    textColor: "text-yellow-800",
+    textColorDark: "dark:text-yellow-200",
+    description: "Uang muka sudah diterima"
+  },
+  PAID: {
+    label: "Lunas",
+    color: "text-emerald-600",
+    bgColor: "bg-emerald-100",
+    bgColorDark: "dark:bg-emerald-900/50",
+    textColor: "text-emerald-800",
+    textColorDark: "dark:text-emerald-200",
+    description: "Pembayaran lunas"
+  },
 };
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function formatDateShort(dateStr: string) {
+  return new Date(dateStr).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 }
 
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
 }
 
-// ── Tab Components ──────────────────────────────────────────────────────────
+// ── Hero Status Banner ─────────────────────────────────────────────────────────
+
+function HeroBanner({ project, paymentPct, deadlineStr, statusCfg, paymentCfg }: {
+  project: NonNullable<ClientLink["project"]>;
+  paymentPct: number;
+  deadlineStr: string;
+  statusCfg: typeof projectStatusConfig[string];
+  paymentCfg: typeof paymentStatusConfig[string];
+}) {
+  const Icon = statusCfg.icon;
+
+  return (
+    <div className="rounded-2xl bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 border border-primary/20 p-4 sm:p-5 space-y-4">
+      {/* Top row: Service name + Status badge */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-lg sm:text-xl font-bold text-foreground truncate">
+            {project.service.name}
+          </h2>
+          <p className="text-sm text-muted-foreground">{project.projectNumber} · {project.clientName}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          <Badge className={cn(
+            "text-xs font-medium px-2.5 py-1",
+            statusCfg.bgColor, statusCfg.bgColorDark, statusCfg.textColor, statusCfg.textColorDark
+          )}>
+            <Icon className="h-3 w-3 mr-1" />
+            {statusCfg.label}
+          </Badge>
+        </div>
+      </div>
+
+      {/* Status description */}
+      <p className="text-sm text-muted-foreground">{statusCfg.description}</p>
+
+      {/* Progress + Deadline row */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Progress */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground font-medium">Progress</span>
+            <span className="font-semibold text-foreground">{paymentPct}%</span>
+          </div>
+          <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all duration-500"
+              style={{ width: `${paymentPct}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Deadline */}
+        <div className="flex items-center gap-2 rounded-lg bg-background/60 px-3 py-2">
+          <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
+          <div className="min-w-0">
+            <p className="text-[10px] text-muted-foreground">Deadline</p>
+            <p className="text-sm font-medium text-foreground truncate">{deadlineStr}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Designer */}
+      {project.assignments?.[0] && (
+        <div className="flex items-center gap-2 text-sm">
+          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+            <UserCheck className="h-3.5 w-3.5 text-primary" />
+          </div>
+          <span className="text-muted-foreground">Designer:</span>
+          <span className="font-medium text-foreground">{project.assignments[0].designer.name}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Quick Action Cards ─────────────────────────────────────────────────────────
+
+function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhausted, latestInvoice, paymentCfg }: {
+  project: NonNullable<ClientLink["project"]>;
+  paymentPct: number;
+  remainingQuota: number;
+  isQuotaExhausted: boolean;
+  latestInvoice?: NonNullable<ClientLink["project"]>["invoices"][number];
+  paymentCfg: typeof paymentStatusConfig[string];
+}) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      {/* Payment Status Card */}
+      <button
+        className="rounded-xl border bg-card text-left p-4 hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+        onClick={() => {}}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <CreditCard className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">Pembayaran</span>
+        </div>
+        <Badge className={cn("text-xs font-medium mb-2", paymentCfg.bgColor, paymentCfg.bgColorDark, paymentCfg.textColor, paymentCfg.textColorDark)}>
+          {paymentCfg.label}
+        </Badge>
+        <p className="text-xs text-muted-foreground mt-1">{paymentCfg.description}</p>
+      </button>
+
+      {/* Revision Quota Card */}
+      <button
+        className="rounded-xl border bg-card text-left p-4 hover:border-orange-400/40 hover:shadow-sm transition-all active:scale-[0.98]"
+        onClick={() => {}}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <RefreshCw className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">Revisi</span>
+        </div>
+        {isQuotaExhausted ? (
+          <>
+            <Badge className="text-xs font-medium bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300 mb-2">Habis</Badge>
+            <p className="text-xs text-muted-foreground mt-1">Kuota revisi sudah terpakai semua</p>
+          </>
+        ) : (
+          <>
+            <div className="flex items-baseline gap-1 mb-2">
+              <span className="text-2xl font-bold text-foreground">{remainingQuota}</span>
+              <span className="text-sm text-muted-foreground">/ {MAX_REVISION_QUOTA}x tersisa</span>
+            </div>
+            <p className="text-xs text-muted-foreground">Ajukan revisi jika perlu perubahan</p>
+          </>
+        )}
+      </button>
+
+      {/* Invoice Card */}
+      <button
+        className="rounded-xl border bg-card text-left p-4 hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98]"
+        onClick={() => {}}
+      >
+        <div className="flex items-center gap-2 mb-2">
+          <Receipt className="h-4 w-4 text-muted-foreground" />
+          <span className="text-xs font-medium text-muted-foreground">Tagihan</span>
+        </div>
+        {latestInvoice ? (
+          <>
+            <p className="text-lg font-bold text-foreground mb-1">{formatCurrency(latestInvoice.total)}</p>
+            <Badge className="text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200">
+              {latestInvoice.invoiceNumber}
+            </Badge>
+          </>
+        ) : (
+          <>
+            <Badge className="text-xs font-medium bg-muted text-muted-foreground mb-2">-</Badge>
+            <p className="text-xs text-muted-foreground mt-1">Invoice belum tersedia</p>
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
+// ── Horizontal Timeline ────────────────────────────────────────────────────────
+
+function TimelineStep({ event, isActive, isCompleted }: { event: TimelineEvent; isActive: boolean; isCompleted: boolean }) {
+  const config = eventConfig[event.type];
+  const Icon = config.icon;
+
+  return (
+    <div className="flex flex-col items-center text-center min-w-[70px] sm:min-w-[80px]">
+      <div className={cn(
+        "w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center shrink-0 transition-all duration-300",
+        isActive
+          ? "ring-4 ring-primary/25 bg-primary text-primary-foreground shadow-lg scale-110 z-10"
+          : isCompleted
+            ? cn(config.bgColor, config.bgColorDark, "ring-2 ring-primary/20")
+            : "bg-muted text-muted-foreground"
+      )}>
+        <Icon className={cn(
+          "h-4 w-4 sm:h-4.5 sm:w-4.5",
+          isActive ? "text-primary-foreground" : isCompleted ? config.color : "text-muted-foreground"
+        )} />
+      </div>
+      <p className={cn(
+        "text-[10px] sm:text-xs mt-2 font-medium leading-tight max-w-[70px] sm:max-w-[80px] truncate",
+        isActive ? "text-primary" : isCompleted ? "text-foreground" : "text-muted-foreground"
+      )}>
+        {event.titleShort}
+      </p>
+      <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
+        {formatDateShort(event.date)}
+      </p>
+    </div>
+  );
+}
+
+function HorizontalTimeline({ events, activeProgress }: { events: TimelineEvent[]; activeProgress?: number }) {
+  if (events.length === 0) {
+    return (
+      <div className="py-6 text-center">
+        <History className="h-8 w-8 mx-auto text-muted-foreground/50 mb-2" />
+        <p className="text-sm text-muted-foreground">Belum ada aktivitas</p>
+      </div>
+    );
+  }
+
+  const progressWidth = activeProgress !== undefined
+    ? activeProgress
+    : Math.min(100, (events.length / Math.max(events.length, 4)) * 100);
+
+  return (
+    <div className="space-y-3">
+      {/* Timeline steps */}
+      <div className="w-full overflow-x-auto pb-1 -mx-1 px-1">
+        <div className="flex items-start min-w-max px-1">
+          {events.map((event, idx) => (
+            <div key={event.id} className="flex items-center">
+              <TimelineStep
+                event={event}
+                isActive={idx === events.length - 1}
+                isCompleted={idx < events.length - 1}
+              />
+              {idx < events.length - 1 && (
+                <div className={cn(
+                  "h-0.5 w-6 sm:w-8 mx-0.5 sm:mx-1 -mt-5 rounded-full transition-colors duration-500",
+                  idx < events.length - 2 ? "bg-primary" : "bg-muted"
+                )} />
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="px-1">
+        <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+          <div
+            className="h-full bg-primary rounded-full transition-all duration-700 ease-out"
+            style={{ width: `${progressWidth}%` }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Timeline Detail (Expandable) ──────────────────────────────────────────────
+
+function TimelineDetail({ events }: { events: TimelineEvent[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+
+  if (events.length === 0) return null;
+
+  // Show only latest 3 events in collapsed list
+  const visibleEvents = events.slice(-3);
+
+  return (
+    <div className="space-y-2">
+      {visibleEvents.map((event) => {
+        const config = eventConfig[event.type];
+        const Icon = config.icon;
+        const isExpanded = expandedId === event.id;
+
+        return (
+          <div key={event.id} className="rounded-lg border bg-card overflow-hidden">
+            <button
+              className="w-full flex items-center gap-3 p-3 text-left hover:bg-muted/30 transition-colors"
+              onClick={() => setExpandedId(isExpanded ? null : event.id)}
+            >
+              <div className={cn("w-8 h-8 rounded-full flex items-center justify-center shrink-0", config.bgColor, config.bgColorDark)}>
+                <Icon className={cn("h-4 w-4", config.color)} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-foreground">{event.title}</p>
+                <p className="text-xs text-muted-foreground">{formatDateShort(event.date)}</p>
+              </div>
+              <ChevronRight className={cn("h-4 w-4 text-muted-foreground shrink-0 transition-transform", isExpanded && "rotate-90")} />
+            </button>
+            {isExpanded && event.description && (
+              <div className="px-3 pb-3 pt-0">
+                <p className="text-sm text-muted-foreground bg-muted/30 rounded-lg p-3">{event.description}</p>
+                {event.progress !== undefined && event.progress !== null && (
+                  <div className="mt-2">
+                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                      <span>Progress</span>
+                      <span className="font-medium">{event.progress}%</span>
+                    </div>
+                    <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+                      <div className="h-full bg-primary rounded-full" style={{ width: `${event.progress}%` }} />
+                    </div>
+                  </div>
+                )}
+                {event.attachments && event.attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {event.attachments.map((att) => (
+                      <a
+                        key={att.id}
+                        href={`${process.env.NEXT_PUBLIC_STORAGE_URL || ""}/${att.storageKey}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline bg-muted/50 px-2 py-1 rounded-md"
+                      >
+                        <Paperclip className="h-3 w-3" />
+                        {att.filename}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Tab Components ────────────────────────────────────────────────────────────
 
 type BriefTabProject = NonNullable<ClientLink["project"]>;
 
@@ -339,9 +596,9 @@ function BriefTab({ project }: { project: BriefTabProject }) {
     if (q === "reference_items_json") {
       const parsed = parseJson(a);
       if (Array.isArray(parsed)) {
-        for (const item of parsed) {
-          if (item.imageUrl) referenceImages.push(item.imageUrl);
-          else if (item.url) referenceImages.push(item.url);
+        for (const refItem of parsed) {
+          if (refItem.imageUrl) referenceImages.push(refItem.imageUrl);
+          else if (refItem.url) referenceImages.push(refItem.url);
         }
       }
       continue;
@@ -373,76 +630,81 @@ function BriefTab({ project }: { project: BriefTabProject }) {
       continue;
     }
 
-    // Regular text / image URL fields
-    if (isImageUrl(a)) {
-      textFields.push({ label: FIELD_LABELS[q] || q, value: a });
-    } else {
-      textFields.push({ label: FIELD_LABELS[q] || q, value: a });
-    }
+    textFields.push({ label: FIELD_LABELS[q] || q, value: a });
   }
 
+  const textFieldsNonImage = textFields.filter(f => !isImageUrl(f.value));
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Logo images */}
       {(brandLogoUrl || vendorLogoUrl) && (
         <div className="grid grid-cols-2 gap-3">
           {brandLogoUrl && (
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Logo Brand</p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={brandLogoUrl} alt="Logo Brand" className="w-full max-h-32 object-contain rounded-lg border bg-muted/50" />
+            <div className="space-y-1.5 rounded-xl border overflow-hidden">
+              <div className="aspect-square bg-muted/50">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={brandLogoUrl} alt="Logo Brand" className="w-full h-full object-contain" />
+              </div>
+              <div className="p-2">
+                <p className="text-xs font-medium text-muted-foreground">Logo Brand</p>
+              </div>
             </div>
           )}
           {vendorLogoUrl && (
-            <div className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground">Logo Vendor</p>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={vendorLogoUrl} alt="Logo Vendor" className="w-full max-h-32 object-contain rounded-lg border bg-muted/50" />
+            <div className="space-y-1.5 rounded-xl border overflow-hidden">
+              <div className="aspect-square bg-muted/50">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={vendorLogoUrl} alt="Logo Vendor" className="w-full h-full object-contain" />
+              </div>
+              <div className="p-2">
+                <p className="text-xs font-medium text-muted-foreground">Logo Vendor</p>
+              </div>
             </div>
           )}
         </div>
       )}
 
       {/* Text fields */}
-      {textFields.filter(f => !isImageUrl(f.value)).length > 0 && (
+      {textFieldsNonImage.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Informasi Brief</CardTitle>
+            <CardTitle className="text-sm">Informasi Project</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2">
-            {textFields.filter(f => !isImageUrl(f.value)).map((f) => (
-              <div key={f.label} className="flex gap-3 text-sm">
-                <p className="text-muted-foreground shrink-0 w-40">{f.label}</p>
-                <p className="font-medium whitespace-pre-wrap wrap-break-word">{f.value}</p>
+          <CardContent className="space-y-2.5">
+            {textFieldsNonImage.map((f) => (
+              <div key={f.label} className="flex flex-col sm:flex-row sm:gap-3 text-sm">
+                <p className="text-muted-foreground shrink-0 sm:w-36 text-xs sm:text-sm">{f.label}</p>
+                <p className="font-medium text-foreground whitespace-pre-wrap break-words text-sm">{f.value}</p>
               </div>
             ))}
           </CardContent>
         </Card>
       )}
 
-      {/* Menu Items (SVC-03/04/05) */}
+      {/* Menu Items */}
       {menuItems.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Daftar Menu</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {menuItems.map((item, idx) => (
-                <div key={item.id || idx} className="rounded-lg border overflow-hidden">
+                <div key={item.id || idx} className="rounded-xl border overflow-hidden">
                   {item.image && (
                     <div className="aspect-square bg-muted/50">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                     </div>
                   )}
-                  <div className="p-2">
+                  <div className="p-2.5">
                     <p className="text-sm font-medium truncate">{item.name}</p>
                     {item.price && (
-                      <p className="text-xs text-muted-foreground">{formatCurrency(parseInt(item.price, 10) || 0)}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(parseInt(item.price, 10) || 0)}</p>
                     )}
                     {item.caption && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{item.caption}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.caption}</p>
                     )}
                   </div>
                 </div>
@@ -452,58 +714,57 @@ function BriefTab({ project }: { project: BriefTabProject }) {
         </Card>
       )}
 
-      {/* Cart Sides (SVC-11) */}
+      {/* Cart Sides */}
       {cartSides.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Sisi Gerobak</CardTitle>
           </CardHeader>
           <CardContent className="overflow-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Sisi</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Ukuran</th>
-                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Deskripsi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {cartSides.map((side, idx) => (
-                  <tr key={idx} className="border-t">
-                    <td className="px-3 py-2 font-medium">{side.sideName}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{side.dimensions}</td>
-                    <td className="px-3 py-2">{side.textBrief || "-"}</td>
+            <div className="min-w-[400px]">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Sisi</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Ukuran</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Deskripsi</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {cartSides.map((side, idx) => (
+                    <tr key={idx} className="border-t">
+                      <td className="px-3 py-2.5 font-medium text-sm">{side.sideName}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground text-sm">{side.dimensions}</td>
+                      <td className="px-3 py-2.5 text-sm">{side.textBrief || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Kopi Menu Items (SVC-11) */}
+      {/* Kopi Menu Items */}
       {KopiMenuItems.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Menu Kopi</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {KopiMenuItems.map((item, idx) => (
-                <div key={item.id || idx} className="rounded-lg border overflow-hidden">
+                <div key={item.id || idx} className="rounded-xl border overflow-hidden">
                   {item.image && (
                     <div className="aspect-square bg-muted/50">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
                     </div>
                   )}
-                  <div className="p-2">
+                  <div className="p-2.5">
                     <p className="text-sm font-medium truncate">{item.name}</p>
                     {item.price && (
-                      <p className="text-xs text-muted-foreground">{formatCurrency(parseInt(item.price, 10) || 0)}</p>
-                    )}
-                    {item.caption && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{item.caption}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(parseInt(item.price, 10) || 0)}</p>
                     )}
                   </div>
                 </div>
@@ -513,23 +774,23 @@ function BriefTab({ project }: { project: BriefTabProject }) {
         </Card>
       )}
 
-      {/* Box References (SVC-07) */}
+      {/* Box / Cart References */}
       {(boxRefs.length > 0 || cartRefs.length > 0) && (
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm">Referensi Desain</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {[...boxRefs, ...cartRefs].map((ref, idx) =>
                 ref.imageUrl ? (
-                  <div key={idx} className="space-y-1">
+                  <div key={idx} className="space-y-1 rounded-xl border overflow-hidden">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={ref.imageUrl} alt={ref.description || `Referensi ${idx + 1}`} className="w-full h-32 object-cover rounded-lg border" />
-                    {ref.description && <p className="text-xs text-muted-foreground">{ref.description}</p>}
+                    <img src={ref.imageUrl} alt={ref.description || `Referensi ${idx + 1}`} className="w-full h-28 sm:h-32 object-cover" />
+                    {ref.description && <p className="text-xs text-muted-foreground p-2">{ref.description}</p>}
                   </div>
                 ) : ref.description ? (
-                  <div key={idx} className="rounded-lg border p-2 text-xs text-muted-foreground">{ref.description}</div>
+                  <div key={idx} className="rounded-xl border p-3 text-xs text-muted-foreground">{ref.description}</div>
                 ) : null
               )}
             </div>
@@ -541,198 +802,400 @@ function BriefTab({ project }: { project: BriefTabProject }) {
       {referenceImages.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Referensi Gambar</CardTitle>
+            <CardTitle className="text-sm">Gambar Referensi</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {referenceImages.map((url, idx) => (
-                <a key={idx} href={url} target="_blank" rel="noopener noreferrer">
+                <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="rounded-xl border overflow-hidden block hover:border-primary/50 transition-colors">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`Referensi ${idx + 1}`} className="w-full h-28 object-cover rounded-lg border hover:border-primary transition-colors" />
+                  <img src={url} alt={`Referensi ${idx + 1}`} className="w-full h-28 sm:h-32 object-cover" />
                 </a>
               ))}
             </div>
           </CardContent>
         </Card>
       )}
-
-      {/* Service Info */}
-      <Card className="border-dashed">
-        <CardContent className="pt-4">
-          <p className="text-xs text-muted-foreground">
-            <span className="font-medium">Layanan:</span> {project.service.name} ({project.service.code})
-          </p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
 
-type InvoiceTabProject = NonNullable<ClientLink["project"]>;
-type InvoiceTabInvoice = NonNullable<ClientLink["project"]>["invoices"][number];
-
 function InvoiceTab({
   project,
   latestInvoice,
-  formatDate,
   formatCurrency,
 }: {
-  project: InvoiceTabProject;
-  latestInvoice: InvoiceTabInvoice;
-  formatDate: (d: string) => string;
+  project: NonNullable<ClientLink["project"]>;
+  latestInvoice?: NonNullable<ClientLink["project"]>["invoices"][number];
   formatCurrency: (n: number) => string;
 }) {
   if (!latestInvoice) {
     return (
       <Card>
-        <CardContent className="py-8 text-center">
-          <Receipt className="h-8 w-8 mx-auto text-muted-foreground mb-2 opacity-50" />
-          <p className="text-sm text-muted-foreground">Invoice belum tersedia</p>
+        <CardContent className="py-12 text-center">
+          <Receipt className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
+          <p className="text-sm font-medium text-muted-foreground">Invoice belum tersedia</p>
           <p className="text-xs text-muted-foreground mt-1">Hubungi admin untuk informasi tagihan.</p>
         </CardContent>
       </Card>
     );
   }
 
-  const statusConfig: Record<string, { label: string; class: string }> = {
-    DRAFT: { label: "Draft", class: "bg-gray-100 text-gray-700" },
-    ISSUED: { label: "Issued", class: "bg-blue-100 text-blue-700" },
-    PAID: { label: "Lunas", class: "bg-green-100 text-green-700" },
-    CANCELLED: { label: "Cancelled", class: "bg-red-100 text-red-700" },
+  const statusConfig: Record<string, { label: string; color: string; bgColor: string; bgColorDark: string; textColor: string; textColorDark: string }> = {
+    DRAFT: { label: "Draft", color: "text-gray-500", bgColor: "bg-gray-100", bgColorDark: "dark:bg-gray-800/60", textColor: "text-gray-700", textColorDark: "dark:text-gray-200" },
+    ISSUED: { label: "Issued", color: "text-blue-600", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900/50", textColor: "text-blue-700", textColorDark: "dark:text-blue-200" },
+    PAID: { label: "Lunas", color: "text-emerald-600", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900/50", textColor: "text-emerald-700", textColorDark: "dark:text-emerald-200" },
+    CANCELLED: { label: "Cancelled", color: "text-red-600", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900/50", textColor: "text-red-700", textColorDark: "dark:text-red-200" },
   };
-  const statusCfg = statusConfig[latestInvoice.status] || { label: latestInvoice.status, class: "bg-gray-100 text-gray-700" };
+  const statusCfg = statusConfig[latestInvoice.status] || statusConfig.DRAFT;
+
+  const remaining = project.agreedPrice - project.paidAmount;
+
+  return (
+    <div className="space-y-4">
+      {/* Invoice Header Card */}
+      <Card>
+        <CardContent className="p-5">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-0.5">Invoice</p>
+              <h3 className="text-lg font-bold text-foreground">{latestInvoice.invoiceNumber}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Diterbitkan: {formatDate(latestInvoice.issuedAt)}</p>
+            </div>
+            <Badge className={cn("text-xs font-medium shrink-0", statusCfg.bgColor, statusCfg.bgColorDark, statusCfg.textColor, statusCfg.textColorDark)}>
+              {statusCfg.label}
+            </Badge>
+          </div>
+
+          {/* Price breakdown */}
+          <div className="space-y-2.5">
+            <div className="flex justify-between text-sm py-2 border-b">
+              <span className="text-muted-foreground">Total Tagihan</span>
+              <span className="font-semibold text-foreground">{formatCurrency(latestInvoice.total)}</span>
+            </div>
+            <div className="flex justify-between text-sm py-2 border-b">
+              <span className="text-muted-foreground">Sudah Dibayar</span>
+              <span className="font-medium text-emerald-600">{formatCurrency(project.paidAmount)}</span>
+            </div>
+            {remaining > 0 ? (
+              <div className="flex justify-between text-sm py-2">
+                <span className="text-muted-foreground font-medium">Sisa Bayar</span>
+                <span className="font-bold text-destructive text-base">{formatCurrency(remaining)}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between text-sm py-2">
+                <span className="text-muted-foreground font-medium">Status</span>
+                <span className="font-bold text-emerald-600 text-base">LUNAS</span>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Payment Guide */}
+      {remaining > 0 && (
+        <Card className="border-primary/20 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                <AlertTriangle className="h-4 w-4 text-primary" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground mb-1">Cara Pembayaran</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Lakukan pembayaran ke rekening yang tertera pada invoice resmi yang dikirimkan oleh admin via WhatsApp. Setelah transfer, konfirmasi ke admin.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function PaymentTab({
+  project,
+  formatCurrency,
+}: {
+  project: NonNullable<ClientLink["project"]>;
+  formatCurrency: (n: number) => string;
+}) {
+  const paymentCfg = paymentStatusConfig[project.paymentStatus] || paymentStatusConfig.UNPAID;
+  const remaining = project.agreedPrice - project.paidAmount;
+  const paidPct = Math.round((project.paidAmount / project.agreedPrice) * 100);
+
+  return (
+    <div className="space-y-4">
+      {/* Main Payment Status */}
+      <Card className="border-primary/20">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-3 mb-4">
+            <CreditCard className="h-5 w-5 text-primary shrink-0" />
+            <div>
+              <p className="text-xs text-muted-foreground">Status Pembayaran</p>
+              <Badge className={cn("text-sm font-semibold mt-1 px-3 py-1", paymentCfg.bgColor, paymentCfg.bgColorDark, paymentCfg.textColor, paymentCfg.textColorDark)}>
+                {paymentCfg.label}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Amount breakdown */}
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Total Harga</span>
+              <span className="font-medium text-foreground">{formatCurrency(project.agreedPrice)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Sudah Dibayar</span>
+              <span className="font-medium text-emerald-600">{formatCurrency(project.paidAmount)}</span>
+            </div>
+            {remaining > 0 ? (
+              <div className="flex justify-between text-sm border-t pt-2">
+                <span className="text-muted-foreground font-medium">Sisa</span>
+                <span className="font-bold text-destructive text-base">{formatCurrency(remaining)}</span>
+              </div>
+            ) : (
+              <div className="flex justify-between text-sm border-t pt-2">
+                <span className="text-muted-foreground font-medium">Status</span>
+                <span className="font-bold text-emerald-600 text-base">LUNAS</span>
+              </div>
+            )}
+          </div>
+
+          {/* Progress bar */}
+          <div className="mt-4">
+            <div className="flex justify-between text-xs text-muted-foreground mb-1.5">
+              <span>{formatCurrency(project.paidAmount)} dibayar</span>
+              <span className="font-medium">{paidPct}%</span>
+            </div>
+            <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-700 ease-out"
+                style={{ width: `${paidPct}%` }}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Payment Guide */}
+      {remaining > 0 && (
+        <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1.5">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Segera Lakukan Pembayaran</p>
+                <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+                  Transfer ke rekening yang tertera pada invoice resmi. Setelah transfer, kirim bukti ke admin via WhatsApp untuk konfirmasi.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Payment complete message */}
+      {remaining === 0 && (
+        <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0" />
+              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+                Pembayaran sudah lunas. Terima kasih!
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Final Approval Card ───────────────────────────────────────────────────────
+
+function FinalApprovalCard({
+  project,
+  isApproveOpen,
+  setApproveOpen,
+  approvingFinal,
+  onApprove,
+  formatDate,
+}: {
+  project: NonNullable<ClientLink["project"]>;
+  isApproveOpen: boolean;
+  setApproveOpen: (v: boolean) => void;
+  approvingFinal: boolean;
+  onApprove: () => void;
+  formatDate: (d: string) => string;
+}) {
+  if (project.finalApprovedAt) {
+    return (
+      <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50">
+        <CardContent className="p-5">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/50 flex items-center justify-center shrink-0">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-emerald-900 dark:text-emerald-100">Project Selesai!</p>
+              <p className="text-sm text-emerald-700 dark:text-emerald-300">
+                Disetujui pada {formatDate(project.finalApprovedAt)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!project.finalSubmittedAt) return null;
+
+  return (
+    <div className="space-y-3">
+      <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center shrink-0">
+              <Star className="h-4 w-4 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">Final Work Sudah Disubmit!</p>
+              <p className="text-xs text-blue-700 dark:text-blue-300 mt-0.5">
+                Designer sudah submit hasil akhir. Review dan approve jika sudah sesuai.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Button
+        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-3 rounded-xl shadow-sm"
+        onClick={() => setApproveOpen(true)}
+      >
+        <CheckCircle2 className="h-4 w-4 mr-2" />
+        Approve Final Work
+      </Button>
+
+      {isApproveOpen && (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Konfirmasi Approval</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 p-3">
+              <p className="text-sm text-emerald-800 dark:text-emerald-200">
+                Dengan menekan <strong>&quot;Ya, Approve&quot;</strong>, project akan ditandai SELESAI. Pastikan kamu sudah puas dengan hasilnya. Jika ada revisi, gunakan tombol Request Revision di atas.
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setApproveOpen(false)}>
+                Batal
+              </Button>
+              <Button
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
+                onClick={onApprove}
+                disabled={approvingFinal}
+              >
+                {approvingFinal ? (
+                  <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Memproses...</>
+                ) : "Ya, Approve"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ── Revision Form ─────────────────────────────────────────────────────────────
+
+function RevisionForm({
+  isOpen,
+  setOpen,
+  isSubmitting,
+  description,
+  setDescription,
+  files,
+  setFiles,
+  onSubmit,
+}: {
+  isOpen: boolean;
+  setOpen: (v: boolean) => void;
+  isSubmitting: boolean;
+  description: string;
+  setDescription: (v: string) => void;
+  files: Array<{ id: string; file: File; preview?: string }>;
+  setFiles: Dispatch<SetStateAction<Array<{ id: string; file: File; preview?: string }>>>;
+  onSubmit: () => void;
+}) {
+  if (!isOpen) return null;
 
   return (
     <Card>
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div>
-            <CardTitle className="text-lg">{latestInvoice.invoiceNumber}</CardTitle>
-            <p className="text-sm text-muted-foreground">Diterbitkan: {formatDate(latestInvoice.issuedAt)}</p>
-          </div>
-          <Badge className={statusCfg.class}>{statusCfg.label}</Badge>
-        </div>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Request Revisi</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
-        {/* Project Info */}
-        <div className="rounded-md border p-3">
-          <p className="text-xs text-muted-foreground mb-1">Project</p>
-          <p className="text-sm font-medium">{project.service.name}</p>
-          <p className="text-xs text-muted-foreground">{project.projectNumber} — {project.clientName}</p>
+        {/* Warning */}
+        <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-800 dark:text-amber-200 leading-relaxed">
+              Isi revisi se-detail mungkin. Pengajuan tidak lengkap tetap terhitung 1x.
+            </p>
+          </div>
         </div>
 
-        {/* Price Summary */}
-        <div className="rounded-md border p-3 space-y-2">
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Total Tagihan</span>
-            <span className="font-medium">{formatCurrency(latestInvoice.total)}</span>
-          </div>
-          <div className="flex justify-between text-sm">
-            <span className="text-muted-foreground">Yang Sudah Dibayar</span>
-            <span className="text-green-600 font-medium">{formatCurrency(project.paidAmount)}</span>
-          </div>
-          {project.agreedPrice - project.paidAmount > 0 && (
-            <div className="flex justify-between text-sm border-t pt-2">
-              <span className="text-muted-foreground">Sisa Bayar</span>
-              <span className="text-destructive font-semibold">
-                {formatCurrency(project.agreedPrice - project.paidAmount)}
-              </span>
-            </div>
-          )}
+        {/* Description */}
+        <div className="space-y-1.5">
+          <label htmlFor="revision" className="text-sm font-medium text-foreground">
+            Deskripsi Revisi <span className="text-destructive">*</span>
+          </label>
+          <textarea
+            id="revision"
+            className="w-full min-h-32 p-3 border rounded-xl text-sm resize-none bg-background focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none transition-all"
+            placeholder="Jelaskan perubahan yang diinginkan secara detail..."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
         </div>
 
-        {/* Note */}
-        <p className="text-xs text-muted-foreground text-center">
-          Pembayaran dapat dilakukan melalui transfer ke rekening yang tertera pada invoice resmi yang dikirimkan oleh admin.
-        </p>
+        {/* File Upload */}
+        <FileUploadField
+          files={files}
+          onChange={setFiles}
+          maxFiles={10}
+          label="Gambar Referensi"
+          hint="untuk upload"
+        />
+
+        <div className="flex gap-3">
+          <Button
+            variant="outline"
+            className="flex-1 rounded-xl"
+            onClick={() => { setOpen(false); setFiles([]); }}
+          >
+            Batal
+          </Button>
+          <Button
+            className="flex-1 rounded-xl"
+            onClick={onSubmit}
+            disabled={isSubmitting || !description.trim()}
+          >
+            {isSubmitting ? (
+              <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Mengirim...</>
+            ) : "Kirim Revisi"}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-type PaymentTabProject = NonNullable<ClientLink["project"]>;
-type PaymentStatusMap = Record<string, { label: string; class: string }>;
-
-function PaymentTab({
-  project,
-  formatCurrency,
-  paymentStatusMap,
-}: {
-  project: PaymentTabProject;
-  formatCurrency: (n: number) => string;
-  paymentStatusMap: PaymentStatusMap;
-}) {
-  const statusCfg = paymentStatusMap[project.paymentStatus] || paymentStatusMap.UNPAID;
-  const remaining = project.agreedPrice - project.paidAmount;
-
-  return (
-    <div className="space-y-4">
-      {/* Payment Status Card */}
-      <Card className="border-primary/30">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CreditCard className="h-4 w-4" />
-            Status Pembayaran
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Badge className={statusCfg.class}>{statusCfg.label}</Badge>
-          </div>
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Total Harga</span>
-              <span className="font-medium">{formatCurrency(project.agreedPrice)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Sudah Dibayar</span>
-              <span className="text-green-600 font-medium">-{formatCurrency(project.paidAmount)}</span>
-            </div>
-            <div className="border-t pt-2 flex justify-between text-sm">
-              <span className="text-muted-foreground">Sisa</span>
-              <span className={remaining > 0 ? "text-destructive font-semibold" : "text-green-600 font-semibold"}>
-                {formatCurrency(remaining)}
-              </span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Payment Progress Bar */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Progress Pembayaran</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-2 flex justify-between text-xs text-muted-foreground">
-            <span>{formatCurrency(project.paidAmount)} dibayar</span>
-            <span>{formatCurrency(project.agreedPrice)}</span>
-          </div>
-          <div className="h-3 bg-muted rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary rounded-full transition-all"
-              style={{ width: `${Math.min(100, (project.paidAmount / project.agreedPrice) * 100)}%` }}
-            />
-          </div>
-          <p className="text-xs text-muted-foreground mt-1 text-center">
-            {Math.round((project.paidAmount / project.agreedPrice) * 100)}% lunas
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Payment Guide */}
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Cara Pembayaran</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground space-y-2">
-          <p>Silakan lakukan pembayaran sesuai sisa tagihan ke rekening yang tertera pada invoice resmi.</p>
-          <p>Setelah melakukan pembayaran, informasikan ke admin melalui WhatsApp untuk konfirmasi pelunasan.</p>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+// ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ClientTrackingPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -744,25 +1207,21 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const [isRevisionOpen, setIsRevisionOpen] = useState(false);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
   const [revisionDescription, setRevisionDescription] = useState("");
-  const [revisionFiles, setRevisionFiles] = useState<File[]>([]);
+  const [revisionFiles, setRevisionFiles] = useState<Array<{ id: string; file: File; preview?: string }>>([]);
   const [approveFinalOpen, setApproveFinalOpen] = useState(false);
   const [approvingFinal, setApprovingFinal] = useState(false);
-  const [briefTab, setBriefTab] = useState<"brief" | "invoice" | "payment">("brief");
+  const [activeTab, setActiveTab] = useState<"brief" | "invoice" | "payment">("brief");
 
   const fetchLink = async () => {
     try {
       const res = await fetch(`/api/client-links/${token}`);
       if (!res.ok) {
-        if (res.status === 410) {
-          setError("Link sudah expired atau sudah digunakan");
-        } else {
-          setError("Link tidak ditemukan");
-        }
+        if (res.status === 410) setError("Link sudah expired atau sudah digunakan");
+        else setError("Link tidak ditemukan");
         return;
       }
       const data = await res.json();
       setLink(data.link);
-      setError(null);
     } catch {
       setError("Terjadi kesalahan");
     } finally {
@@ -770,10 +1229,9 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
     }
   };
 
-  /* eslint-disable react-hooks/set-state-in-effect -- pre-existing pattern in codebase */
-  /* eslint-disable react-hooks/exhaustive-deps */
+  /* eslint-disable react-hooks/set-state-in-effect -- pre-existing pattern */
   useEffect(() => { fetchLink(); }, [token]);
-  /* eslint-enable react-hooks/set-state-in-effect, react-hooks/exhaustive-deps */
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const handleSubmitBrief = async (responses: BriefResponses, attachmentIds: string[]) => {
     setIsSubmittingBrief(true);
@@ -797,40 +1255,24 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   };
 
   const handleSubmitRevision = async () => {
-    if (!revisionDescription.trim()) {
-      toast("Mohon isi deskripsi revisi", "error");
-      return;
-    }
+    if (!revisionDescription.trim()) { toast("Mohon isi deskripsi revisi", "error"); return; }
     setIsSubmittingRevision(true);
     try {
-      // 1. Upload reference images first
       const attachmentIds: string[] = [];
       for (const file of revisionFiles) {
-        const uploadFormData = new FormData();
-        uploadFormData.append("file", file);
-        uploadFormData.append("projectId", link!.project!.id);
-        uploadFormData.append("category", "revision");
-        const res = await fetch(`/api/client-links/${token}/upload`, {
-          method: "POST",
-          body: uploadFormData,
-        });
-        if (res.ok) {
-          const data = await res.json();
-          attachmentIds.push(data.attachmentId);
-        }
+        const fd = new FormData();
+        fd.append("file", file.file);
+        fd.append("projectId", link!.project!.id);
+        fd.append("category", "revision");
+        const res = await fetch(`/api/client-links/${token}/upload`, { method: "POST", body: fd });
+        if (res.ok) { const d = await res.json(); attachmentIds.push(d.attachmentId); }
       }
-
-      // 2. Submit revision with attachmentIds
-      const formData = new FormData();
-      formData.append("description", revisionDescription);
-      attachmentIds.forEach((id) => formData.append("attachmentIds", id));
-
-      const res = await fetch(`/api/client-links/${token}/revisions`, {
-        method: "POST",
-        body: formData,
-      });
+      const fd = new FormData();
+      fd.append("description", revisionDescription);
+      attachmentIds.forEach((id) => fd.append("attachmentIds", id));
+      const res = await fetch(`/api/client-links/${token}/revisions`, { method: "POST", body: fd });
       if (res.ok) {
-        toast("Revisi berhasil disubmit!");
+        toast("Revisi berhasil disubmit!", "success");
         setIsRevisionOpen(false);
         setRevisionDescription("");
         setRevisionFiles([]);
@@ -849,16 +1291,14 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const handleApproveFinal = async () => {
     setApprovingFinal(true);
     try {
-      const res = await fetch(`/api/client-links/${token}/approve-final`, {
-        method: "POST",
-      });
+      const res = await fetch(`/api/client-links/${token}/approve-final`, { method: "POST" });
       if (res.ok) {
         toast("Project selesai. Terima kasih!", "success");
         setApproveFinalOpen(false);
         fetchLink();
       } else {
         const data = await res.json();
-        toast(data.error || "Gagal approve final work", "error");
+        toast(data.error || "Gagal approve", "error");
       }
     } catch {
       toast("Terjadi kesalahan", "error");
@@ -867,56 +1307,58 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
     }
   };
 
+  // Loading state
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+        <div className="text-center space-y-3">
+          <div className="animate-spin h-10 w-10 border-3 border-primary border-t-transparent rounded-full mx-auto" />
+          <p className="text-sm text-muted-foreground">Memuat...</p>
+        </div>
       </div>
     );
   }
 
+  // Error state
   if (error || !link) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
-        <Card className="max-w-md w-full text-center">
-          <CardContent className="pt-6">
-            <AlertTriangle className="h-12 w-12 mx-auto text-yellow-600 mb-4" />
-            <h1 className="text-xl font-semibold mb-2">Link Tidak Valid</h1>
-            <p className="text-muted-foreground">{error || "Link tidak ditemukan"}</p>
-          </CardContent>
+        <Card className="max-w-sm w-full text-center p-6">
+          <div className="w-14 h-14 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center mx-auto mb-4">
+            <AlertTriangle className="h-7 w-7 text-yellow-600" />
+          </div>
+          <h2 className="text-lg font-semibold text-foreground mb-2">Link Tidak Valid</h2>
+          <p className="text-sm text-muted-foreground">{error || "Link tidak ditemukan"}</p>
         </Card>
       </div>
     );
   }
 
-  const project = link.project;
+  const project = link.project!;
+  // non-null: we've returned early if !link or (!hasBrief && !project)
   const hasBrief = !!project?.brief;
-  const revisions = project?.revisions || [];
-  const remainingQuota = Math.max(0, MAX_REVISION_QUOTA - revisions.length);
-  const isQuotaExhausted = remainingQuota === 0;
-  const latestInvoice = project?.invoices?.[0];
-  const projectStatus = project ? (statusMap[project.status] || statusMap.DRAFT) : null;
-  const paymentStatus = project ? (paymentStatusMap[project.paymentStatus] || paymentStatusMap.UNPAID) : null;
 
-  // If brief not yet submitted, show brief form
+  // Brief form (before submission)
   if (!hasBrief && project) {
     return (
       <div className="min-h-screen bg-background">
-        <div className="max-w-2xl mx-auto px-4 py-8">
-          <div className="text-center mb-8">
-            <h1 className="text-2xl font-bold text-foreground">YukDesain Studio</h1>
-            <p className="text-muted-foreground">Form Brief Project</p>
+        <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
+          <div className="text-center mb-6">
+            <h1 className="text-xl font-bold text-foreground">YukDesain Studio</h1>
+            <p className="text-sm text-muted-foreground">Form Brief Project</p>
           </div>
-          <Card className="mb-6">
-            <CardHeader>
-              <div className="flex items-start justify-between">
+          <Card className="mb-4">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle className="text-lg">{project.service.name}</CardTitle>
-                  <p className="text-sm text-muted-foreground">{project.projectNumber}</p>
+                  <p className="text-sm font-semibold text-foreground">{project.service.name}</p>
+                  <p className="text-xs text-muted-foreground">{project.projectNumber}</p>
                 </div>
-                <Badge variant="secondary">Brief Required</Badge>
+                <Badge className="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200">
+                  Brief Required
+                </Badge>
               </div>
-            </CardHeader>
+            </CardContent>
           </Card>
           <ServiceBriefForm
             projectId={project.id}
@@ -931,344 +1373,277 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
     );
   }
 
-  // Tracking View (after brief submitted)
+  // Tracking view
+  const revisions = project?.revisions || [];
+  const remainingQuota = Math.max(0, MAX_REVISION_QUOTA - revisions.length);
+  const isQuotaExhausted = remainingQuota === 0;
+  const latestInvoice = project?.invoices?.[0];
+  const statusCfg = projectStatusConfig[project.status] || projectStatusConfig.DRAFT;
+  const paymentCfg = paymentStatusConfig[project.paymentStatus] || paymentStatusConfig.UNPAID;
+  const paidPct = Math.round((project.paidAmount / project.agreedPrice) * 100);
+
+  const timelineEvents = buildTimeline(project);
+  const deadlineStr = project.deadline ? formatDate(project.deadline) : "-";
+
+  const tabs = [
+    {
+      id: "brief" as const,
+      label: "Brief",
+      icon: FileText,
+      badge: hasBrief ? "✓" : undefined,
+    },
+    {
+      id: "invoice" as const,
+      label: "Invoice",
+      icon: Receipt,
+      badge: latestInvoice ? latestInvoice.invoiceNumber : undefined,
+    },
+    {
+      id: "payment" as const,
+      label: "Pembayaran",
+      icon: CreditCard,
+      badge: paymentCfg.label,
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-3xl mx-auto px-4 py-8">
+      <div className="max-w-2xl mx-auto px-3 sm:px-4 py-5 sm:py-6 space-y-4">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-foreground">YukDesain Studio</h1>
-          <p className="text-muted-foreground">Tracking Project</p>
+        <div className="text-center pb-1">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">YukDesain Studio</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Tracking Project</p>
         </div>
 
-        {/* Project Status Card */}
-        <Card className="mb-6">
-          <CardHeader>
-            <div className="flex items-start justify-between">
-              <div>
-                <CardTitle className="text-lg">{link.project?.service.name}</CardTitle>
-                <p className="text-sm text-muted-foreground">{link.project?.projectNumber}</p>
-              </div>
-              {projectStatus && (
-                <Badge className={projectStatus.class}>
-                  {projectStatus.label}
-                </Badge>
-              )}
+        {/* Hero Banner — status + progress + deadline */}
+        <HeroBanner
+          project={project}
+          paymentPct={paidPct}
+          deadlineStr={deadlineStr}
+          statusCfg={statusCfg}
+          paymentCfg={paymentCfg}
+        />
+
+        {/* Quick Action Cards */}
+        <QuickActionCards
+          project={project}
+          paymentPct={paidPct}
+          remainingQuota={remainingQuota}
+          isQuotaExhausted={isQuotaExhausted}
+          latestInvoice={latestInvoice}
+          paymentCfg={paymentCfg}
+        />
+
+        {/* Horizontal Timeline */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Timeline
+              </CardTitle>
+              <span className="text-xs text-muted-foreground">
+                {timelineEvents.length} step{timelineEvents.length !== 1 ? "s" : ""}
+              </span>
             </div>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Deadline</p>
-                <div className="flex items-center gap-1">
-                  <Clock className="h-3 w-3 text-muted-foreground" />
-                  <p className="text-sm font-medium">
-                    {project?.deadline ? formatDate(project.deadline) : "-"}
-                  </p>
-                </div>
-              </div>
-              {project?.assignments?.[0] && (
-                <div>
-                  <p className="text-xs text-muted-foreground mb-1">Designer</p>
-                  <p className="text-sm font-medium">{project.assignments[0].designer.name}</p>
-                </div>
-              )}
-            </div>
-
-            {/* Payment Summary */}
-            {paymentStatus && (
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-muted-foreground mb-1">Status Pembayaran</p>
-                <div className="flex items-center justify-between">
-                  <Badge className={paymentStatus.class}>{paymentStatus.label}</Badge>
-                  <span className="text-sm text-muted-foreground">
-                    {project ? `${formatCurrency(project.paidAmount)} / ${formatCurrency(project.agreedPrice)}` : ""}
-                  </span>
-                </div>
-              </div>
-            )}
-
-            {/* Revision Quota */}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-muted-foreground">Sisa Revisi</p>
-                <p className="text-sm font-medium">{remainingQuota}x / {MAX_REVISION_QUOTA}x</p>
-              </div>
-              {latestInvoice && (
-                <div className="text-right">
-                  <p className="text-xs text-muted-foreground">Total Tagihan</p>
-                  <p className="text-sm font-semibold">{formatCurrency(latestInvoice.total)}</p>
-                </div>
-              )}
-            </div>
+          <CardContent>
+            <HorizontalTimeline events={timelineEvents} activeProgress={paidPct} />
           </CardContent>
         </Card>
 
-        {/* Tab Bar */}
-        <div className="flex gap-1 mb-4 border-b">
-          <button
-            onClick={() => setBriefTab("brief")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
-              briefTab === "brief"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <FileText className="h-4 w-4" />
-            Brief Saya
-          </button>
-          <button
-            onClick={() => setBriefTab("invoice")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
-              briefTab === "invoice"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Receipt className="h-4 w-4" />
-            Invoice
-          </button>
-          <button
-            onClick={() => setBriefTab("payment")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
-              briefTab === "payment"
-                ? "border-primary text-primary"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <CreditCard className="h-4 w-4" />
-            Pembayaran
-          </button>
+        {/* Timeline Detail (expandable) */}
+        {timelineEvents.length > 0 && (
+          <TimelineDetail events={timelineEvents} />
+        )}
+
+        {/* Tab Bar — mobile-friendly, full width */}
+        <div className="flex gap-1 bg-muted/30 rounded-xl p-1">
+          {tabs.map((tab) => {
+            const Icon = tab.icon;
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-medium transition-all",
+                  isActive
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon className="h-3.5 w-3.5 shrink-0" />
+                <span className="hidden sm:inline">{tab.label}</span>
+                <span className="sm:hidden">{tab.label.split(" ")[0]}</span>
+                {tab.badge && (
+                  <span className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                    isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                  )}>
+                    {tab.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
 
         {/* Tab Content */}
-        {briefTab === "brief" && project?.brief && (
-          <BriefTab project={project} />
-        )}
-        {briefTab === "brief" && !project?.brief && (
-          <Card><CardContent className="py-8 text-center text-muted-foreground">Brief belum disubmit.</CardContent></Card>
-        )}
-        {briefTab === "invoice" && project && latestInvoice && (
-          <InvoiceTab project={project} latestInvoice={latestInvoice} formatDate={formatDate} formatCurrency={formatCurrency} />
-        )}
-        {briefTab === "invoice" && project && !latestInvoice && (
-          <Card><CardContent className="py-8 text-center text-muted-foreground"><Receipt className="h-6 w-6 mx-auto mb-2 text-muted-foreground opacity-50" />Invoice belum tersedia.</CardContent></Card>
-        )}
-        {briefTab === "payment" && project && (
-          <PaymentTab project={project} formatCurrency={formatCurrency} paymentStatusMap={paymentStatusMap} />
-        )}
+        <div className="min-h-[200px]">
+          {activeTab === "brief" && project?.brief && <BriefTab project={project} />}
+          {activeTab === "brief" && !project?.brief && (
+            <Card><CardContent className="py-8 text-center"><p className="text-sm text-muted-foreground">Brief belum disubmit.</p></CardContent></Card>
+          )}
+          {activeTab === "invoice" && (
+            <InvoiceTab project={project} latestInvoice={latestInvoice} formatCurrency={formatCurrency} />
+          )}
+          {activeTab === "payment" && (
+            <PaymentTab project={project} formatCurrency={formatCurrency} />
+          )}
+        </div>
 
-        {/* Timeline is always visible below tabs */}
-        <Card className="mt-6 mb-6">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <History className="h-4 w-4" />
-              Timeline Project
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {(() => {
-              const events = buildTimeline(project!);
-              return events.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  Belum ada aktivitas
-                </p>
-              ) : (
-                <div>
-                  {events.map((event, idx) => (
-                    <TimelineItem key={event.id} event={event} isLast={idx === events.length - 1} />
-                  ))}
-                </div>
-              );
-            })()}
-          </CardContent>
-        </Card>
-
-        {/* Spacing before action buttons */}
-        <div className="mt-6" />
-
-        {/* Final Approval Status / Actions */}
-        {project?.finalApprovedAt ? (
-          <Card className="border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950">
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-3">
-                <CheckCircle2 className="h-8 w-8 text-green-600 shrink-0" />
-                <div>
-                  <p className="font-semibold text-green-800 dark:text-green-200">Project Selesai</p>
-                  <p className="text-sm text-green-700 dark:text-green-300">
-                    Final work approved on {formatDate(project.finalApprovedAt)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ) : project?.finalSubmittedAt ? (
-          <>
-            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 mb-4">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-8 w-8 text-blue-600 shrink-0" />
-                  <div>
-                    <p className="font-semibold text-blue-800 dark:text-blue-200">Final Work Submitted</p>
-                    <p className="text-sm text-blue-700 dark:text-blue-300">
-                      Designer telah submit final work. Review dan approve jika sudah sesuai.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
+        {/* Final Approval / Revision Actions */}
+        <div className="space-y-3 pt-2">
+          {/* Show revision button only if NOT final approved and NOT quota exhausted */}
+          {!project.finalApprovedAt && !isQuotaExhausted && !project.finalSubmittedAt && (
             <Button
-              className="w-full bg-green-600 hover:bg-green-700 text-white"
-              onClick={() => setApproveFinalOpen(true)}
+              className="w-full rounded-xl text-sm font-medium py-3 border-2 border-dashed border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/30"
+              onClick={() => setIsRevisionOpen(true)}
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
-              Approve Final Work
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Request Revisi ({remainingQuota}x tersisa)
             </Button>
+          )}
 
-            {approveFinalOpen && (
-              <Card className="mt-4">
-                <CardHeader>
-                  <CardTitle className="text-base">Konfirmasi Approval</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 p-3">
-                    <p className="text-sm text-green-800 dark:text-green-200">
-                      Dengan menekan &quot;Ya, Approve&quot;, project ini akan ditandai sebagai SELESAI. Pastikan kamu sudah puas dengan hasil akhir. Jika ada revisi, gunakan tombol Request Revision di atas.
-                    </p>
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setApproveFinalOpen(false)}>Batal</Button>
-                    <Button
-                      className="bg-green-600 hover:bg-green-700"
-                      onClick={handleApproveFinal}
-                      disabled={approvingFinal}
-                    >
-                      {approvingFinal ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Memproses...
-                        </>
-                      ) : (
-                        "Ya, Approve"
-                      )}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </>
-        ) : null}
+          {isQuotaExhausted && !project.finalApprovedAt && (
+            <Button className="w-full rounded-xl" disabled>
+              <AlertTriangle className="h-4 w-4 mr-2" />
+              Kuota Revisi Habis
+            </Button>
+          )}
 
-        {/* Revision Button */}
-        {isQuotaExhausted ? (
-          <Button className="w-full" disabled>
-            <AlertTriangle className="h-4 w-4 mr-2" />
-            Kuota Revisi Habis
-          </Button>
-        ) : (
-          <Button
-            className="w-full"
-            onClick={() => setIsRevisionOpen(true)}
-          >
-            Request Revision ({remainingQuota}x tersisa)
-          </Button>
-        )}
+          <FinalApprovalCard
+            project={project}
+            isApproveOpen={approveFinalOpen}
+            setApproveOpen={setApproveFinalOpen}
+            approvingFinal={approvingFinal}
+            onApprove={handleApproveFinal}
+            formatDate={formatDate}
+          />
 
-        {isRevisionOpen && (
-          <Card className="mt-4">
-            <CardHeader>
-              <CardTitle className="text-base">Request Revision</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="bg-yellow-50 dark:bg-yellow-950 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4" />
-                  Mohon diisi revisi sebaik mungkin karena akan terhitung 1x jika kamu hanya input tidak lengkap
-                </p>
-              </div>
-              <div className="space-y-2">
-                <label htmlFor="revision" className="text-sm font-medium">
-                  Deskripsi Revision
-                </label>
-                <textarea
-                  id="revision"
-                  className="w-full min-h-30 p-3 border rounded-lg text-base resize-none bg-background"
-                  placeholder="Jelaskan secara detail perubahan yang diinginkan..."
-                  value={revisionDescription}
-                  onChange={(e) => setRevisionDescription(e.target.value)}
-                />
-              </div>
-
-              {/* Revision Reference Images (BRD 20.2) */}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">
-                  Gambar Referensi (opsional)
-                </label>
-                <div className="border-2 border-dashed rounded-lg p-4 text-center hover:border-primary/50 transition-colors">
-                  <input
-                    type="file"
-                    id="revision-files"
-                    className="hidden"
-                    accept="image/*"
-                    multiple
-                    onChange={(e) => {
-                      const files = Array.from(e.target.files || []);
-                      setRevisionFiles((prev) => [...prev, ...files]);
-                    }}
-                  />
-                  <label htmlFor="revision-files" className="cursor-pointer">
-                    <Paperclip className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">
-                      Klik untuk upload gambar referensi revisi
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      JPG, PNG, GIF, WebP — maks 10MB per file
-                    </p>
-                  </label>
-                </div>
-                {revisionFiles.length > 0 && (
-                  <div className="space-y-1">
-                    {revisionFiles.map((file, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-sm bg-muted/50 rounded px-2 py-1">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <Paperclip className="h-3 w-3 shrink-0 text-muted-foreground" />
-                          <span className="truncate">{file.name}</span>
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            ({(file.size / 1024).toFixed(0)}KB)
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          className="text-xs text-destructive hover:underline shrink-0 ml-2"
-                          onClick={() => setRevisionFiles((prev) => prev.filter((_, i) => i !== idx))}
-                        >
-                          Hapus
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => { setIsRevisionOpen(false); setRevisionFiles([]); }}>Batal</Button>
-                <Button onClick={handleSubmitRevision} disabled={isSubmittingRevision}>
-                  {isSubmittingRevision ? "Mengirim..." : "Kirim Revision"}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+          <RevisionForm
+            isOpen={isRevisionOpen}
+            setOpen={setIsRevisionOpen}
+            isSubmitting={isSubmittingRevision}
+            description={revisionDescription}
+            setDescription={setRevisionDescription}
+            files={revisionFiles}
+            setFiles={setRevisionFiles}
+            onSubmit={handleSubmitRevision}
+          />
+        </div>
 
         {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-8">
-          YukDesain Studio Portal © 2026
+        <p className="text-center text-xs text-muted-foreground pt-2 pb-4">
+          YukDesain Studio © 2026
         </p>
       </div>
     </div>
   );
+}
+
+// ── Build Timeline ─────────────────────────────────────────────────────────────
+
+function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEvent[] {
+  const events: TimelineEvent[] = [];
+
+  const shortTitles: Record<string, string> = {
+    brief_submitted: "Brief",
+    designer_assigned: "Designer",
+    progress: "Progress",
+    revision: "Revisi",
+    final_submitted: "Final",
+    final_approved: "Selesai",
+  };
+
+  if (project.brief) {
+    events.push({
+      id: `brief-${project.brief.id}`,
+      type: "brief_submitted",
+      title: "Brief Submitted",
+      titleShort: shortTitles.brief_submitted,
+      description: "Brief berhasil disubmit. Project siap diproses.",
+      date: (project.brief as { submittedAt?: string }).submittedAt || project.brief.id,
+    });
+  }
+
+  if (project.assignments?.[0]) {
+    events.push({
+      id: `assigned-${project.assignments[0].designer.id}`,
+      type: "designer_assigned",
+      title: "Designer Ditugaskan",
+      titleShort: shortTitles.designer_assigned,
+      description: `${project.assignments[0].designer.name} telah ditugaskan untuk project ini.`,
+      date: (project.assignments[0] as unknown as { assignedAt?: string }).assignedAt || new Date().toISOString(),
+    });
+  }
+
+  const sortedUpdates = [...(project.updates || [])].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+  for (const update of sortedUpdates) {
+    events.push({
+      id: `progress-${update.id}`,
+      type: "progress",
+      title: "Progress Update",
+      titleShort: shortTitles.progress,
+      description: update.description,
+      date: update.createdAt,
+      author: update.author.name,
+      progress: update.progress,
+      attachments: update.attachment ? [update.attachment] : [],
+    });
+  }
+
+  const sortedRevisions = [...project.revisions].sort(
+    (a, b) => new Date(a.requestedAt).getTime() - new Date(b.requestedAt).getTime()
+  );
+  for (const rev of sortedRevisions) {
+    events.push({
+      id: `revision-${rev.id}`,
+      type: "revision",
+      title: `Revisi #${rev.number}`,
+      titleShort: `${shortTitles.revision} ${rev.number}`,
+      description: rev.description,
+      date: rev.requestedAt,
+      status: rev.status,
+      revisionNumber: rev.number,
+      attachments: rev.attachments,
+    });
+  }
+
+  if (project.finalSubmittedAt) {
+    events.push({
+      id: "final-submitted",
+      type: "final_submitted",
+      title: "Final Work Submitted",
+      titleShort: shortTitles.final_submitted,
+      description: "Designer telah submit hasil akhir. Menunggu approval kamu.",
+      date: project.finalSubmittedAt,
+    });
+  }
+
+  if (project.finalApprovedAt) {
+    events.push({
+      id: "final-approved",
+      type: "final_approved",
+      title: "Project Selesai!",
+      titleShort: shortTitles.final_approved,
+      description: "Final work telah disetujui. Terima kasih!",
+      date: project.finalApprovedAt,
+    });
+  }
+
+  return events.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 }
