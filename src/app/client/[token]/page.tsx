@@ -22,11 +22,17 @@ import {
   CreditCard,
   CalendarDays,
   ChevronRight,
+  Download,
+  Building,
+  Smartphone,
 } from "lucide-react";
 import { ServiceBriefForm } from "@/components/forms/brief/ServiceBriefForm";
 import type { BriefResponses } from "@/components/forms/brief/types";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import { toast } from "@/components/ui/toast";
+import { pdf } from "@react-pdf/renderer";
+import { saveAs } from "file-saver";
+import { ReceiptPDF } from "@/components/invoice/ReceiptPDF";
 
 type BriefResponseItem = {
   questionId: string;
@@ -54,6 +60,8 @@ type ClientLink = {
     invoices: Array<{
       id: string;
       invoiceNumber: string;
+      items: Array<{ description: string; quantity: number; unitPrice: number; total: number }>;
+      subtotal: number;
       total: number;
       status: string;
       issuedAt: string;
@@ -87,6 +95,14 @@ type ClientLink = {
       designer: { id: string; name: string };
     }>;
   } | null;
+};
+
+type PaymentAccount = {
+  id: string;
+  type: string;
+  name: string;
+  accountNumber: string;
+  accountHolder: string;
 };
 
 type TimelineEvent = {
@@ -841,50 +857,76 @@ function InvoiceTab({
   project,
   latestInvoice,
   formatCurrency,
+  onDownload,
+  isDownloading,
+  paymentAccounts,
 }: {
   project: NonNullable<ClientLink["project"]>;
   latestInvoice?: NonNullable<ClientLink["project"]>["invoices"][number];
   formatCurrency: (n: number) => string;
+  onDownload?: () => void;
+  isDownloading?: boolean;
+  paymentAccounts: PaymentAccount[];
 }) {
   if (!latestInvoice) {
     return (
       <Card>
         <CardContent className="py-12 text-center">
           <Receipt className="h-10 w-10 mx-auto text-muted-foreground/40 mb-3" />
-          <p className="text-sm font-medium text-muted-foreground">Invoice belum tersedia</p>
-          <p className="text-xs text-muted-foreground mt-1">Hubungi admin untuk informasi tagihan.</p>
+          <p className="text-sm font-medium text-muted-foreground">Struk belum tersedia</p>
+          <p className="text-xs text-muted-foreground mt-1">Struk akan otomatis tersedia setelah project dibuat.</p>
         </CardContent>
       </Card>
     );
   }
 
-  const statusConfig: Record<string, { label: string; color: string; bgColor: string; bgColorDark: string; textColor: string; textColorDark: string }> = {
-    DRAFT: { label: "Draft", color: "text-gray-500", bgColor: "bg-gray-100", bgColorDark: "dark:bg-gray-800/60", textColor: "text-gray-900", textColorDark: "dark:text-gray-100" },
-    ISSUED: { label: "Issued", color: "text-blue-600", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900/50", textColor: "text-blue-950", textColorDark: "dark:text-blue-100" },
-    PAID: { label: "Lunas", color: "text-emerald-600", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900/50", textColor: "text-emerald-950", textColorDark: "dark:text-emerald-100" },
-    CANCELLED: { label: "Cancelled", color: "text-red-600", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900/50", textColor: "text-red-950", textColorDark: "dark:text-red-100" },
+  const statusConfig: Record<string, { label: string; bgColor: string; bgColorDark: string; textColor: string; textColorDark: string }> = {
+    DRAFT: { label: "Draft", bgColor: "bg-gray-100", bgColorDark: "dark:bg-gray-800/60", textColor: "text-gray-900", textColorDark: "dark:text-gray-100" },
+    ISSUED: { label: "Issued", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900/50", textColor: "text-blue-950", textColorDark: "dark:text-blue-100" },
+    PAID: { label: "Lunas", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900/50", textColor: "text-emerald-950", textColorDark: "dark:text-emerald-100" },
+    CANCELLED: { label: "Cancelled", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900/50", textColor: "text-red-950", textColorDark: "dark:text-red-100" },
+    UNPAID: { label: "Belum Bayar", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900/50", textColor: "text-red-950", textColorDark: "dark:text-red-100" },
+    PARTIALLY_PAID: { label: "DP / Cicilan", bgColor: "bg-yellow-100", bgColorDark: "dark:bg-yellow-900/50", textColor: "text-yellow-950", textColorDark: "dark:text-yellow-100" },
   };
-  const statusCfg = statusConfig[latestInvoice.status] || statusConfig.DRAFT;
+  const statusCfg = statusConfig[latestInvoice.status] || statusConfig.UNPAID;
 
   const remaining = project.agreedPrice - project.paidAmount;
 
   return (
     <div className="space-y-4">
-      {/* Invoice Header Card */}
+      {/* Receipt Header Card */}
       <Card>
         <CardContent className="p-5">
           <div className="flex items-start justify-between gap-3 mb-4">
             <div>
-              <p className="text-xs text-muted-foreground mb-0.5">Invoice</p>
+              <p className="text-xs text-muted-foreground mb-0.5">Struk Pembayaran</p>
               <h3 className="text-lg font-bold text-foreground">{latestInvoice.invoiceNumber}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">Diterbitkan: {formatDate(latestInvoice.issuedAt)}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{formatDate(latestInvoice.issuedAt)}</p>
             </div>
-            <Badge className={cn("text-xs font-medium shrink-0", statusCfg.bgColor, statusCfg.bgColorDark, statusCfg.textColor, statusCfg.textColorDark)}>
-              {statusCfg.label}
-            </Badge>
+            <div className="flex flex-col items-end gap-2">
+              <Badge className={cn("text-xs font-medium shrink-0", statusCfg.bgColor, statusCfg.bgColorDark, statusCfg.textColor, statusCfg.textColorDark)}>
+                {statusCfg.label}
+              </Badge>
+              {onDownload && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs h-7 gap-1"
+                  onClick={onDownload}
+                  disabled={isDownloading}
+                >
+                  {isDownloading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Download className="h-3 w-3" />
+                  )}
+                  Download Struk
+                </Button>
+              )}
+            </div>
           </div>
 
-          {/* Price breakdown */}
+          {/* Price breakdown — receipt style */}
           <div className="space-y-2.5">
             <div className="flex justify-between text-sm py-2 border-b">
               <span className="text-muted-foreground">Total Tagihan</span>
@@ -897,7 +939,7 @@ function InvoiceTab({
             {remaining > 0 ? (
               <div className="flex justify-between text-sm py-2">
                 <span className="text-muted-foreground font-medium">Sisa Bayar</span>
-                <span className="font-bold text-destructive text-base">{formatCurrency(remaining)}</span>
+                <span className="font-bold text-red-600 text-base">{formatCurrency(remaining)}</span>
               </div>
             ) : (
               <div className="flex justify-between text-sm py-2">
@@ -913,17 +955,45 @@ function InvoiceTab({
       {remaining > 0 && (
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="p-4">
-            <div className="flex items-start gap-3">
+            <div className="flex items-start gap-3 mb-4">
               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
                 <AlertTriangle className="h-4 w-4 text-primary" />
               </div>
               <div>
                 <p className="text-sm font-medium text-foreground mb-1">Cara Pembayaran</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">
-                  Lakukan pembayaran ke rekening yang tertera pada invoice resmi yang dikirimkan oleh admin via WhatsApp. Setelah transfer, konfirmasi ke admin.
+                  Transfer ke salah satu akun berikut, lalu konfirmasi ke admin via WhatsApp.
                 </p>
               </div>
             </div>
+
+            {paymentAccounts.length > 0 ? (
+              <div className="space-y-3">
+                {paymentAccounts.map((acc) => (
+                  <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg bg-background/80">
+                    <div className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                      acc.type === "BANK" ? "bg-blue-100 dark:bg-blue-900/50" : "bg-green-100 dark:bg-green-900/50"
+                    )}>
+                      {acc.type === "BANK" ? (
+                        <Building className="h-4 w-4 text-blue-600" />
+                      ) : (
+                        <Smartphone className="h-4 w-4 text-green-600" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-foreground">{acc.name}</p>
+                      <p className="text-sm font-mono text-foreground">{acc.accountNumber}</p>
+                      <p className="text-xs text-muted-foreground">a/n {acc.accountHolder}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">
+                Akun pembayaran belum dikonfigurasi. Hubungi admin untuk info rekening.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -1228,6 +1298,8 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const [approveFinalOpen, setApproveFinalOpen] = useState(false);
   const [approvingFinal, setApprovingFinal] = useState(false);
   const [activeTab, setActiveTab] = useState<"brief" | "invoice" | "payment">("brief");
+  const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
 
   const fetchLink = async () => {
     try {
@@ -1239,6 +1311,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
       }
       const data = await res.json();
       setLink(data.link);
+      setPaymentAccounts(data.paymentAccounts || []);
     } catch {
       setError("Terjadi kesalahan");
     } finally {
@@ -1321,6 +1394,35 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
       toast("Terjadi kesalahan", "error");
     } finally {
       setApprovingFinal(false);
+    }
+  };
+
+  const handleDownloadInvoice = async () => {
+    if (!latestInvoice) return;
+    setIsDownloadingInvoice(true);
+    try {
+      const doc = (
+        <ReceiptPDF
+          invoiceNumber={latestInvoice.invoiceNumber}
+          issuedAt={latestInvoice.issuedAt}
+          clientName={project.clientName}
+          projectNumber={project.projectNumber}
+          serviceName={project.service.name}
+          items={latestInvoice.items}
+          subtotal={latestInvoice.subtotal}
+          total={latestInvoice.total}
+          paidAmount={project.paidAmount}
+          paymentStatus={project.paymentStatus}
+          agreedPrice={project.agreedPrice}
+        />
+      );
+      const blob = await pdf(doc).toBlob();
+      saveAs(blob, `${latestInvoice.invoiceNumber}.pdf`);
+    } catch (err) {
+      console.error("Failed to generate receipt:", err);
+      toast("Gagal generate struk. Coba lagi.", "error");
+    } finally {
+      setIsDownloadingInvoice(false);
     }
   };
 
@@ -1515,7 +1617,14 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             <Card><CardContent className="py-8 text-center"><p className="text-sm text-muted-foreground">Brief belum disubmit.</p></CardContent></Card>
           )}
           {activeTab === "invoice" && (
-            <InvoiceTab project={project} latestInvoice={latestInvoice} formatCurrency={formatCurrency} />
+            <InvoiceTab
+              project={project}
+              latestInvoice={latestInvoice}
+              formatCurrency={formatCurrency}
+              onDownload={handleDownloadInvoice}
+              isDownloading={isDownloadingInvoice}
+              paymentAccounts={paymentAccounts}
+            />
           )}
           {activeTab === "payment" && (
             <PaymentTab project={project} formatCurrency={formatCurrency} />

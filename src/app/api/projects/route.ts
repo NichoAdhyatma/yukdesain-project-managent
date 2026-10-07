@@ -120,26 +120,26 @@ export async function POST(request: Request) {
       },
     });
 
-    // Auto-create invoice with service as line item
+    // Auto-create receipt with service as line item
     const now = new Date();
     const year = now.getFullYear();
     const lastInvoice = await prisma.invoice.findFirst({
-      where: { invoiceNumber: { startsWith: `INV-${year}-` } },
+      where: { invoiceNumber: { startsWith: `STRUK-${year}-` } },
       orderBy: { invoiceNumber: "desc" },
     });
     let nextInvoiceNum = 1;
     if (lastInvoice?.invoiceNumber) {
-      const lastNum = parseInt(lastInvoice.invoiceNumber.replace(`INV-${year}-`, ""));
+      const lastNum = parseInt(lastInvoice.invoiceNumber.replace(`STRUK-${year}-`, ""));
       nextInvoiceNum = lastNum + 1;
     }
-    const invoiceNumber = `INV-${year}-${String(nextInvoiceNum).padStart(4, "0")}`;
+    const invoiceNumber = `STRUK-${year}-${String(nextInvoiceNum).padStart(3, "0")}`;
 
     const invoice = await prisma.invoice.create({
       data: {
         projectId: project.id,
         invoiceNumber,
         items: [{
-          description: `${project.service?.name || "Jasa"} — ${projectNumber}`,
+          description: project.service?.name || "Jasa Design",
           quantity: 1,
           unitPrice: project.agreedPrice,
           total: project.agreedPrice,

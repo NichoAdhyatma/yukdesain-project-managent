@@ -8,8 +8,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { CurrencyInput } from "@/components/ui/currency-input";
 import {
   Table,
   TableBody,
@@ -31,9 +29,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Download, Eye, FileText, Send, Loader2, Plus, Trash2 } from "lucide-react";
-import { DatePicker } from "@/components/ui/date-picker";
-import { InvoicePDF } from "@/components/invoice/InvoicePDF";
+import { Search, Download, Eye, FileText, Loader2 } from "lucide-react";
+import { ReceiptPDF } from "@/components/invoice/ReceiptPDF";
 
 type InvoiceItem = { description: string; quantity: number; unitPrice: number; total: number };
 type Invoice = {
@@ -46,7 +43,6 @@ type Invoice = {
   total: number;
   status: string;
   issuedAt: string;
-  dueDate: string | null;
   project: {
     id: string;
     projectNumber: string;
@@ -54,22 +50,8 @@ type Invoice = {
     agreedPrice: number;
     paidAmount: number;
     paymentStatus: string;
+    service?: { name: string } | null;
   };
-};
-
-type SimpleProject = {
-  id: string;
-  projectNumber: string;
-  clientName: string;
-  agreedPrice: number;
-  paymentStatus: string;
-};
-
-type InvoiceItemInput = {
-  id: string;
-  description: string;
-  quantity: number;
-  unitPrice: number;
 };
 
 const statusConfig: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
@@ -94,70 +76,6 @@ export default function InvoicesPage() {
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
-  // Create invoice dialog
-  const [createOpen, setCreateOpen] = useState(false);
-  const [projects, setProjects] = useState<SimpleProject[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [invoiceItems, setInvoiceItems] = useState<InvoiceItemInput[]>([
-    { id: "1", description: "", quantity: 1, unitPrice: 0 },
-  ]);
-  const [taxAmount, setTaxAmount] = useState(0);
-  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
-  const [creating, setCreating] = useState(false);
-
-  async function loadProjects() {
-    try {
-      const res = await fetch("/api/projects?limit=100");
-      const data = await res.json();
-      if (data.projects) {
-        setProjects(
-          data.projects.map((p: { id: string; projectNumber: string; clientName: string; agreedPrice: number; paymentStatus: string }) => ({
-            id: p.id,
-            projectNumber: p.projectNumber,
-            clientName: p.clientName,
-            agreedPrice: p.agreedPrice,
-            paymentStatus: p.paymentStatus,
-          }))
-        );
-      }
-    } catch (e) {
-      console.error("Failed to load projects:", e);
-    }
-  }
-
-  function addItem() {
-    setInvoiceItems((prev) => [
-      ...prev,
-      { id: String(Date.now()), description: "", quantity: 1, unitPrice: 0 },
-    ]);
-  }
-
-  function removeItem(id: string) {
-    if (invoiceItems.length === 1) return;
-    setInvoiceItems((prev) => prev.filter((i) => i.id !== id));
-  }
-
-  function updateItem(id: string, field: keyof InvoiceItemInput, value: string | number) {
-    setInvoiceItems((prev) =>
-      prev.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item
-      )
-    );
-  }
-
-  const subtotal = invoiceItems.reduce(
-    (sum, item) => sum + item.quantity * item.unitPrice,
-    0
-  );
-  const total = subtotal + taxAmount;
-
-  function resetCreateForm() {
-    setSelectedProjectId("");
-    setInvoiceItems([{ id: "1", description: "", quantity: 1, unitPrice: 0 }]);
-    setTaxAmount(0);
-    setDueDate(undefined);
-  }
-
   async function loadInvoices() {
     try {
       const res = await fetch("/api/invoices");
@@ -170,57 +88,9 @@ export default function InvoicesPage() {
     }
   }
 
-  async function handleCreateInvoice() {
-    if (!selectedProjectId || invoiceItems.length === 0) {
-      toast("Pilih project dan isi minimal 1 item", "error");
-      return;
-    }
-    const validItems = invoiceItems.filter((i) => i.description.trim());
-    if (validItems.length === 0) {
-      toast("Minimal isi deskripsi untuk 1 item", "error");
-      return;
-    }
-    setCreating(true);
-    try {
-      const items = validItems.map((i) => ({
-        description: i.description,
-        quantity: i.quantity,
-        unitPrice: i.unitPrice,
-        total: i.quantity * i.unitPrice,
-      }));
-      const res = await fetch("/api/invoices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: selectedProjectId,
-          items,
-          subtotal,
-          tax: taxAmount || null,
-          total,
-          dueDate: dueDate ? dueDate.toISOString() : null,
-        }),
-      });
-      if (res.ok) {
-        setCreateOpen(false);
-        resetCreateForm();
-        loadInvoices();
-        toast("Invoice berhasil dibuat!");
-        loadInvoices();
-      } else {
-        const data = await res.json();
-        toast(data.error || "Gagal membuat invoice", "error");
-      }
-    } catch {
-      toast("Terjadi kesalahan", "error");
-    } finally {
-      setCreating(false);
-    }
-  }
-
   /* eslint-disable react-hooks/set-state-in-effect -- pre-existing pattern in codebase */
   useEffect(() => {
     loadInvoices();
-    loadProjects();
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
@@ -228,17 +98,18 @@ export default function InvoicesPage() {
     setDownloadingId(invoice.id);
     try {
       const doc = (
-        <InvoicePDF
+        <ReceiptPDF
           invoiceNumber={invoice.invoiceNumber}
           issuedAt={invoice.issuedAt}
-          dueDate={invoice.dueDate}
           clientName={invoice.project.clientName}
           projectNumber={invoice.project.projectNumber}
+          serviceName={invoice.project.service?.name}
           items={invoice.items}
           subtotal={invoice.subtotal}
-          tax={invoice.tax}
           total={invoice.total}
-          status={invoice.status}
+          paidAmount={invoice.project.paidAmount}
+          paymentStatus={invoice.status}
+          agreedPrice={invoice.project.agreedPrice}
         />
       );
       const blob = await pdf(doc).toBlob();
@@ -272,22 +143,16 @@ export default function InvoicesPage() {
   return (
     <div className="flex flex-col h-full">
       <div className="flex flex-col gap-4 p-6 border-b border-border">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-foreground">Invoices</h1>
-            <p className="text-muted-foreground">Kelola invoice dan pembayaran</p>
-          </div>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Buat Invoice
-          </Button>
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Struk Pembayaran</h1>
+          <p className="text-muted-foreground text-sm">Struk pembayaran auto-generated per project</p>
         </div>
 
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Cari invoice..."
+              placeholder="Cari struk..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9"
@@ -323,12 +188,13 @@ export default function InvoicesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-36">Invoice #</TableHead>
+                  <TableHead className="w-36">Struk #</TableHead>
                   <TableHead>Project</TableHead>
                   <TableHead>Client</TableHead>
                   <TableHead>Tanggal</TableHead>
-                  <TableHead>Jatuh Tempo</TableHead>
                   <TableHead className="text-right">Total</TableHead>
+                  <TableHead className="text-right">Sudah Bayar</TableHead>
+                  <TableHead>Sisa</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="w-24"></TableHead>
                 </TableRow>
@@ -336,13 +202,14 @@ export default function InvoicesPage() {
               <TableBody>
                 {filteredInvoices.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      Tidak ada invoice yang ditemukan
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      Tidak ada struk yang ditemukan
                     </TableCell>
                   </TableRow>
                 ) : (
                   filteredInvoices.map((invoice) => {
                     const status = statusConfig[invoice.status] || statusConfig.UNPAID;
+                    const remaining = Math.max(0, invoice.total - invoice.project.paidAmount);
                     return (
                       <TableRow key={invoice.id}>
                         <TableCell className="font-medium font-mono text-sm">
@@ -351,11 +218,18 @@ export default function InvoicesPage() {
                         <TableCell className="text-sm">{invoice.project.projectNumber}</TableCell>
                         <TableCell className="text-sm">{invoice.project.clientName}</TableCell>
                         <TableCell className="text-sm">{formatDate(invoice.issuedAt)}</TableCell>
-                        <TableCell className="text-sm">
-                          {invoice.dueDate ? formatDate(invoice.dueDate) : "-"}
-                        </TableCell>
                         <TableCell className="text-right font-medium text-sm">
                           {formatCurrency(invoice.total)}
+                        </TableCell>
+                        <TableCell className="text-right text-sm text-emerald-600">
+                          {formatCurrency(invoice.project.paidAmount)}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {remaining > 0 ? (
+                            <span className="text-red-600 font-medium">{formatCurrency(remaining)}</span>
+                          ) : (
+                            <span className="text-emerald-600">-</span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <Badge variant={status.variant}>{status.label}</Badge>
@@ -367,7 +241,7 @@ export default function InvoicesPage() {
                               size="icon"
                               className="h-8 w-8"
                               onClick={() => setSelectedInvoice(invoice)}
-                              aria-label="Lihat detail invoice"
+                              aria-label="Lihat detail"
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -399,7 +273,7 @@ export default function InvoicesPage() {
 
       {/* Invoice Detail Dialog */}
       <Dialog open={!!selectedInvoice} onOpenChange={() => setSelectedInvoice(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
@@ -407,8 +281,7 @@ export default function InvoicesPage() {
             </DialogTitle>
           </DialogHeader>
           {selectedInvoice && (
-            <div className="space-y-6">
-              {/* Header Info */}
+            <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">Project</p>
@@ -423,15 +296,12 @@ export default function InvoicesPage() {
                   <p className="font-medium">{formatDate(selectedInvoice.issuedAt)}</p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground">Jatuh Tempo</p>
-                  <p className="font-medium">
-                    {selectedInvoice.dueDate ? formatDate(selectedInvoice.dueDate) : "-"}
-                  </p>
+                  <p className="text-muted-foreground">Layanan</p>
+                  <p className="font-medium">{selectedInvoice.project.service?.name || "-"}</p>
                 </div>
               </div>
 
-              {/* Items Table */}
-              <div className="border rounded-lg">
+              <div className="border rounded-lg overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -454,23 +324,25 @@ export default function InvoicesPage() {
                 </Table>
               </div>
 
-              {/* Total */}
               <div className="flex justify-end">
                 <div className="w-64 space-y-2">
-                  {selectedInvoice.tax && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Pajak</span>
-                      <span>{formatCurrency(selectedInvoice.tax)}</span>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Total</span>
+                    <span className="font-medium">{formatCurrency(selectedInvoice.total)}</span>
+                  </div>
+                  <div className="flex justify-between text-sm text-emerald-600">
+                    <span className="text-muted-foreground">Sudah Bayar</span>
+                    <span className="font-medium">-{formatCurrency(selectedInvoice.project.paidAmount)}</span>
+                  </div>
+                  {Math.max(0, selectedInvoice.total - selectedInvoice.project.paidAmount) > 0 && (
+                    <div className="flex justify-between text-sm text-red-600 border-t pt-2">
+                      <span className="text-muted-foreground">Sisa</span>
+                      <span className="font-medium">{formatCurrency(selectedInvoice.total - selectedInvoice.project.paidAmount)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between font-bold text-lg border-t pt-2">
-                    <span>Total</span>
-                    <span className="text-primary">{formatCurrency(selectedInvoice.total)}</span>
-                  </div>
                 </div>
               </div>
 
-              {/* Actions */}
               <div className="flex justify-end gap-2">
                 <Button
                   variant="outline"
@@ -482,167 +354,11 @@ export default function InvoicesPage() {
                   ) : (
                     <Download className="h-4 w-4 mr-2" />
                   )}
-                  Download PDF
-                </Button>
-                <Button>
-                  <Send className="h-4 w-4 mr-2" />
-                  Kirim ke Client
+                  Download Struk
                 </Button>
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Create Invoice Dialog */}
-      <Dialog open={createOpen} onOpenChange={(open) => { if (!open) resetCreateForm(); setCreateOpen(open); }}>
-        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Plus className="h-5 w-5" />
-              Buat Invoice Baru
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-6">
-
-            {/* Project Selection */}
-            <div className="space-y-2">
-              <Label>Project *</Label>
-              <Select value={selectedProjectId} onValueChange={(v) => v && setSelectedProjectId(v)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Pilih project..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {projects.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      <span>
-                        {p.projectNumber} — {p.clientName}
-                        <span className="text-muted-foreground ml-2">
-                          ({formatCurrency(p.agreedPrice)})
-                        </span>
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Invoice Items */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Item *</Label>
-                <Button variant="outline" size="sm" onClick={addItem}>
-                  <Plus className="h-3 w-3 mr-1" /> Tambah Item
-                </Button>
-              </div>
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-full">Deskripsi</TableHead>
-                      <TableHead className="w-20 text-center">Qty</TableHead>
-                      <TableHead className="w-36 text-right">Harga Satuan</TableHead>
-                      <TableHead className="w-28 text-right">Total</TableHead>
-                      <TableHead className="w-10" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invoiceItems.map((item) => (
-                      <TableRow key={item.id}>
-                        <TableCell>
-                          <Input
-                            placeholder="Deskripsi item..."
-                            value={item.description}
-                            onChange={(e) => updateItem(item.id, "description", e.target.value)}
-                            className="h-8 text-sm"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <Input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(item.id, "quantity", parseInt(e.target.value) || 1)}
-                            className="h-8 text-sm text-center"
-                          />
-                        </TableCell>
-                        <TableCell>
-                          <CurrencyInput
-                            value={item.unitPrice}
-                            onChange={(val) => updateItem(item.id, "unitPrice", val)}
-                            placeholder="0"
-                            className="h-8 text-sm text-right"
-                          />
-                        </TableCell>
-                        <TableCell className="text-right text-sm font-medium text-muted-foreground">
-                          {formatCurrency(item.quantity * item.unitPrice)}
-                        </TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-7 w-7 text-destructive"
-                            disabled={invoiceItems.length === 1}
-                            onClick={() => removeItem(item.id)}
-                            aria-label="Hapus item invoice"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-
-            {/* Subtotal, Tax, Total */}
-            <div className="flex justify-end">
-              <div className="w-64 space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Subtotal</span>
-                  <span>{formatCurrency(subtotal)}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm gap-2">
-                  <Label className="text-muted-foreground shrink-0">Pajak (PPN 11%)</Label>
-                  <div className="w-36">
-                    <CurrencyInput
-                      value={taxAmount}
-                      onChange={(val) => setTaxAmount(val)}
-                      placeholder="0"
-                      className="h-8 text-sm text-right"
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between font-bold text-lg border-t pt-2">
-                  <span>Total</span>
-                  <span className="text-primary">{formatCurrency(total)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Due Date */}
-            <div className="space-y-2">
-              <Label>Jatuh Tempo</Label>
-              <DatePicker
-                value={dueDate}
-                onChange={setDueDate}
-                placeholder="Pilih tanggal jatuh tempo"
-                className="max-w-xs"
-              />
-            </div>
-
-            {/* Actions */}
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => { setCreateOpen(false); resetCreateForm(); }}>
-                Batal
-              </Button>
-              <Button onClick={handleCreateInvoice} disabled={creating || !selectedProjectId}>
-                {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Plus className="h-4 w-4 mr-2" />}
-                {creating ? "Membuat..." : "Buat Invoice"}
-              </Button>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>

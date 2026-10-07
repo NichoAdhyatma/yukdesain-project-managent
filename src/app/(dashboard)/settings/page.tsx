@@ -23,6 +23,11 @@ import {
   Trash2,
   X,
   AlertTriangle,
+  CreditCard,
+  Building,
+  Smartphone,
+  Copy,
+  Check,
 } from "lucide-react";
 import {
   Dialog,
@@ -49,6 +54,15 @@ type MenuItem = {
   order: number;
   isActive: boolean;
   menu2Roles?: Menu2Role[];
+};
+type PaymentAccount = {
+  id: string;
+  type: string;
+  name: string;
+  accountNumber: string;
+  accountHolder: string;
+  isActive: boolean;
+  order: number;
 };
 
 export default function SettingsPage() {
@@ -78,6 +92,18 @@ export default function SettingsPage() {
   const [menuError, setMenuError] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<MenuItem | null>(null);
+
+  // Payment accounts
+  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
+  const [paymentLoading, setPaymentLoading] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<PaymentAccount | null>(null);
+  const [paymentForm, setPaymentForm] = useState({ type: "BANK", name: "", accountNumber: "", accountHolder: "" });
+  const [paymentSaving, setPaymentSaving] = useState(false);
+  const [paymentError, setPaymentError] = useState("");
+  const [paymentConfirmOpen, setPaymentConfirmOpen] = useState(false);
+  const [paymentConfirmTarget, setPaymentConfirmTarget] = useState<PaymentAccount | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const loadMenus = async () => {
     setMenuLoading(true);
@@ -158,6 +184,81 @@ export default function SettingsPage() {
     setConfirmOpen(true);
   };
 
+  const loadPaymentAccounts = async () => {
+    setPaymentLoading(true);
+    try {
+      const res = await fetch("/api/settings/payment-accounts");
+      const data = await res.json();
+      setPaymentAccounts(data.accounts || []);
+    } catch { /* silent */ } finally {
+      setPaymentLoading(false);
+    }
+  };
+
+  /* eslint-disable react-hooks/set-state-in-effect -- pre-existing pattern in codebase */
+  useEffect(() => { loadPaymentAccounts(); }, []);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const openCreateAccount = () => {
+    setEditingAccount(null);
+    setPaymentForm({ type: "BANK", name: "", accountNumber: "", accountHolder: "" });
+    setPaymentError("");
+    setPaymentDialogOpen(true);
+  };
+
+  const openEditAccount = (acc: PaymentAccount) => {
+    setEditingAccount(acc);
+    setPaymentForm({ type: acc.type, name: acc.name, accountNumber: acc.accountNumber, accountHolder: acc.accountHolder });
+    setPaymentError("");
+    setPaymentDialogOpen(true);
+  };
+
+  const handleSaveAccount = async () => {
+    if (!paymentForm.name || !paymentForm.accountNumber || !paymentForm.accountHolder) {
+      setPaymentError("Semua field harus diisi");
+      return;
+    }
+    setPaymentSaving(true);
+    setPaymentError("");
+    try {
+      const method = editingAccount ? "PUT" : "POST";
+      const url = editingAccount ? "/api/settings/payment-accounts" : "/api/settings/payment-accounts";
+      const body: Record<string, unknown> = { ...paymentForm };
+      if (editingAccount) body.id = editingAccount.id;
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) { const d = await res.json(); setPaymentError(d.error || "Gagal menyimpan"); return; }
+      setPaymentDialogOpen(false);
+      loadPaymentAccounts();
+    } catch { setPaymentError("Gagal menyimpan"); } finally { setPaymentSaving(false); }
+  };
+
+  const openDeleteAccount = (acc: PaymentAccount) => {
+    setPaymentConfirmTarget(acc);
+    setPaymentConfirmOpen(true);
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!paymentConfirmTarget) return;
+    try {
+      await fetch(`/api/settings/payment-accounts?id=${paymentConfirmTarget.id}`, { method: "DELETE" });
+      loadPaymentAccounts();
+    } catch { /* silent */ } finally {
+      setPaymentConfirmOpen(false);
+      setPaymentConfirmTarget(null);
+    }
+  };
+
+  const copyToClipboard = (text: string, id: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -173,7 +274,7 @@ export default function SettingsPage() {
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         <Tabs defaultValue="general" className="w-full max-w-3xl">
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="general" className="gap-2">
               <User className="h-4 w-4" />
               General
@@ -193,6 +294,10 @@ export default function SettingsPage() {
             <TabsTrigger value="menus" className="gap-2">
               <Menu className="h-4 w-4" />
               Menus
+            </TabsTrigger>
+            <TabsTrigger value="payment" className="gap-2">
+              <CreditCard className="h-4 w-4" />
+              Payment
             </TabsTrigger>
           </TabsList>
 
@@ -497,6 +602,103 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           </TabsContent>
+
+          {/* Payment Accounts */}
+          <TabsContent value="payment" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>Rekening & E-Wallet</CardTitle>
+                  <CardDescription>
+                    Akun pembayaran yang ditampilkan ke client di portal
+                  </CardDescription>
+                </div>
+                <Button size="sm" onClick={openCreateAccount}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Tambah Akun
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {paymentLoading ? (
+                  <p className="text-sm text-muted-foreground py-4 text-center">Memuat...</p>
+                ) : paymentAccounts.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CreditCard className="h-10 w-10 mx-auto text-muted-foreground/30 mb-3" />
+                    <p className="text-sm font-medium text-muted-foreground">Belum ada akun pembayaran</p>
+                    <p className="text-xs text-muted-foreground mt-1">Tambahkan rekening bank atau e-wallet untuk ditampilkan ke client</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Bank Accounts */}
+                    {paymentAccounts.filter((a) => a.type === "BANK").length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                          <Building className="h-3.5 w-3.5" />
+                          Transfer Bank
+                        </p>
+                        <div className="space-y-2">
+                          {paymentAccounts.filter((a) => a.type === "BANK").map((acc) => (
+                            <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                              <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center shrink-0">
+                                <Building className="h-4 w-4 text-blue-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-foreground">{acc.name}</p>
+                                <p className="text-xs text-muted-foreground font-mono">{acc.accountNumber}</p>
+                                <p className="text-xs text-muted-foreground">a/n {acc.accountHolder}</p>
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => copyToClipboard(acc.accountNumber, acc.id)}>
+                                {copiedId === acc.id ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => openEditAccount(acc)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => openDeleteAccount(acc)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* E-Wallet Accounts */}
+                    {paymentAccounts.filter((a) => a.type === "EWALLET").length > 0 && (
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase mb-2 flex items-center gap-1.5">
+                          <Smartphone className="h-3.5 w-3.5" />
+                          E-Wallet
+                        </p>
+                        <div className="space-y-2">
+                          {paymentAccounts.filter((a) => a.type === "EWALLET").map((acc) => (
+                            <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                              <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center shrink-0">
+                                <Smartphone className="h-4 w-4 text-green-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-foreground">{acc.name}</p>
+                                <p className="text-xs text-muted-foreground font-mono">{acc.accountNumber}</p>
+                                <p className="text-xs text-muted-foreground">a/n {acc.accountHolder}</p>
+                              </div>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => copyToClipboard(acc.accountNumber, acc.id)}>
+                                {copiedId === acc.id ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />}
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => openEditAccount(acc)}>
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => openDeleteAccount(acc)}>
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
       </div>
 
@@ -602,6 +804,91 @@ export default function SettingsPage() {
               Batal
             </Button>
             <Button variant="destructive" onClick={handleDeleteMenu}>
+              Hapus
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create/Edit Payment Account Dialog */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{editingAccount ? "Edit Akun Pembayaran" : "Tambah Akun Pembayaran"}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {paymentError && <p className="text-sm text-destructive">{paymentError}</p>}
+            <div className="space-y-2">
+              <Label>Tipe Akun</Label>
+              <Select
+                value={paymentForm.type}
+                onValueChange={(v) => v && setPaymentForm((f) => ({ ...f, type: v }))}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BANK">Transfer Bank</SelectItem>
+                  <SelectItem value="EWALLET">E-Wallet</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="accName">Nama Bank / E-Wallet</Label>
+              <Input
+                id="accName"
+                placeholder={paymentForm.type === "BANK" ? "BCA, Mandiri, BRI, ..." : "GoPay, OVO, Dana, ..."}
+                value={paymentForm.name}
+                onChange={(e) => setPaymentForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="accNumber">Nomor Rekening / E-Wallet</Label>
+              <Input
+                id="accNumber"
+                placeholder="1234567890"
+                value={paymentForm.accountNumber}
+                onChange={(e) => setPaymentForm((f) => ({ ...f, accountNumber: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="accHolder">Nama Pemilik</Label>
+              <Input
+                id="accHolder"
+                placeholder="John Doe"
+                value={paymentForm.accountHolder}
+                onChange={(e) => setPaymentForm((f) => ({ ...f, accountHolder: e.target.value }))}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
+              <X className="h-4 w-4 mr-1" />
+              Batal
+            </Button>
+            <Button onClick={handleSaveAccount} disabled={paymentSaving}>
+              {paymentSaving ? "Menyimpan..." : "Simpan"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Payment Account Dialog */}
+      <Dialog open={paymentConfirmOpen} onOpenChange={setPaymentConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Hapus Akun Pembayaran
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Yakin ingin menghapus <strong>&quot;{paymentConfirmTarget?.name} - {paymentConfirmTarget?.accountNumber}&quot;</strong>?
+            Akun ini tidak akan lagi ditampilkan ke client.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentConfirmOpen(false)}>
+              Batal
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteAccount}>
               Hapus
             </Button>
           </DialogFooter>

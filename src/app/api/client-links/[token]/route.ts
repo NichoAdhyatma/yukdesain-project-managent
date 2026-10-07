@@ -19,6 +19,15 @@ export async function GET(
             invoices: {
               orderBy: { issuedAt: "desc" },
               take: 1,
+              select: {
+                id: true,
+                invoiceNumber: true,
+                items: true,
+                subtotal: true,
+                total: true,
+                status: true,
+                issuedAt: true,
+              },
             },
             assignments: {
               include: {
@@ -40,6 +49,10 @@ export async function GET(
                 attachments: true,
               },
               orderBy: { requestedAt: "desc" },
+            },
+            payments: {
+              orderBy: { date: "desc" },
+              take: 20,
             },
           },
         },
@@ -66,14 +79,26 @@ export async function GET(
       return NextResponse.json({ error: "Link has expired" }, { status: 410 });
     }
 
+    // Fetch active payment accounts for the studio
+    const paymentAccounts = await prisma.paymentAccount.findMany({
+      where: { isActive: true },
+      orderBy: { order: "asc" },
+      select: {
+        id: true,
+        type: true,
+        name: true,
+        accountNumber: true,
+        accountHolder: true,
+      },
+    });
+
     // Check locked/submitted - still return data for tracking
     if (link.status === "LOCKED" || link.status === "SUBMITTED") {
-      // Link used - still return data for client tracking
-      return NextResponse.json({ link });
+      return NextResponse.json({ link, paymentAccounts });
     }
 
     // Active link - return as normal
-    return NextResponse.json({ link });
+    return NextResponse.json({ link, paymentAccounts });
   } catch (error) {
     console.error("Error fetching link:", error);
     return NextResponse.json({ error: "Failed to fetch link" }, { status: 500 });
