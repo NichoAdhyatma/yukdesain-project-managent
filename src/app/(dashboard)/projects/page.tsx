@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "@/components/ui/toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -129,11 +130,11 @@ export default function ProjectsPage() {
         loadData();
       } else {
         const data = await res.json();
-        alert(data.error || "Gagal assign designer");
+        toast(data.error || "Gagal assign designer", "error");
       }
     } catch (e) {
       console.error("Failed:", e);
-      alert("Terjadi kesalahan");
+      toast("Terjadi kesalahan", "error");
     } finally {
       setAssigning(false);
     }
@@ -165,11 +166,11 @@ export default function ProjectsPage() {
         loadData();
       } else {
         const data = await res.json();
-        alert(data.error || "Gagal record payment");
+        toast(data.error || "Gagal record payment", "error");
       }
     } catch (e) {
       console.error("Failed:", e);
-      alert("Terjadi kesalahan");
+      toast("Terjadi kesalahan", "error");
     } finally {
       setRecordingPayment(false);
     }

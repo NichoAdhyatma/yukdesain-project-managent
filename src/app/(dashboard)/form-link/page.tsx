@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -94,7 +95,7 @@ export default function FormLinkPage() {
 
       if (!projectRes.ok) {
         const data = await projectRes.json();
-        alert(data.error || "Gagal membuat project");
+        toast(data.error || "Gagal membuat project", "error");
         return;
       }
 
@@ -109,7 +110,7 @@ export default function FormLinkPage() {
 
       if (!linkRes.ok) {
         const data = await linkRes.json();
-        alert(data.error || "Gagal generate link");
+        toast(data.error || "Gagal generate link", "error");
         return;
       }
 
@@ -122,7 +123,7 @@ export default function FormLinkPage() {
 
     } catch (e) {
       console.error("Failed:", e);
-      alert("Terjadi kesalahan");
+      toast("Terjadi kesalahan", "error");
     } finally {
       setSaving(false);
     }
@@ -138,7 +139,7 @@ export default function FormLinkPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        alert(data.error || "Gagal generate link");
+        toast(data.error || "Gagal generate link", "error");
         return;
       }
 
@@ -146,6 +147,7 @@ export default function FormLinkPage() {
       const fullLink = `${window.location.origin}/client/${data.link.token}`;
       setGeneratedLink(fullLink);
       setGeneratedClientName(clientName);
+      toast("Link berhasil di-generate!", "success");
 
       loadData();
     } catch (e) {

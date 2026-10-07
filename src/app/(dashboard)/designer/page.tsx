@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -146,11 +147,11 @@ export default function DesignerWorkspacePage() {
         loadProjects();
       } else {
         const data = await res.json();
-        alert(data.error || "Gagal posting update");
+        toast(data.error || "Gagal posting update", "error");
       }
     } catch (e) {
       console.error("Failed:", e);
-      alert("Terjadi kesalahan");
+      toast("Terjadi kesalahan", "error");
     } finally {
       setSaving(false);
     }
@@ -175,10 +176,10 @@ export default function DesignerWorkspacePage() {
         loadProjects();
       } else {
         const data = await res.json();
-        alert(data.error || "Gagal submit final");
+        toast(data.error || "Gagal submit final", "error");
       }
     } catch {
-      alert("Terjadi kesalahan");
+      toast("Terjadi kesalahan", "error");
     } finally {
       setSubmittingFinal(false);
     }

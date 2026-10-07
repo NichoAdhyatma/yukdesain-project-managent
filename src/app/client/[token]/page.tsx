@@ -18,9 +18,18 @@ import {
   RefreshCw,
   Star,
   History,
+  Receipt,
+  CreditCard,
 } from "lucide-react";
 import { ServiceBriefForm } from "@/components/forms/brief/ServiceBriefForm";
 import type { BriefResponses } from "@/components/forms/brief/types";
+
+type BriefResponseItem = {
+  questionId: string;
+  question: string;
+  answer: string;
+};
+import { toast } from "@/components/ui/toast";
 
 type ClientLink = {
   id: string;
@@ -263,6 +272,468 @@ function formatCurrency(amount: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
 }
 
+// ── Tab Components ──────────────────────────────────────────────────────────
+
+type BriefTabProject = NonNullable<ClientLink["project"]>;
+
+function BriefTab({ project }: { project: BriefTabProject }) {
+  const brief = project.brief;
+  if (!brief) return null;
+
+  const responses = Array.isArray(brief.responses) ? (brief.responses as BriefResponseItem[]) : [];
+  if (responses.length === 0) return null;
+
+  const textFields: Array<{ label: string; value: string }> = [];
+  let menuItems: Array<{ id: string; name: string; price?: string; image?: string; caption?: string }> = [];
+  let cartSides: Array<{ sideName: string; dimensions: string; textBrief: string }> = [];
+  let boxRefs: Array<{ imageUrl?: string; description?: string }> = [];
+  let cartRefs: Array<{ imageUrl?: string; description?: string }> = [];
+  const referenceImages: string[] = [];
+  let brandLogoUrl = "";
+  let vendorLogoUrl = "";
+  let KopiMenuItems: Array<{ id: string; name: string; price?: string; image?: string; caption?: string }> = [];
+
+  const FIELD_LABELS: Record<string, string> = {
+    brand_name: "Nama Brand / Usaha",
+    tagline: "Tagline",
+    business_desc: "Deskripsi Bisnis",
+    colors: "Warna yang Diinginkan",
+    main_text: "Teks Utama",
+    size: "Ukuran",
+    style: "Gaya / Style",
+    dimensions: "Dimensi",
+    mandatory_info: "Informasi Wajib",
+    color_concept: "Konsep Warna",
+    sticker_shape: "Bentuk Sticker",
+    sticker_media: "Media Cetak",
+    sticker_text: "Teks Sticker",
+    photobooth_size: "Ukuran Fotobooth",
+    vendor_name: "Nama Vendor / Tempat",
+    event_theme: "Tema Acara",
+    sosmed_platform: "Platform Social Media",
+    sosmed_vibe: "Vibe / Gaya",
+  };
+
+  function isImageUrl(val: string) {
+    if (!val) return false;
+    try {
+      const ext = new URL(val).pathname.toLowerCase();
+      return /\.(jpg|jpeg|png|gif|webp|svg)$/.test(ext) ||
+        val.includes("r2.dev") || val.includes("cloudflarestorage") || val.includes("imgix");
+    } catch { return false; }
+  }
+
+  function parseJson(val: string) {
+    try { return JSON.parse(val); }
+    catch { return null; }
+  }
+
+  for (const item of responses) {
+    const q = item.questionId;
+    const a = item.answer;
+    if (!a) continue;
+
+    if (q === "brand_logo_url" && isImageUrl(a)) { brandLogoUrl = a; continue; }
+    if (q === "vendor_logo_url" && isImageUrl(a)) { vendorLogoUrl = a; continue; }
+
+    if (q === "reference_items_json") {
+      const parsed = parseJson(a);
+      if (Array.isArray(parsed)) {
+        for (const item of parsed) {
+          if (item.imageUrl) referenceImages.push(item.imageUrl);
+          else if (item.url) referenceImages.push(item.url);
+        }
+      }
+      continue;
+    }
+
+    if (q === "menu_items_json") {
+      const parsed = parseJson(a);
+      if (Array.isArray(parsed)) menuItems = parsed;
+      continue;
+    }
+    if (q === "kopi_menu_items_json") {
+      const parsed = parseJson(a);
+      if (Array.isArray(parsed)) KopiMenuItems = parsed;
+      continue;
+    }
+    if (q === "cart_sides_json") {
+      const parsed = parseJson(a);
+      if (Array.isArray(parsed)) cartSides = parsed;
+      continue;
+    }
+    if (q === "box_references_json") {
+      const parsed = parseJson(a);
+      if (Array.isArray(parsed)) boxRefs = parsed;
+      continue;
+    }
+    if (q === "cart_references_json") {
+      const parsed = parseJson(a);
+      if (Array.isArray(parsed)) cartRefs = parsed;
+      continue;
+    }
+
+    // Regular text / image URL fields
+    if (isImageUrl(a)) {
+      textFields.push({ label: FIELD_LABELS[q] || q, value: a });
+    } else {
+      textFields.push({ label: FIELD_LABELS[q] || q, value: a });
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Logo images */}
+      {(brandLogoUrl || vendorLogoUrl) && (
+        <div className="grid grid-cols-2 gap-3">
+          {brandLogoUrl && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Logo Brand</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={brandLogoUrl} alt="Logo Brand" className="w-full max-h-32 object-contain rounded-lg border bg-muted/50" />
+            </div>
+          )}
+          {vendorLogoUrl && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Logo Vendor</p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={vendorLogoUrl} alt="Logo Vendor" className="w-full max-h-32 object-contain rounded-lg border bg-muted/50" />
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Text fields */}
+      {textFields.filter(f => !isImageUrl(f.value)).length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Informasi Brief</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {textFields.filter(f => !isImageUrl(f.value)).map((f) => (
+              <div key={f.label} className="flex gap-3 text-sm">
+                <p className="text-muted-foreground shrink-0 w-40">{f.label}</p>
+                <p className="font-medium whitespace-pre-wrap wrap-break-word">{f.value}</p>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Menu Items (SVC-03/04/05) */}
+      {menuItems.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Daftar Menu</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {menuItems.map((item, idx) => (
+                <div key={item.id || idx} className="rounded-lg border overflow-hidden">
+                  {item.image && (
+                    <div className="aspect-square bg-muted/50">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <div className="p-2">
+                    <p className="text-sm font-medium truncate">{item.name}</p>
+                    {item.price && (
+                      <p className="text-xs text-muted-foreground">{formatCurrency(parseInt(item.price, 10) || 0)}</p>
+                    )}
+                    {item.caption && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.caption}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Cart Sides (SVC-11) */}
+      {cartSides.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Sisi Gerobak</CardTitle>
+          </CardHeader>
+          <CardContent className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Sisi</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Ukuran</th>
+                  <th className="text-left px-3 py-2 font-medium text-muted-foreground text-xs">Deskripsi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cartSides.map((side, idx) => (
+                  <tr key={idx} className="border-t">
+                    <td className="px-3 py-2 font-medium">{side.sideName}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{side.dimensions}</td>
+                    <td className="px-3 py-2">{side.textBrief || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Kopi Menu Items (SVC-11) */}
+      {KopiMenuItems.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Menu Kopi</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {KopiMenuItems.map((item, idx) => (
+                <div key={item.id || idx} className="rounded-lg border overflow-hidden">
+                  {item.image && (
+                    <div className="aspect-square bg-muted/50">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <div className="p-2">
+                    <p className="text-sm font-medium truncate">{item.name}</p>
+                    {item.price && (
+                      <p className="text-xs text-muted-foreground">{formatCurrency(parseInt(item.price, 10) || 0)}</p>
+                    )}
+                    {item.caption && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.caption}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Box References (SVC-07) */}
+      {(boxRefs.length > 0 || cartRefs.length > 0) && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Referensi Desain</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[...boxRefs, ...cartRefs].map((ref, idx) =>
+                ref.imageUrl ? (
+                  <div key={idx} className="space-y-1">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={ref.imageUrl} alt={ref.description || `Referensi ${idx + 1}`} className="w-full h-32 object-cover rounded-lg border" />
+                    {ref.description && <p className="text-xs text-muted-foreground">{ref.description}</p>}
+                  </div>
+                ) : ref.description ? (
+                  <div key={idx} className="rounded-lg border p-2 text-xs text-muted-foreground">{ref.description}</div>
+                ) : null
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Reference images */}
+      {referenceImages.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Referensi Gambar</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {referenceImages.map((url, idx) => (
+                <a key={idx} href={url} target="_blank" rel="noopener noreferrer">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={url} alt={`Referensi ${idx + 1}`} className="w-full h-28 object-cover rounded-lg border hover:border-primary transition-colors" />
+                </a>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Service Info */}
+      <Card className="border-dashed">
+        <CardContent className="pt-4">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-medium">Layanan:</span> {project.service.name} ({project.service.code})
+          </p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+type InvoiceTabProject = NonNullable<ClientLink["project"]>;
+type InvoiceTabInvoice = NonNullable<ClientLink["project"]>["invoices"][number];
+
+function InvoiceTab({
+  project,
+  latestInvoice,
+  formatDate,
+  formatCurrency,
+}: {
+  project: InvoiceTabProject;
+  latestInvoice: InvoiceTabInvoice;
+  formatDate: (d: string) => string;
+  formatCurrency: (n: number) => string;
+}) {
+  if (!latestInvoice) {
+    return (
+      <Card>
+        <CardContent className="py-8 text-center">
+          <Receipt className="h-8 w-8 mx-auto text-muted-foreground mb-2 opacity-50" />
+          <p className="text-sm text-muted-foreground">Invoice belum tersedia</p>
+          <p className="text-xs text-muted-foreground mt-1">Hubungi admin untuk informasi tagihan.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const statusConfig: Record<string, { label: string; class: string }> = {
+    DRAFT: { label: "Draft", class: "bg-gray-100 text-gray-700" },
+    ISSUED: { label: "Issued", class: "bg-blue-100 text-blue-700" },
+    PAID: { label: "Lunas", class: "bg-green-100 text-green-700" },
+    CANCELLED: { label: "Cancelled", class: "bg-red-100 text-red-700" },
+  };
+  const statusCfg = statusConfig[latestInvoice.status] || { label: latestInvoice.status, class: "bg-gray-100 text-gray-700" };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="text-lg">{latestInvoice.invoiceNumber}</CardTitle>
+            <p className="text-sm text-muted-foreground">Diterbitkan: {formatDate(latestInvoice.issuedAt)}</p>
+          </div>
+          <Badge className={statusCfg.class}>{statusCfg.label}</Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Project Info */}
+        <div className="rounded-md border p-3">
+          <p className="text-xs text-muted-foreground mb-1">Project</p>
+          <p className="text-sm font-medium">{project.service.name}</p>
+          <p className="text-xs text-muted-foreground">{project.projectNumber} — {project.clientName}</p>
+        </div>
+
+        {/* Price Summary */}
+        <div className="rounded-md border p-3 space-y-2">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Total Tagihan</span>
+            <span className="font-medium">{formatCurrency(latestInvoice.total)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Yang Sudah Dibayar</span>
+            <span className="text-green-600 font-medium">{formatCurrency(project.paidAmount)}</span>
+          </div>
+          {project.agreedPrice - project.paidAmount > 0 && (
+            <div className="flex justify-between text-sm border-t pt-2">
+              <span className="text-muted-foreground">Sisa Bayar</span>
+              <span className="text-destructive font-semibold">
+                {formatCurrency(project.agreedPrice - project.paidAmount)}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Note */}
+        <p className="text-xs text-muted-foreground text-center">
+          Pembayaran dapat dilakukan melalui transfer ke rekening yang tertera pada invoice resmi yang dikirimkan oleh admin.
+        </p>
+      </CardContent>
+    </Card>
+  );
+}
+
+type PaymentTabProject = NonNullable<ClientLink["project"]>;
+type PaymentStatusMap = Record<string, { label: string; class: string }>;
+
+function PaymentTab({
+  project,
+  formatCurrency,
+  paymentStatusMap,
+}: {
+  project: PaymentTabProject;
+  formatCurrency: (n: number) => string;
+  paymentStatusMap: PaymentStatusMap;
+}) {
+  const statusCfg = paymentStatusMap[project.paymentStatus] || paymentStatusMap.UNPAID;
+  const remaining = project.agreedPrice - project.paidAmount;
+
+  return (
+    <div className="space-y-4">
+      {/* Payment Status Card */}
+      <Card className="border-primary/30">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CreditCard className="h-4 w-4" />
+            Status Pembayaran
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center justify-between">
+            <Badge className={statusCfg.class}>{statusCfg.label}</Badge>
+          </div>
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Total Harga</span>
+              <span className="font-medium">{formatCurrency(project.agreedPrice)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-muted-foreground">Sudah Dibayar</span>
+              <span className="text-green-600 font-medium">-{formatCurrency(project.paidAmount)}</span>
+            </div>
+            <div className="border-t pt-2 flex justify-between text-sm">
+              <span className="text-muted-foreground">Sisa</span>
+              <span className={remaining > 0 ? "text-destructive font-semibold" : "text-green-600 font-semibold"}>
+                {formatCurrency(remaining)}
+              </span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Payment Progress Bar */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Progress Pembayaran</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="mb-2 flex justify-between text-xs text-muted-foreground">
+            <span>{formatCurrency(project.paidAmount)} dibayar</span>
+            <span>{formatCurrency(project.agreedPrice)}</span>
+          </div>
+          <div className="h-3 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary rounded-full transition-all"
+              style={{ width: `${Math.min(100, (project.paidAmount / project.agreedPrice) * 100)}%` }}
+            />
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 text-center">
+            {Math.round((project.paidAmount / project.agreedPrice) * 100)}% lunas
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Payment Guide */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm">Cara Pembayaran</CardTitle>
+        </CardHeader>
+        <CardContent className="text-sm text-muted-foreground space-y-2">
+          <p>Silakan lakukan pembayaran sesuai sisa tagihan ke rekening yang tertera pada invoice resmi.</p>
+          <p>Setelah melakukan pembayaran, informasikan ke admin melalui WhatsApp untuk konfirmasi pelunasan.</p>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function ClientTrackingPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
   const [link, setLink] = useState<ClientLink | null>(null);
@@ -276,6 +747,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const [revisionFiles, setRevisionFiles] = useState<File[]>([]);
   const [approveFinalOpen, setApproveFinalOpen] = useState(false);
   const [approvingFinal, setApprovingFinal] = useState(false);
+  const [briefTab, setBriefTab] = useState<"brief" | "invoice" | "payment">("brief");
 
   const fetchLink = async () => {
     try {
@@ -315,10 +787,10 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         window.location.reload();
       } else {
         const data = await res.json();
-        alert(data.error || "Gagal submit brief");
+        toast(data.error || "Gagal submit brief", "error");
       }
     } catch {
-      alert("Terjadi kesalahan");
+      toast("Terjadi kesalahan", "error");
     } finally {
       setIsSubmittingBrief(false);
     }
@@ -326,7 +798,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
 
   const handleSubmitRevision = async () => {
     if (!revisionDescription.trim()) {
-      alert("Mohon isi deskripsi revisi");
+      toast("Mohon isi deskripsi revisi", "error");
       return;
     }
     setIsSubmittingRevision(true);
@@ -358,17 +830,17 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         body: formData,
       });
       if (res.ok) {
-        alert("Revisi berhasil disubmit!");
+        toast("Revisi berhasil disubmit!");
         setIsRevisionOpen(false);
         setRevisionDescription("");
         setRevisionFiles([]);
         fetchLink();
       } else {
         const data = await res.json();
-        alert(data.error || "Gagal submit revisi");
+        toast(data.error || "Gagal submit revisi", "error");
       }
     } catch {
-      alert("Terjadi kesalahan");
+      toast("Terjadi kesalahan", "error");
     } finally {
       setIsSubmittingRevision(false);
     }
@@ -381,15 +853,15 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         method: "POST",
       });
       if (res.ok) {
-        alert("🎉 Final work approved! Project selesai.");
+        toast("Project selesai. Terima kasih!", "success");
         setApproveFinalOpen(false);
         fetchLink();
       } else {
         const data = await res.json();
-        alert(data.error || "Gagal approve final work");
+        toast(data.error || "Gagal approve final work", "error");
       }
     } catch {
-      alert("Terjadi kesalahan");
+      toast("Terjadi kesalahan", "error");
     } finally {
       setApprovingFinal(false);
     }
@@ -485,7 +957,6 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Status + Designer */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Deadline</p>
@@ -504,7 +975,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
               )}
             </div>
 
-            {/* Payment Status (BRD 19 - client sees invoice, payment state) */}
+            {/* Payment Summary */}
             {paymentStatus && (
               <div className="rounded-md border p-3">
                 <p className="text-xs text-muted-foreground mb-1">Status Pembayaran</p>
@@ -517,39 +988,81 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
               </div>
             )}
 
-            {/* Invoice (BRD 19) */}
-            {latestInvoice ? (
-              <div className="rounded-md border p-3">
-                <p className="text-xs text-muted-foreground mb-1">Invoice</p>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium">{latestInvoice.invoiceNumber}</p>
-                    <p className="text-xs text-muted-foreground">{formatDate(latestInvoice.issuedAt)}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">{formatCurrency(latestInvoice.total)}</p>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="rounded-md border p-3 flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Invoice belum tersedia</p>
-              </div>
-            )}
-
             {/* Revision Quota */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Sisa Revisi</p>
-                <p className="font-medium">{remainingQuota}x / {MAX_REVISION_QUOTA}x</p>
+                <p className="text-xs text-muted-foreground">Sisa Revisi</p>
+                <p className="text-sm font-medium">{remainingQuota}x / {MAX_REVISION_QUOTA}x</p>
               </div>
+              {latestInvoice && (
+                <div className="text-right">
+                  <p className="text-xs text-muted-foreground">Total Tagihan</p>
+                  <p className="text-sm font-semibold">{formatCurrency(latestInvoice.total)}</p>
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
 
-        {/* Unified Project Timeline */}
-        <Card className="mb-6">
+        {/* Tab Bar */}
+        <div className="flex gap-1 mb-4 border-b">
+          <button
+            onClick={() => setBriefTab("brief")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+              briefTab === "brief"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <FileText className="h-4 w-4" />
+            Brief Saya
+          </button>
+          <button
+            onClick={() => setBriefTab("invoice")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+              briefTab === "invoice"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Receipt className="h-4 w-4" />
+            Invoice
+          </button>
+          <button
+            onClick={() => setBriefTab("payment")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors",
+              briefTab === "payment"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <CreditCard className="h-4 w-4" />
+            Pembayaran
+          </button>
+        </div>
+
+        {/* Tab Content */}
+        {briefTab === "brief" && project?.brief && (
+          <BriefTab project={project} />
+        )}
+        {briefTab === "brief" && !project?.brief && (
+          <Card><CardContent className="py-8 text-center text-muted-foreground">Brief belum disubmit.</CardContent></Card>
+        )}
+        {briefTab === "invoice" && project && latestInvoice && (
+          <InvoiceTab project={project} latestInvoice={latestInvoice} formatDate={formatDate} formatCurrency={formatCurrency} />
+        )}
+        {briefTab === "invoice" && project && !latestInvoice && (
+          <Card><CardContent className="py-8 text-center text-muted-foreground"><Receipt className="h-6 w-6 mx-auto mb-2 text-muted-foreground opacity-50" />Invoice belum tersedia.</CardContent></Card>
+        )}
+        {briefTab === "payment" && project && (
+          <PaymentTab project={project} formatCurrency={formatCurrency} paymentStatusMap={paymentStatusMap} />
+        )}
+
+        {/* Timeline is always visible below tabs */}
+        <Card className="mt-6 mb-6">
           <CardHeader>
             <CardTitle className="text-base flex items-center gap-2">
               <History className="h-4 w-4" />
@@ -573,6 +1086,9 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             })()}
           </CardContent>
         </Card>
+
+        {/* Spacing before action buttons */}
+        <div className="mt-6" />
 
         {/* Final Approval Status / Actions */}
         {project?.finalApprovedAt ? (

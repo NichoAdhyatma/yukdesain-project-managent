@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "@/components/ui/toast";
 import { pdf } from "@react-pdf/renderer";
 import { saveAs } from "file-saver";
 import { Card, CardContent } from "@/components/ui/card";
@@ -171,12 +172,12 @@ export default function InvoicesPage() {
 
   async function handleCreateInvoice() {
     if (!selectedProjectId || invoiceItems.length === 0) {
-      alert("Pilih project dan isi minimal 1 item");
+      toast("Pilih project dan isi minimal 1 item", "error");
       return;
     }
     const validItems = invoiceItems.filter((i) => i.description.trim());
     if (validItems.length === 0) {
-      alert("Minimal isi deskripsi untuk 1 item");
+      toast("Minimal isi deskripsi untuk 1 item", "error");
       return;
     }
     setCreating(true);
@@ -203,13 +204,14 @@ export default function InvoicesPage() {
         setCreateOpen(false);
         resetCreateForm();
         loadInvoices();
-        alert("Invoice berhasil dibuat!");
+        toast("Invoice berhasil dibuat!");
+        loadInvoices();
       } else {
         const data = await res.json();
-        alert(data.error || "Gagal membuat invoice");
+        toast(data.error || "Gagal membuat invoice", "error");
       }
     } catch {
-      alert("Terjadi kesalahan");
+      toast("Terjadi kesalahan", "error");
     } finally {
       setCreating(false);
     }
@@ -243,7 +245,7 @@ export default function InvoicesPage() {
       saveAs(blob, `${invoice.invoiceNumber}.pdf`);
     } catch (err) {
       console.error("Failed to generate PDF:", err);
-      alert("Gagal generate PDF. Coba lagi.");
+      toast("Gagal generate PDF. Coba lagi.", "error");
     } finally {
       setDownloadingId(null);
     }
