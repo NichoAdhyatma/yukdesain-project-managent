@@ -35,6 +35,7 @@ import { pdf } from "@react-pdf/renderer";
 import { saveAs } from "file-saver";
 import { ReceiptPDF } from "@/components/invoice/ReceiptPDF";
 import { ImageViewer } from "@/components/ui/image-viewer";
+import { SubmitProgressOverlay } from "@/components/ui/submit-progress-overlay";
 
 type BriefResponseItem = {
   questionId: string;
@@ -1332,6 +1333,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
 
   const [isRevisionOpen, setIsRevisionOpen] = useState(false);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
+  const [revisionProgress, setRevisionProgress] = useState(0);
   const [revisionDescription, setRevisionDescription] = useState("");
   const [revisionFiles, setRevisionFiles] = useState<Array<{ id: string; file: File; preview?: string }>>([]);
   const [approveFinalOpen, setApproveFinalOpen] = useState(false);
@@ -1386,15 +1388,18 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const handleSubmitRevision = async () => {
     if (!revisionDescription.trim()) { toast("Mohon isi deskripsi revisi", "error"); return; }
     setIsSubmittingRevision(true);
+    const total = revisionFiles.length;
+    setRevisionProgress(total > 0 ? 0 : 100);
     try {
       const attachmentIds: string[] = [];
-      for (const file of revisionFiles) {
+      for (let i = 0; i < revisionFiles.length; i++) {
         const fd = new FormData();
-        fd.append("file", file.file);
+        fd.append("file", revisionFiles[i].file);
         fd.append("projectId", link!.project!.id);
         fd.append("category", "revision");
         const res = await fetch(`/api/client-links/${token}/upload`, { method: "POST", body: fd });
         if (res.ok) { const d = await res.json(); attachmentIds.push(d.attachmentId); }
+        setRevisionProgress(Math.round(((i + 1) / total) * 95));
       }
       const fd = new FormData();
       fd.append("description", revisionDescription);
@@ -1414,6 +1419,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
       toast("Terjadi kesalahan", "error");
     } finally {
       setIsSubmittingRevision(false);
+      setRevisionProgress(0);
     }
   };
 
@@ -1565,6 +1571,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   ];
 
   return (
+    <>
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-3 sm:px-4 py-5 sm:py-6 space-y-4">
         {/* Header */}
@@ -1672,8 +1679,8 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
 
         {/* Final Approval / Revision Actions */}
         <div className="space-y-3 pt-2">
-          {/* Show revision button only if NOT final approved and NOT quota exhausted */}
-          {!project.finalApprovedAt && !isQuotaExhausted && !project.finalSubmittedAt && (
+          {/* Show revision button if not yet final approved, quota available, and has final submission */}
+          {!project.finalApprovedAt && !isQuotaExhausted && (
             <Button
               className="w-full rounded-xl text-sm font-medium py-3 border-2 border-dashed border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/30"
               onClick={() => setIsRevisionOpen(true)}
@@ -1717,6 +1724,9 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         </p>
       </div>
     </div>
+
+    <SubmitProgressOverlay progress={revisionProgress} label="Mengunggah lampiran..." />
+    </>
   );
 }
 

@@ -28,6 +28,7 @@ import { CartReferenceBuilder } from "./CartReferenceBuilder";
 import { KopiMenuBuilder } from "./KopiMenuBuilder";
 import { MenuItemBuilder } from "./MenuItemBuilder";
 import type { BoxReference, CartReference, KopiMenuItem } from "./types";
+import { SubmitProgressOverlay } from "@/components/ui/submit-progress-overlay";
 
 interface ServiceBriefFormProps {
   serviceCode: string;
@@ -62,6 +63,7 @@ export function ServiceBriefForm({
   const [brandLogoFile, setBrandLogoFile] = useState<File>();
   const [vendorLogoUrl, setVendorLogoUrl] = useState<string>();
   const [vendorLogoFile, setVendorLogoFile] = useState<File>();
+  const [progress, setProgress] = useState(0);
 
   const updateField = (field: keyof BriefResponses, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -89,27 +91,50 @@ export function ServiceBriefForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Upload local image files first, then update state
+    // Count total uploads for progress tracking
     const localImageItems = referenceItems.filter(
       (item) => item.type === "image" && item.file
     );
+    const boxFiles = boxReferences.filter((item) => item.file);
+    const cartFiles = cartReferences.filter((item) => item.file);
+    const menuFiles = menuItems.filter((m) => m.name.trim() && m.file);
+    const totalUploads =
+      localImageItems.length +
+      boxFiles.length +
+      cartFiles.length +
+      (brandLogoFile ? 1 : 0) +
+      (vendorLogoFile ? 1 : 0) +
+      menuFiles.length;
+
+    let doneUploads = 0;
+    const tick = () => {
+      doneUploads++;
+      setProgress(totalUploads > 0 ? Math.round((doneUploads / totalUploads) * 95) : 95);
+    };
+
+    if (totalUploads > 0) {
+      setProgress(0);
+    }
+
+    // Upload local image files first, then update state
     const uploadedItems: ReferenceItem[] = [];
 
     for (const item of localImageItems) {
       try {
-        const formData = new FormData();
-        formData.append("file", item.file!);
-        formData.append("projectId", projectId);
-        formData.append("category", "brief-reference");
+        const fd = new FormData();
+        fd.append("file", item.file!);
+        fd.append("projectId", projectId);
+        fd.append("category", "brief-reference");
 
         const uploadUrl = clientToken
           ? `/api/client-links/${clientToken}/upload`
           : "/api/upload";
 
-        const res = await fetch(uploadUrl, { method: "POST", body: formData });
+        const res = await fetch(uploadUrl, { method: "POST", body: fd });
 
         if (!res.ok) {
           console.error("Upload failed for:", item.filename);
+          tick();
           continue;
         }
 
@@ -123,6 +148,7 @@ export function ServiceBriefForm({
       } catch (err) {
         console.error("Upload error:", err);
       }
+      tick();
     }
 
     // Combine uploaded items with URL items
@@ -149,6 +175,7 @@ export function ServiceBriefForm({
       } else if (item.imageUrl) {
         uploadedBoxRefs.push(item);
       }
+      tick();
     }
 
     // Upload cart reference files
@@ -164,6 +191,7 @@ export function ServiceBriefForm({
       } else if (item.imageUrl) {
         uploadedCartRefs.push(item);
       }
+      tick();
     }
 
     // Clean up local blob URLs
@@ -184,6 +212,7 @@ export function ServiceBriefForm({
     if (brandLogoFile) {
       const uploaded = await uploadFile(brandLogoFile, "brief-logo");
       if (uploaded) finalBrandLogoUrl = uploaded.publicUrl;
+      tick();
     }
 
     // Upload vendor logo if pending file
@@ -191,6 +220,7 @@ export function ServiceBriefForm({
     if (vendorLogoFile) {
       const uploaded = await uploadFile(vendorLogoFile, "brief-logo");
       if (uploaded) finalVendorLogoUrl = uploaded.publicUrl;
+      tick();
     }
 
     const responses: BriefResponses = { ...formData };
@@ -204,23 +234,22 @@ export function ServiceBriefForm({
     }
 
     // Upload menu item images
-    const uploadedMenuItems = await Promise.all(
-      menuItems.filter((m) => m.name.trim()).map(async (item) => {
+    for (const item of menuItems) {
+      if (item.name.trim()) {
         if (item.file) {
           const uploaded = await uploadFile(item.file, "brief-menu-item");
-          return {
-            ...item,
-            image: uploaded?.publicUrl ?? item.image,
-            file: undefined,
-          };
+          if (uploaded) {
+            item.image = uploaded.publicUrl;
+            item.file = undefined;
+          }
         }
-        return item;
-      })
-    );
+      }
+      tick();
+    }
 
     // Menu items for SVC-03/04/05
     if (serviceCode === "SVC-03" || serviceCode === "SVC-04" || serviceCode === "SVC-05") {
-      responses.menu_items_json = uploadedMenuItems.filter((m) => m.name.trim());
+      responses.menu_items_json = menuItems.filter((m) => m.name.trim());
     }
 
     // Cart sides for SVC-11
@@ -253,7 +282,9 @@ export function ServiceBriefForm({
       }));
     }
 
+    setProgress(100);
     await onSubmit(responses, attachmentIds);
+    setProgress(0);
   };
 
   // Common style options
@@ -329,6 +360,7 @@ export function ServiceBriefForm({
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Service Header */}
       <Card>
@@ -959,5 +991,8 @@ export function ServiceBriefForm({
         </Button>
       </div>
     </form>
+
+    <SubmitProgressOverlay progress={progress} label="Mengunggah file..." />
+    </>
   );
 }

@@ -38,6 +38,15 @@ export async function POST(
     }
 
     const project = link.project;
+
+    // Block if already final approved
+    if (project.finalApprovedAt) {
+      return NextResponse.json(
+        { error: "Project is already finalized. No more revisions allowed." },
+        { status: 403 }
+      );
+    }
+
     const usedRevisions = project.revisions.length;
 
     // Check quota
