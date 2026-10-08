@@ -110,7 +110,15 @@ export default function FormLinkPage() {
 
       if (!linkRes.ok) {
         const data = await linkRes.json();
-        toast(data.error || "Gagal generate link", "error");
+        if (linkRes.status === 409 && data.link) {
+          const fullLink = `${window.location.origin}/client/${data.link.token}`;
+          setGeneratedLink(fullLink);
+          setGeneratedClientName(form.clientName);
+          loadData();
+        } else {
+          toast(data.error || "Gagal generate link", "error");
+          loadData();
+        }
         return;
       }
 
@@ -139,7 +147,15 @@ export default function FormLinkPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        toast(data.error || "Gagal generate link", "error");
+        if (res.status === 409 && data.link) {
+          const fullLink = `${window.location.origin}/client/${data.link.token}`;
+          setGeneratedLink(fullLink);
+          setGeneratedClientName(clientName);
+          loadData();
+        } else {
+          toast(data.error || "Gagal generate link", "error");
+          loadData();
+        }
         return;
       }
 

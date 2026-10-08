@@ -34,6 +34,7 @@ import { toast } from "@/components/ui/toast";
 import { pdf } from "@react-pdf/renderer";
 import { saveAs } from "file-saver";
 import { ReceiptPDF } from "@/components/invoice/ReceiptPDF";
+import { ImageViewer } from "@/components/ui/image-viewer";
 
 type BriefResponseItem = {
   questionId: string;
@@ -665,10 +666,12 @@ function BriefTab({ project }: { project: BriefTabProject }) {
         <div className="grid grid-cols-2 gap-3">
           {brandLogoUrl && (
             <div className="space-y-1.5 rounded-xl border overflow-hidden">
-              <div className="aspect-square bg-muted/50">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={brandLogoUrl} alt="Logo Brand" className="w-full h-full object-contain" />
-              </div>
+              <ImageViewer
+                src={brandLogoUrl}
+                alt="Logo Brand"
+                imgClassName="w-full aspect-square object-contain"
+                containerClassName="bg-muted/50"
+              />
               <div className="p-2">
                 <p className="text-xs font-medium text-muted-foreground">Logo Brand</p>
               </div>
@@ -676,10 +679,12 @@ function BriefTab({ project }: { project: BriefTabProject }) {
           )}
           {vendorLogoUrl && (
             <div className="space-y-1.5 rounded-xl border overflow-hidden">
-              <div className="aspect-square bg-muted/50">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={vendorLogoUrl} alt="Logo Vendor" className="w-full h-full object-contain" />
-              </div>
+              <ImageViewer
+                src={vendorLogoUrl}
+                alt="Logo Vendor"
+                imgClassName="w-full aspect-square object-contain"
+                containerClassName="bg-muted/50"
+              />
               <div className="p-2">
                 <p className="text-xs font-medium text-muted-foreground">Logo Vendor</p>
               </div>
@@ -716,10 +721,12 @@ function BriefTab({ project }: { project: BriefTabProject }) {
               {menuItems.map((item, idx) => (
                 <div key={item.id || idx} className="rounded-xl border overflow-hidden">
                   {item.image && (
-                    <div className="aspect-square bg-muted/50">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                    </div>
+                    <ImageViewer
+                      src={item.image}
+                      alt={item.name}
+                      imgClassName="w-full aspect-square object-cover"
+                      containerClassName="bg-muted/50"
+                    />
                   )}
                   <div className="p-2.5">
                     <p className="text-sm font-medium truncate">{item.name}</p>
@@ -796,10 +803,12 @@ function BriefTab({ project }: { project: BriefTabProject }) {
               {KopiMenuItems.map((item, idx) => (
                 <div key={item.id || idx} className="rounded-xl border overflow-hidden">
                   {item.image && (
-                    <div className="aspect-square bg-muted/50">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                    </div>
+                    <ImageViewer
+                      src={item.image}
+                      alt={item.name}
+                      imgClassName="w-full aspect-square object-cover"
+                      containerClassName="bg-muted/50"
+                    />
                   )}
                   <div className="p-2.5">
                     <p className="text-sm font-medium truncate">{item.name}</p>
@@ -825,8 +834,11 @@ function BriefTab({ project }: { project: BriefTabProject }) {
               {[...boxRefs, ...cartRefs].map((ref, idx) =>
                 ref.imageUrl ? (
                   <div key={idx} className="space-y-1 rounded-xl border overflow-hidden">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={ref.imageUrl} alt={ref.description || `Referensi ${idx + 1}`} className="w-full h-28 sm:h-32 object-cover" />
+                    <ImageViewer
+                      src={ref.imageUrl}
+                      alt={ref.description || `Referensi ${idx + 1}`}
+                      imgClassName="w-full h-28 sm:h-32 object-cover"
+                    />
                     {ref.description && <p className="text-xs text-muted-foreground p-2">{ref.description}</p>}
                   </div>
                 ) : ref.description ? (
@@ -861,19 +873,11 @@ function BriefTab({ project }: { project: BriefTabProject }) {
                       </p>
                     </a>
                   ) : (
-                    <a
-                      href={item.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block rounded-xl border overflow-hidden hover:border-primary/50 transition-colors"
-                    >
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={item.url}
-                        alt={item.caption || `Referensi ${idx + 1}`}
-                        className="w-full h-28 object-cover"
-                      />
-                    </a>
+                    <ImageViewer
+                      src={item.url}
+                      alt={item.caption || `Referensi ${idx + 1}`}
+                      imgClassName="w-full h-28 object-cover"
+                    />
                   )}
                   {item.caption && (
                     <p className="text-xs text-muted-foreground leading-snug">{item.caption}</p>

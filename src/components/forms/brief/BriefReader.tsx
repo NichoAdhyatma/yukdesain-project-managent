@@ -1,7 +1,8 @@
 "use client";
 
 import { SERVICE_BRIEF_CONFIGS } from "./types";
-import { ExternalLink, FileText } from "lucide-react";
+import { ImageViewer } from "@/components/ui/image-viewer";
+import { FileText } from "lucide-react";
 
 type BriefResponseItem = { questionId: string; question: string; answer: string };
 
@@ -32,23 +33,12 @@ function ImageField({ label, url }: { label: string; url: string }) {
   return (
     <div className="space-y-1">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <div className="relative w-fit">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={url}
-          alt={label}
-          className="max-w-[200px] max-h-[200px] object-contain rounded-lg border bg-muted/50"
-        />
-      </div>
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ExternalLink className="h-3 w-3" />
-        Buka di tab baru
-      </a>
+      <ImageViewer
+        src={url}
+        alt={label}
+        containerClassName="relative w-fit"
+        imgClassName="max-w-[200px] max-h-[200px] object-contain rounded-lg border bg-muted/50"
+      />
     </div>
   );
 }
@@ -65,14 +55,11 @@ function JsonTableField({ label, data }: { label: string; data: unknown }) {
           {data.map((item: { id: string; name: string; price?: string; image?: string; caption?: string }, idx: number) => (
             <div key={item.id || idx} className="rounded-lg border overflow-hidden">
               {item.image && (
-                <div className="aspect-square bg-muted/50">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={item.image}
-                    alt={item.name || `Menu ${idx + 1}`}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+                <ImageViewer
+                  src={item.image}
+                  alt={item.name || `Menu ${idx + 1}`}
+                  imgClassName="w-full aspect-square object-cover"
+                />
               )}
               <div className="p-2">
                 <p className="text-sm font-medium truncate">{item.name || "-"}</p>
@@ -130,11 +117,11 @@ function JsonTableField({ label, data }: { label: string; data: unknown }) {
           {data.map((item: { id?: string; imageUrl?: string; description?: string }, idx: number) =>
             item.imageUrl ? (
               <div key={item.id || idx} className="space-y-1">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <ImageViewer
                   src={item.imageUrl}
                   alt={item.description || `Referensi ${idx + 1}`}
-                  className="w-full h-32 object-cover rounded-lg border"
+                  containerClassName="rounded-lg overflow-hidden border"
+                  imgClassName="w-full h-32 object-cover"
                 />
                 {item.description && (
                   <p className="text-xs text-muted-foreground">{item.description}</p>
@@ -180,14 +167,12 @@ function ImageGalleryField({ label, data }: { label: string; data: unknown }) {
 
           return (
             <div key={item.url || item.imageUrl || idx} className="space-y-1">
-              <a href={imgSrc} target="_blank" rel="noopener noreferrer">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={imgSrc}
-                  alt={caption || `Referensi ${idx + 1}`}
-                  className="w-full h-28 object-cover rounded-lg border hover:border-primary transition-colors cursor-pointer"
-                />
-              </a>
+              <ImageViewer
+                src={imgSrc}
+                alt={caption || `Referensi ${idx + 1}`}
+                containerClassName="rounded-lg overflow-hidden border"
+                imgClassName="w-full h-28 object-cover"
+              />
               {caption && (
                 <p className="text-xs text-muted-foreground leading-snug">{caption}</p>
               )}
