@@ -165,30 +165,35 @@ function JsonTableField({ label, data }: { label: string; data: unknown }) {
 function ImageGalleryField({ label, data }: { label: string; data: unknown }) {
   if (!Array.isArray(data) || data.length === 0) return null;
 
-  const urls = data
-    .map((item: { type?: string; imageUrl?: string; url?: string }) => {
-      if (item.type === "image" && item.imageUrl) return item.imageUrl;
-      if (item.url) return item.url;
-      return null;
-    })
-    .filter(Boolean) as string[];
-
-  if (urls.length === 0) return null;
+  const items = data as Array<{ type?: string; url?: string; imageUrl?: string; caption?: string; description?: string }>;
+  if (items.length === 0) return null;
 
   return (
     <div className="space-y-2">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-        {urls.map((url, idx) => (
-          <a key={idx} href={url} target="_blank" rel="noopener noreferrer">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt={`Referensi ${idx + 1}`}
-              className="w-full h-28 object-cover rounded-lg border hover:border-primary transition-colors cursor-pointer"
-            />
-          </a>
-        ))}
+        {items.map((item, idx) => {
+          const imgSrc = item.type === "url" ? item.url : (item.imageUrl || item.url);
+          const caption = item.caption || item.description;
+
+          if (!imgSrc) return null;
+
+          return (
+            <div key={item.url || item.imageUrl || idx} className="space-y-1">
+              <a href={imgSrc} target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imgSrc}
+                  alt={caption || `Referensi ${idx + 1}`}
+                  className="w-full h-28 object-cover rounded-lg border hover:border-primary transition-colors cursor-pointer"
+                />
+              </a>
+              {caption && (
+                <p className="text-xs text-muted-foreground leading-snug">{caption}</p>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

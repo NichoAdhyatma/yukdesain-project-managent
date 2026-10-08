@@ -25,6 +25,7 @@ import {
   Download,
   Building,
   Smartphone,
+  ExternalLink,
 } from "lucide-react";
 import { ServiceBriefForm } from "@/components/forms/brief/ServiceBriefForm";
 import type { BriefResponses } from "@/components/forms/brief/types";
@@ -120,12 +121,12 @@ type TimelineEvent = {
 };
 
 const eventConfig: Record<TimelineEvent["type"], { icon: React.ElementType; color: string; bgColor: string; bgColorDark: string }> = {
-  brief_submitted: { icon: Send, color: "text-blue-600", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900/50" },
-  designer_assigned: { icon: UserCheck, color: "text-purple-600", bgColor: "bg-purple-100", bgColorDark: "dark:bg-purple-900/50" },
-  progress: { icon: TrendingUp, color: "text-green-600", bgColor: "bg-green-100", bgColorDark: "dark:bg-green-900/50" },
-  revision: { icon: RefreshCw, color: "text-orange-600", bgColor: "bg-orange-100", bgColorDark: "dark:bg-orange-900/50" },
-  final_submitted: { icon: Star, color: "text-amber-600", bgColor: "bg-amber-100", bgColorDark: "dark:bg-amber-900/50" },
-  final_approved: { icon: CheckCircle2, color: "text-emerald-600", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900/50" },
+  brief_submitted: { icon: Send, color: "text-blue-600", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900" },
+  designer_assigned: { icon: UserCheck, color: "text-purple-600", bgColor: "bg-purple-100", bgColorDark: "dark:bg-purple-900" },
+  progress: { icon: TrendingUp, color: "text-green-600", bgColor: "bg-green-100", bgColorDark: "dark:bg-green-900" },
+  revision: { icon: RefreshCw, color: "text-orange-600", bgColor: "bg-orange-100", bgColorDark: "dark:bg-orange-900" },
+  final_submitted: { icon: Star, color: "text-amber-600", bgColor: "bg-amber-100", bgColorDark: "dark:bg-amber-900" },
+  final_approved: { icon: CheckCircle2, color: "text-emerald-600", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900" },
 };
 
 const MAX_REVISION_QUOTA = 3;
@@ -157,9 +158,9 @@ const projectStatusConfig: Record<string, {
     icon: Clock,
     color: "text-yellow-600",
     bgColor: "bg-yellow-100",
-    bgColorDark: "dark:bg-yellow-900/50",
+    bgColorDark: "dark:bg-yellow-900",
     textColor: "text-yellow-800",
-    textColorDark: "dark:text-yellow-200",
+    textColorDark: "dark:text-white",
     description: "Menunggu brief dari client"
   },
   SEDANG_DIKERJAKAN: {
@@ -167,9 +168,9 @@ const projectStatusConfig: Record<string, {
     icon: TrendingUp,
     color: "text-blue-600",
     bgColor: "bg-blue-100",
-    bgColorDark: "dark:bg-blue-900/50",
+    bgColorDark: "dark:bg-blue-900",
     textColor: "text-blue-800",
-    textColorDark: "dark:text-blue-100",
+    textColorDark: "dark:text-white",
     description: "Designer sedang mengerjakan project"
   },
   SELESAI: {
@@ -177,9 +178,9 @@ const projectStatusConfig: Record<string, {
     icon: CheckCircle2,
     color: "text-emerald-600",
     bgColor: "bg-emerald-100",
-    bgColorDark: "dark:bg-emerald-900/50",
+    bgColorDark: "dark:bg-emerald-900",
     textColor: "text-emerald-800",
-    textColorDark: "dark:text-emerald-100",
+    textColorDark: "dark:text-white",
     description: "Project telah selesai"
   },
 };
@@ -197,27 +198,27 @@ const paymentStatusConfig: Record<string, {
     label: "Belum Bayar",
     color: "text-red-600",
     bgColor: "bg-red-100",
-    bgColorDark: "dark:bg-red-900/50",
+    bgColorDark: "dark:bg-red-900",
     textColor: "text-red-800",
-    textColorDark: "dark:text-red-100",
+    textColorDark: "dark:text-white",
     description: "Segera lakukan pembayaran"
   },
   PARTIALLY_PAID: {
     label: "DP",
     color: "text-yellow-600",
     bgColor: "bg-yellow-100",
-    bgColorDark: "dark:bg-yellow-900/50",
+    bgColorDark: "dark:bg-yellow-900",
     textColor: "text-yellow-800",
-    textColorDark: "dark:text-yellow-200",
+    textColorDark: "dark:text-white",
     description: "Uang muka sudah diterima"
   },
   PAID: {
     label: "Lunas",
     color: "text-emerald-600",
     bgColor: "bg-emerald-100",
-    bgColorDark: "dark:bg-emerald-900/50",
+    bgColorDark: "dark:bg-emerald-900",
     textColor: "text-emerald-800",
-    textColorDark: "dark:text-emerald-100",
+    textColorDark: "dark:text-white",
     description: "Pembayaran lunas"
   },
 };
@@ -561,7 +562,7 @@ function BriefTab({ project }: { project: BriefTabProject }) {
   let cartSides: Array<{ sideName: string; dimensions: string; textBrief: string }> = [];
   let boxRefs: Array<{ imageUrl?: string; description?: string }> = [];
   let cartRefs: Array<{ imageUrl?: string; description?: string }> = [];
-  const referenceImages: string[] = [];
+  const referenceItems: Array<{ type: string; url: string; caption?: string }> = [];
   let brandLogoUrl = "";
   let vendorLogoUrl = "";
   let KopiMenuItems: Array<{ id: string; name: string; price?: string; image?: string; caption?: string }> = [];
@@ -613,8 +614,14 @@ function BriefTab({ project }: { project: BriefTabProject }) {
       const parsed = parseJson(a);
       if (Array.isArray(parsed)) {
         for (const refItem of parsed) {
-          if (refItem.imageUrl) referenceImages.push(refItem.imageUrl);
-          else if (refItem.url) referenceImages.push(refItem.url);
+          const url = refItem.type === "url" ? refItem.url : (refItem.imageUrl || refItem.url);
+          if (url) {
+            referenceItems.push({
+              type: refItem.type || "image",
+              url,
+              caption: refItem.caption || refItem.description,
+            });
+          }
         }
       }
       continue;
@@ -832,18 +839,46 @@ function BriefTab({ project }: { project: BriefTabProject }) {
       )}
 
       {/* Reference images */}
-      {referenceImages.length > 0 && (
+      {referenceItems.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Gambar Referensi</CardTitle>
+            <CardTitle className="text-sm">Referensi Gambar & Link</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-              {referenceImages.map((url, idx) => (
-                <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="rounded-xl border overflow-hidden block hover:border-primary/50 transition-colors">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt={`Referensi ${idx + 1}`} className="w-full h-28 sm:h-32 object-cover" />
-                </a>
+              {referenceItems.map((item, idx) => (
+                <div key={item.url + idx} className="space-y-1">
+                  {item.type === "url" ? (
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex flex-col items-center justify-center gap-1.5 rounded-xl border bg-muted/30 p-3 hover:border-primary/50 transition-colors min-h-28"
+                    >
+                      <ExternalLink className="h-5 w-5 text-muted-foreground shrink-0" />
+                      <p className="text-xs text-muted-foreground text-center leading-tight line-clamp-2 break-all px-1">
+                        {item.url.replace(/^https?:\/\//, "")}
+                      </p>
+                    </a>
+                  ) : (
+                    <a
+                      href={item.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block rounded-xl border overflow-hidden hover:border-primary/50 transition-colors"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={item.url}
+                        alt={item.caption || `Referensi ${idx + 1}`}
+                        className="w-full h-28 object-cover"
+                      />
+                    </a>
+                  )}
+                  {item.caption && (
+                    <p className="text-xs text-muted-foreground leading-snug">{item.caption}</p>
+                  )}
+                </div>
               ))}
             </div>
           </CardContent>
@@ -881,12 +916,12 @@ function InvoiceTab({
   }
 
   const statusConfig: Record<string, { label: string; bgColor: string; bgColorDark: string; textColor: string; textColorDark: string }> = {
-    DRAFT: { label: "Draft", bgColor: "bg-gray-100", bgColorDark: "dark:bg-gray-800/60", textColor: "text-gray-900", textColorDark: "dark:text-gray-100" },
-    ISSUED: { label: "Issued", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900/50", textColor: "text-blue-950", textColorDark: "dark:text-blue-100" },
-    PAID: { label: "Lunas", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900/50", textColor: "text-emerald-950", textColorDark: "dark:text-emerald-100" },
-    CANCELLED: { label: "Cancelled", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900/50", textColor: "text-red-950", textColorDark: "dark:text-red-100" },
-    UNPAID: { label: "Belum Bayar", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900/50", textColor: "text-red-950", textColorDark: "dark:text-red-100" },
-    PARTIALLY_PAID: { label: "DP / Cicilan", bgColor: "bg-yellow-100", bgColorDark: "dark:bg-yellow-900/50", textColor: "text-yellow-950", textColorDark: "dark:text-yellow-100" },
+    DRAFT: { label: "Draft", bgColor: "bg-gray-100", bgColorDark: "dark:bg-gray-800", textColor: "text-gray-900", textColorDark: "dark:text-white" },
+    ISSUED: { label: "Issued", bgColor: "bg-blue-100", bgColorDark: "dark:bg-blue-900", textColor: "text-blue-950", textColorDark: "dark:text-white" },
+    PAID: { label: "Lunas", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900", textColor: "text-emerald-950", textColorDark: "dark:text-white" },
+    CANCELLED: { label: "Cancelled", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900", textColor: "text-red-950", textColorDark: "dark:text-white" },
+    UNPAID: { label: "Belum Bayar", bgColor: "bg-red-100", bgColorDark: "dark:bg-red-900", textColor: "text-red-950", textColorDark: "dark:text-white" },
+    PARTIALLY_PAID: { label: "DP / Cicilan", bgColor: "bg-yellow-100", bgColorDark: "dark:bg-yellow-900", textColor: "text-yellow-950", textColorDark: "dark:text-white" },
   };
   const statusCfg = statusConfig[latestInvoice.status] || statusConfig.UNPAID;
 
@@ -1473,7 +1508,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
                   <p className="text-sm font-semibold text-foreground">{project.service.name}</p>
                   <p className="text-xs text-muted-foreground">{project.projectNumber}</p>
                 </div>
-                <Badge className="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-200">
+                <Badge className="text-xs bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-white">
                   Brief Required
                 </Badge>
               </div>
