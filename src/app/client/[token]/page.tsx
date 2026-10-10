@@ -1279,6 +1279,7 @@ function RevisionForm({
   files,
   setFiles,
   onSubmit,
+  onBeforeSubmit,
 }: {
   isOpen: boolean;
   setOpen: (v: boolean) => void;
@@ -1288,6 +1289,7 @@ function RevisionForm({
   files: Array<{ id: string; file: File; preview?: string }>;
   setFiles: Dispatch<SetStateAction<Array<{ id: string; file: File; preview?: string }>>>;
   onSubmit: () => void;
+  onBeforeSubmit?: () => void;
 }) {
   if (!isOpen) return null;
 
@@ -1340,7 +1342,7 @@ function RevisionForm({
           </Button>
           <Button
             className="flex-1 rounded-xl"
-            onClick={onSubmit}
+            onClick={() => { onBeforeSubmit?.(); onSubmit(); }}
             disabled={isSubmitting || !description.trim()}
           >
             {isSubmitting ? (
@@ -1437,7 +1439,6 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
 
   const handleSubmitRevision = async () => {
     if (!revisionDescription.trim()) { toast("Mohon isi deskripsi revisi", "error"); return; }
-    setIsSubmittingRevision(true);
     const total = revisionFiles.length;
     setRevisionProgress(total > 0 ? 0 : 100);
     try {
@@ -1582,6 +1583,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             serviceName={project.service.name}
             onSubmit={handleSubmitBrief}
             isSubmitting={isSubmittingBrief}
+            onBeforeSubmit={() => setIsSubmittingBrief(true)}
           />
         </div>
       </div>
@@ -1925,6 +1927,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             files={revisionFiles}
             setFiles={setRevisionFiles}
             onSubmit={handleSubmitRevision}
+            onBeforeSubmit={() => setIsSubmittingRevision(true)}
           />
         </div>
 

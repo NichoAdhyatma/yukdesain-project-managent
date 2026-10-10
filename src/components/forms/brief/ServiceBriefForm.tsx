@@ -38,6 +38,7 @@ interface ServiceBriefFormProps {
   clientToken?: string;
   onSubmit: (responses: BriefResponses, attachmentIds: string[]) => Promise<void>;
   isSubmitting?: boolean;
+  onBeforeSubmit?: () => void;
 }
 
 export function ServiceBriefForm({
@@ -47,6 +48,7 @@ export function ServiceBriefForm({
   clientToken,
   onSubmit,
   isSubmitting = false,
+  onBeforeSubmit,
 }: ServiceBriefFormProps) {
   const config = SERVICE_BRIEF_CONFIGS.find((c) => c.code === serviceCode);
   const [formData, setFormData] = useState<BriefResponses>({});
@@ -89,6 +91,7 @@ export function ServiceBriefForm({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    onBeforeSubmit?.();
 
     // Count total uploads for progress tracking
     const localImageItems = referenceItems.filter(
