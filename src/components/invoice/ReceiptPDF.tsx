@@ -123,6 +123,7 @@ interface ReceiptPDFProps {
   agreedPrice: number;
   paymentAccounts?: PaymentAccount[];
   clientToken?: string;
+  studioName?: string;
 }
 
 function fmtRp(amount: number): string {
@@ -182,6 +183,7 @@ export function ReceiptPDF({
   paymentStatus,
   paymentAccounts,
   clientToken,
+  studioName = "YukDesain Studio",
 }: ReceiptPDFProps) {
   const statusLabel = STATUS_LABELS[paymentStatus] || paymentStatus;
   const remaining = Math.max(0, total - paidAmount);
@@ -194,7 +196,7 @@ export function ReceiptPDF({
       <Page size={[PW, 640]} style={styles.page}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.company}>YukDesain Studio</Text>
+          <Text style={styles.company}>{studioName}</Text>
           <Text style={styles.tagline}>Creative Design Agency, Jakarta</Text>
         </View>
 

@@ -227,6 +227,9 @@ interface InvoicePDFProps {
   tax?: number | null;
   total: number;
   status: string;
+  studioName?: string;
+  studioTagline?: string;
+  studioAddress?: string;
 }
 
 function formatCurrency(amount: number): string {
@@ -262,6 +265,9 @@ export function InvoicePDF({
   tax,
   total,
   status,
+  studioName = "YukDesain Studio",
+  studioTagline = "Creative Design Agency",
+  studioAddress = "Jakarta, Indonesia",
 }: InvoicePDFProps) {
   const statusLabel = statusLabels[status] || status;
 
@@ -271,9 +277,9 @@ export function InvoicePDF({
         {/* Header */}
         <View style={styles.header}>
           <View>
-            <Text style={styles.logo}>YukDesain Studio</Text>
-            <Text style={styles.logoSub}>Creative Design Agency</Text>
-            <Text style={styles.logoSub}>Jakarta, Indonesia</Text>
+            <Text style={styles.logo}>{studioName}</Text>
+            <Text style={styles.logoSub}>{studioTagline}</Text>
+            <Text style={styles.logoSub}>{studioAddress}</Text>
           </View>
           <View>
             <Text style={styles.invoiceTitle}>INVOICE</Text>
@@ -372,7 +378,7 @@ export function InvoicePDF({
         {/* Footer */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>
-            YukDesain Studio — Creative Design Agency
+            {studioName} — {studioTagline}
           </Text>
           <Text style={styles.footerText}>
             Generated: {formatDate(new Date().toISOString())}

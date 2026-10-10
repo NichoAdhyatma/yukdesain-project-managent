@@ -48,7 +48,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { STUDIO_DEFAULTS } from "@/lib/constants";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard,
@@ -133,6 +134,14 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
   const [savingRole, setSavingRole] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
+  const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
+
+  useEffect(() => {
+    fetch("/api/settings/studio")
+      .then((r) => r.json())
+      .then((s) => { if (s.name) setStudioName(s.name); })
+      .catch(() => {});
+  }, []);
 
   const toggleGroup = (label: string) => {
     setOpenGroups((prev) => ({
@@ -209,7 +218,7 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
             </div>
             <div>
               <span className="font-semibold text-sidebar-foreground text-sm">
-                YukDesain
+                {studioName}
               </span>
               <span className="block text-[10px] text-muted-foreground -mt-0.5">
                 Studio Portal

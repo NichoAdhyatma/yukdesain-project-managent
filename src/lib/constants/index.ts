@@ -158,6 +158,15 @@ export const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "ima
 export const ALLOWED_DOCUMENT_TYPES = ["application/pdf"];
 export const ALLOWED_FILE_TYPES = [...ALLOWED_IMAGE_TYPES, ...ALLOWED_DOCUMENT_TYPES];
 
+// ===== STUDIO DEFAULTS =====
+export const STUDIO_DEFAULTS = {
+  name: "YukDesain Studio",
+  tagline: "Creative Design Agency",
+  email: "hello@yukdesain.com",
+  phone: "",
+  address: "Jakarta, Indonesia",
+} as const;
+
 // ===== CURRENCY =====
 
 export const CURRENCY_SYMBOL = "Rp";

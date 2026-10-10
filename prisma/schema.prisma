@@ -513,3 +513,16 @@ model Session {
   @@index([userId])
   @@map("sessions")
 }
+
+model StudioSettings {
+  id        String   @id @default("default")
+  name      String   @default("YukDesain Studio")
+  tagline   String   @default("Creative Design Agency")
+  email     String   @default("hello@yukdesain.com")
+  phone     String   @default("")
+  address   String   @default("Jakarta, Indonesia")
+  logoUrl   String   @default("")
+  updatedAt DateTime @updatedAt
+
+  @@map("studio_settings")
+}

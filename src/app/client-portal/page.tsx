@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { STUDIO_DEFAULTS } from "@/lib/constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +13,14 @@ export default function ClientPortalPage() {
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
+
+  useEffect(() => {
+    fetch("/api/settings/studio")
+      .then((r) => r.json())
+      .then((s) => { if (s.name) setStudioName(s.name); })
+      .catch(() => {});
+  }, []);
 
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,7 +52,7 @@ export default function ClientPortalPage() {
       <div className="w-full max-w-md space-y-8">
         {/* Brand */}
         <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-foreground">YukDesain Studio</h1>
+          <h1 className="text-2xl font-bold text-foreground">{studioName}</h1>
           <p className="text-sm text-muted-foreground">Client Portal</p>
         </div>
 

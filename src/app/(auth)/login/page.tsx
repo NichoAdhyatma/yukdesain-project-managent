@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2 } from "lucide-react";
+import { STUDIO_DEFAULTS } from "@/lib/constants";
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -45,7 +46,7 @@ function LoginForm() {
         </div>
         <CardTitle className="text-2xl">Masuk</CardTitle>
         <CardDescription>
-          YukDesain Studio Portal
+          {STUDIO_DEFAULTS.name} Portal
         </CardDescription>
       </CardHeader>
       <CardContent>

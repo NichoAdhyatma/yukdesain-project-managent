@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { STUDIO_DEFAULTS } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import {
   ShoppingCart,
@@ -81,6 +83,14 @@ interface Props {
 
 export function DashboardView({ initialMetrics }: Props) {
   const metrics = initialMetrics;
+  const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
+
+  useEffect(() => {
+    fetch("/api/settings/studio")
+      .then((r) => r.json())
+      .then((s) => { if (s.name) setStudioName(s.name); })
+      .catch(() => {});
+  }, []);
 
   const statCards = [
     { title: "Total Orders", value: metrics.newOrders, icon: ShoppingCart, color: "text-blue-600", bgColor: "bg-blue-50 dark:bg-blue-950" },
@@ -94,7 +104,7 @@ export function DashboardView({ initialMetrics }: Props) {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
-        <p className="text-muted-foreground">Selamat datang di YukDesain Studio Portal</p>
+        <p className="text-muted-foreground">Selamat datang di {studioName} Portal</p>
       </div>
 
       {/* Stats Grid */}

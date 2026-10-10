@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use, type Dispatch, type SetStateAction } from "react";
 import { cn } from "@/lib/utils";
+import { STUDIO_DEFAULTS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -1377,6 +1378,14 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const [activeTab, setActiveTab] = useState<"brief" | "invoice" | "payment">("brief");
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
+  const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
+
+  useEffect(() => {
+    fetch("/api/settings/studio")
+      .then((r) => r.json())
+      .then((s) => { if (s.name) setStudioName(s.name); })
+      .catch(() => {});
+  }, []);
 
   const fetchLink = async () => {
     try {
@@ -1500,6 +1509,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
           paidAmount={project.paidAmount}
           paymentStatus={project.paymentStatus}
           agreedPrice={project.agreedPrice}
+          studioName={studioName}
         />
       );
       const blob = await pdf(doc).toBlob();
@@ -1549,7 +1559,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
       <div className="min-h-screen bg-background">
         <div className="max-w-2xl mx-auto px-4 py-6 sm:py-8">
           <div className="text-center mb-6">
-            <h1 className="text-xl font-bold text-foreground">YukDesain Studio</h1>
+            <h1 className="text-xl font-bold text-foreground">{studioName}</h1>
             <p className="text-sm text-muted-foreground">Form Brief Project</p>
           </div>
           <Card className="mb-4">
@@ -1608,6 +1618,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             agreedPrice={project?.agreedPrice ?? submittedInvoice.total}
             paymentAccounts={submittedPaymentAccounts}
             clientToken={briefSubmittedData.projectNumber}
+            studioName={studioName}
           />
         ).toBlob();
         saveAs(blob, `struk-${briefSubmittedData.projectNumber}.pdf`);
@@ -1623,7 +1634,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
           {/* Logo mark */}
           <div className="text-center mb-10">
             <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-              YukDesain Studio
+              {studioName}
             </p>
           </div>
 
@@ -1729,7 +1740,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
 
           {/* Footer */}
           <p className="text-xs text-center text-muted-foreground mt-6">
-            Brief Required · YukDesain Studio · Jakarta
+            Brief Required · {studioName} · Jakarta
           </p>
         </div>
       </div>
@@ -1775,7 +1786,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
       <div className="max-w-2xl mx-auto px-3 sm:px-4 py-5 sm:py-6 space-y-4">
         {/* Header */}
         <div className="text-center pb-1">
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground">YukDesain Studio</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">{studioName}</h1>
           <p className="text-xs sm:text-sm text-muted-foreground">Tracking Project</p>
         </div>
 
@@ -1919,7 +1930,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground pt-2 pb-4">
-          YukDesain Studio © 2026
+          {studioName} © 2026
         </p>
       </div>
     </div>

@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { toast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { STUDIO_DEFAULTS } from "@/lib/constants";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -28,6 +30,7 @@ import {
   Smartphone,
   Copy,
   Check,
+  Loader2,
 } from "lucide-react";
 import {
   Dialog,
@@ -66,10 +69,10 @@ type PaymentAccount = {
 };
 
 export default function SettingsPage() {
-  const [studioName, setStudioName] = useState("YukDesain Studio");
-  const [studioEmail, setStudioEmail] = useState("hello@yukdesain.com");
-  const [studioPhone, setStudioPhone] = useState("+62 812 3456 7890");
-  const [studioAddress, setStudioAddress] = useState("Jakarta, Indonesia");
+  const [studioName, setStudioName] = useState<string>(STUDIO_DEFAULTS.name);
+  const [studioEmail, setStudioEmail] = useState<string>(STUDIO_DEFAULTS.email);
+  const [studioPhone, setStudioPhone] = useState<string>(STUDIO_DEFAULTS.phone);
+  const [studioAddress, setStudioAddress] = useState<string>(STUDIO_DEFAULTS.address);
 
   // Notification settings
   const [notifyNewOrder, setNotifyNewOrder] = useState(true);
@@ -104,6 +107,7 @@ export default function SettingsPage() {
   const [paymentConfirmOpen, setPaymentConfirmOpen] = useState(false);
   const [paymentConfirmTarget, setPaymentConfirmTarget] = useState<PaymentAccount | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [studioSaving, setStudioSaving] = useState(false);
 
   const loadMenus = async () => {
     setMenuLoading(true);
@@ -118,8 +122,41 @@ export default function SettingsPage() {
     }
   };
 
+  const loadStudioSettings = async () => {
+    try {
+      const res = await fetch("/api/settings/studio");
+      const data = await res.json();
+      if (data.name) setStudioName(data.name);
+      if (data.email) setStudioEmail(data.email);
+      if (data.phone !== undefined) setStudioPhone(data.phone || "");
+      if (data.address) setStudioAddress(data.address);
+    } catch { /* silent */ }
+  };
+
+  const handleSaveStudio = async () => {
+    setStudioSaving(true);
+    try {
+      const res = await fetch("/api/settings/studio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: studioName,
+          email: studioEmail,
+          phone: studioPhone,
+          address: studioAddress,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast("Pengaturan berhasil disimpan", "success");
+    } catch {
+      toast("Gagal menyimpan pengaturan", "error");
+    } finally {
+      setStudioSaving(false);
+    }
+  };
+
   /* eslint-disable react-hooks/set-state-in-effect -- pre-existing pattern in codebase */
-  useEffect(() => { loadMenus(); }, []);
+  useEffect(() => { loadMenus(); loadStudioSettings(); }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const openCreateMenu = () => {
@@ -345,9 +382,9 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="pt-4">
-                  <Button>
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Changes
+                  <Button onClick={handleSaveStudio} disabled={studioSaving}>
+                    {studioSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                    {studioSaving ? "Menyimpan..." : "Save Changes"}
                   </Button>
                 </div>
               </CardContent>

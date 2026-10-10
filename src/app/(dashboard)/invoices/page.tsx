@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { STUDIO_DEFAULTS } from "@/lib/constants";
 import {
   Table,
   TableBody,
@@ -75,6 +76,14 @@ export default function InvoicesPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
+
+  useEffect(() => {
+    fetch("/api/settings/studio")
+      .then((r) => r.json())
+      .then((s) => { if (s.name) setStudioName(s.name); })
+      .catch(() => {});
+  }, []);
 
   async function loadInvoices() {
     try {
@@ -110,6 +119,7 @@ export default function InvoicesPage() {
           paidAmount={invoice.project.paidAmount}
           paymentStatus={invoice.status}
           agreedPrice={invoice.project.agreedPrice}
+          studioName={studioName}
         />
       );
       const blob = await pdf(doc).toBlob();
