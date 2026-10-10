@@ -184,6 +184,31 @@ function ImageGalleryField({ label, data }: { label: string; data: unknown }) {
   );
 }
 
+function LogoGalleryField({ label, data }: { label: string; data: unknown }) {
+  if (!Array.isArray(data) || data.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        {data.map((item: { url: string; caption?: string }, idx: number) => (
+          <div key={item.url || idx} className="space-y-1">
+            <ImageViewer
+              src={item.url}
+              alt={item.caption || `Logo ${idx + 1}`}
+              containerClassName="rounded-lg overflow-hidden border"
+              imgClassName="w-full h-32 object-contain bg-muted/50"
+            />
+            {item.caption && (
+              <p className="text-xs text-muted-foreground leading-snug">{item.caption}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Map questionId to human-readable label
 const FIELD_LABELS: Record<string, string> = {
   brand_name: "Nama Brand / Usaha",
@@ -236,6 +261,7 @@ export function BriefReader({ responses, serviceCode }: BriefReaderProps) {
   // Separate special fields from regular fields
   const regularFields: BriefResponseItem[] = [];
   const logoFields: Array<{ label: string; value: string }> = [];
+  const logosJsonField: Array<{ label: string; data: unknown }> = [];
   const jsonFields: Array<{ label: string; data: unknown }> = [];
   const imageGalleryFields: Array<{ label: string; data: unknown }> = [];
 
@@ -247,6 +273,13 @@ export function BriefReader({ responses, serviceCode }: BriefReaderProps) {
     if (questionId === "brand_logo_url" || questionId === "vendor_logo_url") {
       const label = questionId === "brand_logo_url" ? "Logo Brand" : "Logo Vendor";
       logoFields.push({ label, value: answer });
+      continue;
+    }
+
+    // Logos JSON (multi logo with captions)
+    if (questionId === "logos_json") {
+      const parsed = JSON.parse(answer);
+      logosJsonField.push({ label: "Logo Brand", data: parsed });
       continue;
     }
 
@@ -300,6 +333,11 @@ export function BriefReader({ responses, serviceCode }: BriefReaderProps) {
       {/* Image Gallery */}
       {imageGalleryFields.map((f) => (
         <ImageGalleryField key={f.label} label={f.label} data={f.data} />
+      ))}
+
+      {/* Logo Gallery (multi with captions) */}
+      {logosJsonField.map((f) => (
+        <LogoGalleryField key={f.label} label={f.label} data={f.data} />
       ))}
 
       {/* Regular Text Fields */}

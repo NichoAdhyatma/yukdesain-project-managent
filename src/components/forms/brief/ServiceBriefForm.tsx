@@ -23,6 +23,7 @@ import {
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { ReferenceUploader, type ReferenceItem } from "./ReferenceUploader";
 import { SingleImageUploader } from "./SingleImageUploader";
+import { LogoUploader, type LogoItem } from "./LogoUploader";
 import { BoxReferenceBuilder } from "./BoxReferenceBuilder";
 import { CartReferenceBuilder } from "./CartReferenceBuilder";
 import { KopiMenuBuilder } from "./KopiMenuBuilder";
@@ -59,10 +60,8 @@ export function ServiceBriefForm({
   const [boxReferences, setBoxReferences] = useState<BoxReference[]>([]);
   const [cartReferences, setCartReferences] = useState<CartReference[]>([]);
   const [kopiMenuItems, setKopiMenuItems] = useState<KopiMenuItem[]>([{ id: "1", name: "", price: "" }]);
-  const [brandLogoUrl, setBrandLogoUrl] = useState<string>();
-  const [brandLogoFile, setBrandLogoFile] = useState<File>();
-  const [vendorLogoUrl, setVendorLogoUrl] = useState<string>();
-  const [vendorLogoFile, setVendorLogoFile] = useState<File>();
+  const [brandLogos, setBrandLogos] = useState<LogoItem[]>([]);
+  const [vendorLogos, setVendorLogos] = useState<LogoItem[]>([]);
   const [progress, setProgress] = useState(0);
 
   const updateField = (field: keyof BriefResponses, value: string) => {
@@ -98,13 +97,17 @@ export function ServiceBriefForm({
     const boxFiles = boxReferences.filter((item) => item.file);
     const cartFiles = cartReferences.filter((item) => item.file);
     const menuFiles = menuItems.filter((m) => m.name.trim() && m.file);
+    const brandLogoFiles = brandLogos.filter((item) => item.file);
+    const vendorLogoFiles = vendorLogos.filter((item) => item.file);
+    const kopiFiles = kopiMenuItems.filter((k) => k.name.trim() && k.file);
     const totalUploads =
       localImageItems.length +
       boxFiles.length +
       cartFiles.length +
-      (brandLogoFile ? 1 : 0) +
-      (vendorLogoFile ? 1 : 0) +
-      menuFiles.length;
+      brandLogoFiles.length +
+      vendorLogoFiles.length +
+      menuFiles.length +
+      kopiFiles.length;
 
     let doneUploads = 0;
     const tick = () => {
@@ -204,33 +207,51 @@ export function ServiceBriefForm({
     menuItems
       .filter((item) => item.image?.startsWith("blob:"))
       .forEach((item) => { if (item.image) URL.revokeObjectURL(item.image); });
-    if (brandLogoUrl?.startsWith("blob:")) URL.revokeObjectURL(brandLogoUrl);
-    if (vendorLogoUrl?.startsWith("blob:")) URL.revokeObjectURL(vendorLogoUrl);
+    kopiMenuItems
+      .filter((item) => item.image?.startsWith("blob:"))
+      .forEach((item) => { if (item.image) URL.revokeObjectURL(item.image); });
+    brandLogos
+      .filter((item) => item.url.startsWith("blob:"))
+      .forEach((item) => URL.revokeObjectURL(item.url));
+    vendorLogos
+      .filter((item) => item.url.startsWith("blob:"))
+      .forEach((item) => URL.revokeObjectURL(item.url));
 
-    // Upload brand logo if pending file
-    let finalBrandLogoUrl = brandLogoUrl;
-    if (brandLogoFile) {
-      const uploaded = await uploadFile(brandLogoFile, "brief-logo");
-      if (uploaded) finalBrandLogoUrl = uploaded.publicUrl;
-      tick();
-    }
+    // Upload brand logos (multi with captions)
+    const uploadedBrandLogos = await Promise.all(
+      brandLogos.map(async (item) => {
+        if (item.file) {
+          const uploaded = await uploadFile(item.file, "brief-logo");
+          tick();
+          return {
+            url: uploaded?.publicUrl ?? item.url,
+            caption: item.caption,
+          };
+        }
+        return { url: item.url, caption: item.caption };
+      })
+    );
 
-    // Upload vendor logo if pending file
-    let finalVendorLogoUrl = vendorLogoUrl;
-    if (vendorLogoFile) {
-      const uploaded = await uploadFile(vendorLogoFile, "brief-logo");
-      if (uploaded) finalVendorLogoUrl = uploaded.publicUrl;
-      tick();
-    }
+    // Upload vendor logos (multi with captions)
+    const uploadedVendorLogos = await Promise.all(
+      vendorLogos.map(async (item) => {
+        if (item.file) {
+          const uploaded = await uploadFile(item.file, "brief-logo");
+          tick();
+          return {
+            url: uploaded?.publicUrl ?? item.url,
+            caption: item.caption,
+          };
+        }
+        return { url: item.url, caption: item.caption };
+      })
+    );
 
     const responses: BriefResponses = { ...formData };
 
-    // Brand logo URL for SVC-03/04/05 and SVC-11
-    if ((serviceCode === "SVC-03" || serviceCode === "SVC-04" || serviceCode === "SVC-05") && finalBrandLogoUrl) {
-      responses.brand_logo_url = finalBrandLogoUrl;
-    }
-    if (serviceCode === "SVC-11" && finalBrandLogoUrl) {
-      responses.brand_logo_url = finalBrandLogoUrl;
+    // Logos JSON for SVC-03/04/05 and SVC-11
+    if ((serviceCode === "SVC-03" || serviceCode === "SVC-04" || serviceCode === "SVC-05" || serviceCode === "SVC-11") && uploadedBrandLogos.length > 0) {
+      responses.logos_json = uploadedBrandLogos;
     }
 
     // Upload menu item images
@@ -254,6 +275,17 @@ export function ServiceBriefForm({
 
     // Cart sides for SVC-11
     if (serviceCode === "SVC-11") {
+      // Upload kopi menu item images
+      for (const item of kopiMenuItems) {
+        if (item.file) {
+          const uploaded = await uploadFile(item.file, "brief-kopi-menu-item");
+          if (uploaded) {
+            item.image = uploaded.publicUrl;
+            item.file = undefined;
+          }
+        }
+        tick();
+      }
       responses.cart_sides_json = cartSides.filter((s) => s.textBrief.trim());
       responses.cart_references_json = uploadedCartRefs.filter((c) => c.imageUrl);
       responses.kopi_menu_items_json = kopiMenuItems.filter((k) => k.name.trim());
@@ -265,8 +297,8 @@ export function ServiceBriefForm({
     }
 
     // Vendor logo URL for SVC-09
-    if (serviceCode === "SVC-09" && finalVendorLogoUrl) {
-      responses.vendor_logo_url = finalVendorLogoUrl;
+    if (serviceCode === "SVC-09" && uploadedVendorLogos.length > 0) {
+      responses.vendor_logo_url = uploadedVendorLogos[0].url;
     }
 
     // Collect attachment IDs from uploaded image items
@@ -507,15 +539,13 @@ export function ServiceBriefForm({
               <CardDescription>Upload logo brand Anda (opsional)</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              <SingleImageUploader
-                value={brandLogoUrl}
-                onChange={setBrandLogoUrl}
-                onFileChange={setBrandLogoFile}
+              <LogoUploader
+                items={brandLogos}
+                onChange={setBrandLogos}
                 label="Logo Brand"
                 helperText="Upload file logo brand untuk ditampilkan di desain"
-                projectId={projectId}
-                clientToken={clientToken}
                 disabled={isSubmitting}
+                maxItems={5}
               />
             </CardContent>
           </Card>
@@ -768,15 +798,13 @@ export function ServiceBriefForm({
               <p className="text-xs text-muted-foreground -mt-1">
                 Upload logo vendor/tempat jika ada
               </p>
-              <SingleImageUploader
-                value={vendorLogoUrl}
-                onChange={setVendorLogoUrl}
-                onFileChange={setVendorLogoFile}
+              <LogoUploader
+                items={vendorLogos}
+                onChange={setVendorLogos}
                 label="Logo Vendor"
                 helperText="Upload logo vendor atau tempat photobooth"
-                projectId={projectId}
-                clientToken={clientToken}
                 disabled={isSubmitting}
+                maxItems={5}
               />
             </div>
           </CardContent>
@@ -920,15 +948,13 @@ export function ServiceBriefForm({
               <CardDescription>Upload logo brand Anda (opsional)</CardDescription>
             </CardHeader>
             <CardContent>
-              <SingleImageUploader
-                value={brandLogoUrl}
-                onChange={setBrandLogoUrl}
-                onFileChange={setBrandLogoFile}
+              <LogoUploader
+                items={brandLogos}
+                onChange={setBrandLogos}
                 label="Logo Brand"
                 helperText="Upload file logo brand untuk ditampilkan di desain gerobak"
-                projectId={projectId}
-                clientToken={clientToken}
                 disabled={isSubmitting}
+                maxItems={5}
               />
             </CardContent>
           </Card>

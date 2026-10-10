@@ -37,6 +37,12 @@ export interface BriefResponses {
   cart_sides_json?: CartSide[];
   kopi_menu_items_json?: KopiMenuItem[];
   reference_items_json?: ReferenceItem[];
+  logos_json?: LogoItemBrief[];
+}
+
+export interface LogoItemBrief {
+  url: string;
+  caption: string;
 }
 
 export interface MenuItem {
@@ -75,6 +81,7 @@ export interface KopiMenuItem {
   price?: string;
   image?: string;
   caption?: string;
+  file?: File; // local file for preview, uploaded on form submit
 }
 
 export interface ReferenceItem {
@@ -128,7 +135,7 @@ export const SERVICE_BRIEF_CONFIGS: ServiceBriefConfig[] = [
     code: SERVICE_CODES.POSTER_MENU,
     name: "Poster Menu",
     requiredFields: ["main_text", "size", "style"],
-    optionalFields: ["brand_logo_url", "menu_items_json"],
+    optionalFields: ["logos_json", "menu_items_json"],
     hasRepeatableItems: true,
     repeatableItemType: "menu_items",
   },
@@ -136,7 +143,7 @@ export const SERVICE_BRIEF_CONFIGS: ServiceBriefConfig[] = [
     code: SERVICE_CODES.BANNER_UMKM,
     name: "Banner UMKM",
     requiredFields: ["main_text", "size", "style"],
-    optionalFields: ["brand_logo_url", "menu_items_json"],
+    optionalFields: ["logos_json", "menu_items_json"],
     hasRepeatableItems: true,
     repeatableItemType: "menu_items",
   },
@@ -144,7 +151,7 @@ export const SERVICE_BRIEF_CONFIGS: ServiceBriefConfig[] = [
     code: SERVICE_CODES.BALIHO_SPANDUK,
     name: "Baliho / Spanduk Ads",
     requiredFields: ["main_text", "size", "style"],
-    optionalFields: ["brand_logo_url", "menu_items_json"],
+    optionalFields: ["logos_json", "menu_items_json"],
     hasRepeatableItems: true,
     repeatableItemType: "menu_items",
   },
@@ -184,7 +191,7 @@ export const SERVICE_BRIEF_CONFIGS: ServiceBriefConfig[] = [
     code: SERVICE_CODES.PAKET_BRAND_KOPI,
     name: "Paket Brand Kopi Keliling",
     requiredFields: ["brand_name", "main_text"],
-    optionalFields: ["brand_logo_url", "cart_sides_json", "cart_references_json", "kopi_menu_items_json", "reference_items_json"],
+    optionalFields: ["logos_json", "cart_sides_json", "cart_references_json", "kopi_menu_items_json", "reference_items_json"],
     hasRepeatableItems: true,
     repeatableItemType: "cart_sides",
   },

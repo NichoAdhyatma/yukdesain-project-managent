@@ -567,6 +567,7 @@ function BriefTab({ project }: { project: BriefTabProject }) {
   const referenceItems: Array<{ type: string; url: string; caption?: string }> = [];
   let brandLogoUrl = "";
   let vendorLogoUrl = "";
+  const logosJson: Array<{ url: string; caption?: string }> = [];
   let KopiMenuItems: Array<{ id: string; name: string; price?: string; image?: string; caption?: string }> = [];
 
   const FIELD_LABELS: Record<string, string> = {
@@ -611,6 +612,16 @@ function BriefTab({ project }: { project: BriefTabProject }) {
 
     if (q === "brand_logo_url" && isImageUrl(a)) { brandLogoUrl = a; continue; }
     if (q === "vendor_logo_url" && isImageUrl(a)) { vendorLogoUrl = a; continue; }
+
+    if (q === "logos_json") {
+      const parsed = parseJson(a);
+      if (Array.isArray(parsed)) {
+        for (const logo of parsed) {
+          if (logo.url) logosJson.push({ url: logo.url, caption: logo.caption });
+        }
+      }
+      continue;
+    }
 
     if (q === "reference_items_json") {
       const parsed = parseJson(a);
@@ -663,9 +674,27 @@ function BriefTab({ project }: { project: BriefTabProject }) {
   return (
     <div className="space-y-4">
       {/* Logo images */}
-      {(brandLogoUrl || vendorLogoUrl) && (
+      {(brandLogoUrl || vendorLogoUrl || logosJson.length > 0) && (
         <div className="grid grid-cols-2 gap-3">
-          {brandLogoUrl && (
+          {/* Multi logos with captions */}
+          {logosJson.map((logo, idx) => (
+            <div key={logo.url || idx} className="space-y-1.5 rounded-xl border overflow-hidden">
+              <ImageViewer
+                src={logo.url}
+                alt={logo.caption || `Logo ${idx + 1}`}
+                imgClassName="w-full aspect-square object-contain"
+                containerClassName="bg-muted/50"
+              />
+              <div className="p-2">
+                <p className="text-xs font-medium text-muted-foreground">Logo Brand</p>
+                {logo.caption && (
+                  <p className="text-xs text-muted-foreground/70 mt-0.5">{logo.caption}</p>
+                )}
+              </div>
+            </div>
+          ))}
+          {/* Legacy single brand logo */}
+          {brandLogoUrl && !logosJson.some(l => l.url === brandLogoUrl) && (
             <div className="space-y-1.5 rounded-xl border overflow-hidden">
               <ImageViewer
                 src={brandLogoUrl}
@@ -678,6 +707,7 @@ function BriefTab({ project }: { project: BriefTabProject }) {
               </div>
             </div>
           )}
+          {/* Single vendor logo */}
           {vendorLogoUrl && (
             <div className="space-y-1.5 rounded-xl border overflow-hidden">
               <ImageViewer
