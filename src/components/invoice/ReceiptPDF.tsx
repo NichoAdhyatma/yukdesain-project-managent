@@ -1,319 +1,110 @@
 import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 
-// YukDesain brand colors (from globals.css design tokens)
+// Thermal receipt 80mm: black & white, Courier monospace.
+// Tracking code: highlighted box (black bg, white text) agar user mudah notice.
+
 const C = {
-  brand: "#8B5CF6",
-  brandDark: "#7C3AED",
-  brandLight: "#EDE9FE",
-  brandLighter: "#F5F3FF",
-  black: "#111827",
+  black: "#111111",
+  gray: "#6b7280",
   white: "#FFFFFF",
-  gray: {
-    50: "#f9fafb",
-    100: "#f3f4f6",
-    200: "#e5e7eb",
-    300: "#d1d5db",
-    400: "#9ca3af",
-    500: "#6b7280",
-    700: "#374151",
-  },
-  success: "#059669",
-  successBg: "#ECFDF5",
-  danger: "#B91C1C",
-  dangerBg: "#FEF2F2",
+  blue: "#2563EB",
 };
 
-const W = 340; // page width minus padding
+const PW = 226; // 80mm ≈ 226pt
+const PAD = 12;
+
+const FONT = "Courier";
+const FONT_BOLD = "Courier-Bold";
+const LABEL_W = 52;
 
 const styles = StyleSheet.create({
   page: {
-    padding: 24,
-    fontFamily: "Helvetica",
+    paddingVertical: 14,
+    paddingHorizontal: PAD,
+    fontFamily: FONT,
+    fontSize: 8,
+    color: C.black,
     backgroundColor: C.white,
   },
-  receiptBox: {
-    borderWidth: 1,
-    borderColor: C.gray[300],
-    borderStyle: "solid",
-    borderRadius: 8,
-    overflow: "hidden",
-  },
 
-  // ── Header Banner ─────────────────────────────────────────────────────────────
-  headerBanner: {
-    backgroundColor: C.brandDark,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+  // ── Header ─────────────────────────────────────────────────────────────────
+  header: { alignItems: "center", marginBottom: 4 },
+  company: { fontFamily: FONT_BOLD, fontSize: 12, textAlign: "center" },
+  tagline: { fontSize: 7, color: C.gray, textAlign: "center", marginTop: 1 },
+
+  // ── Title bar ──────────────────────────────────────────────────────────────
+  titleBar: {
+    backgroundColor: C.black,
     alignItems: "center",
-  },
-  companyName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: C.white,
-    marginBottom: 2,
-  },
-  companyTagline: {
-    fontSize: 8,
-    color: "rgba(255,255,255,0.75)",
-    marginBottom: 1,
-  },
-
-  // ── Receipt Title Row ────────────────────────────────────────────────────────
-  titleRow: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.gray[200],
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  titleLabel: {
-    fontSize: 13,
-    fontWeight: "bold",
-    color: C.brandDark,
-  },
-  titleNumber: {
-    fontSize: 8,
-    color: C.gray[500],
-  },
-
-  // ── Info Section ─────────────────────────────────────────────────────────────
-  infoSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.gray[200],
-  },
-  infoRow: {
-    flexDirection: "row",
+    paddingVertical: 4,
     marginBottom: 8,
   },
-  infoLeftCol: {
-    width: "50%",
-  },
-  infoRightCol: {
-    width: "50%",
-    alignItems: "flex-end",
-  },
-  infoLabel: {
-    fontSize: 7,
-    color: C.gray[400],
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginBottom: 1,
-  },
-  infoValue: {
-    fontSize: 10,
-    color: C.black,
-    marginBottom: 6,
-  },
-  infoValueBold: {
-    fontSize: 11,
-    fontWeight: "bold",
-    color: C.black,
-    marginBottom: 6,
-  },
+  titleText: { fontFamily: FONT_BOLD, fontSize: 9, color: C.white, letterSpacing: 1.5 },
 
-  // ── Items Section ────────────────────────────────────────────────────────────
-  itemsSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.gray[200],
-  },
-  sectionTitle: {
-    fontSize: 8,
-    fontWeight: "bold",
-    color: C.gray[500],
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-    marginBottom: 8,
-  },
-  // Cols: desc(170) qty(28) price(68) total(74) = 340
-  colHeader: {
-    flexDirection: "row",
-    paddingBottom: 4,
-    borderBottomWidth: 1,
-    borderBottomColor: C.gray[200],
-    marginBottom: 4,
-  },
-  colHeaderText: {
-    fontSize: 7,
-    color: C.gray[400],
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  colDesc: { width: 170 },
-  colQty: { width: 28, textAlign: "center" },
-  colPrice: { width: 68, textAlign: "right" },
-  colTotal: { width: 74, textAlign: "right" },
-  itemRow: {
-    flexDirection: "row",
-    paddingVertical: 5,
-  },
-  itemDesc: {
-    width: 170,
-    fontSize: 9,
-    color: C.gray[700],
-  },
-  itemQty: {
-    width: 28,
-    fontSize: 9,
-    color: C.gray[700],
-    textAlign: "center",
-  },
-  itemPrice: {
-    width: 68,
-    fontSize: 9,
-    color: C.gray[700],
-    textAlign: "right",
-  },
-  itemTotal: {
-    width: 74,
-    fontSize: 9,
-    color: C.black,
-    fontWeight: "bold",
-    textAlign: "right",
-  },
+  // ── KV row ────────────────────────────────────────────────────────────────
+  kvRow: { flexDirection: "row", marginBottom: 2 },
+  kvLabel: { width: LABEL_W, fontSize: 8, color: C.gray },
+  kvValue: { flex: 1, fontSize: 8 },
 
-  // ── Summary Section ─────────────────────────────────────────────────────────
-  summarySection: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.gray[200],
-  },
-  summaryLine: {
+  // ── Item ─────────────────────────────────────────────────────────────────
+  itemBlock: { marginBottom: 5 },
+  itemDesc: { fontFamily: FONT_BOLD, fontSize: 8.5, marginBottom: 1 },
+  itemBottom: { flexDirection: "row", justifyContent: "space-between" },
+  itemCalc: { fontSize: 8, color: C.gray },
+  itemTotal: { fontFamily: FONT_BOLD, fontSize: 8.5, textAlign: "right" },
+
+  // ── Summary ────────────────────────────────────────────────────────────────
+  sumRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
+  sumLabel: { fontSize: 8, color: C.gray, width: 100, textAlign: "right", paddingRight: 8 },
+  sumValue: { fontSize: 8, minWidth: 80, textAlign: "right" },
+  sumAccent: { color: C.blue },
+  totalRow: {
     flexDirection: "row",
     justifyContent: "flex-end",
-    marginBottom: 5,
-    width: 160,
+    paddingTop: 3,
+    borderTopWidth: 0.5,
+    borderTopColor: C.black,
+    marginTop: 2,
   },
-  summaryLinePaid: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginBottom: 5,
-    width: 160,
-  },
-  summaryLineLabel: {
-    fontSize: 9,
-    color: C.gray[500],
-    width: 90,
-    textAlign: "right",
-    paddingRight: 8,
-  },
-  summaryLineValue: {
-    fontSize: 9,
-    color: C.gray[700],
-    width: 70,
-    textAlign: "right",
-  },
-  totalLine: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    paddingTop: 8,
-    marginTop: 4,
-    borderTopWidth: 2,
-    borderTopColor: C.brand,
-    width: 160,
-  },
-  totalLineLabel: {
-    fontSize: 13,
-    fontWeight: "bold",
-    color: C.brandDark,
-    width: 90,
-    textAlign: "right",
-    paddingRight: 8,
-  },
-  totalLineValue: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: C.brandDark,
-    width: 70,
-    textAlign: "right",
+  totalLabel: { fontFamily: FONT_BOLD, fontSize: 10, width: 100, textAlign: "right", paddingRight: 8 },
+  totalValue: { fontFamily: FONT_BOLD, fontSize: 10, minWidth: 80, textAlign: "right", color: C.blue },
+
+  // ── Divider ────────────────────────────────────────────────────────────────
+  divider: { borderBottomWidth: 0.5, borderBottomColor: C.black, marginVertical: 5 },
+
+  // ── Status ────────────────────────────────────────────────────────────────
+  status: { alignItems: "center", marginBottom: 4 },
+  statusBadge: {
+    fontFamily: FONT_BOLD, fontSize: 9, letterSpacing: 1,
+    paddingVertical: 3, paddingHorizontal: 10,
+    borderWidth: 1, borderColor: C.black,
   },
 
-  // ── Payment Info ─────────────────────────────────────────────────────────────
-  paymentSection: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: C.gray[200],
-  },
-  paymentGrid: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  paymentCard: {
-    flex: 1,
-    backgroundColor: C.brandLighter,
-    borderRadius: 6,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#DDD6FE",
-  },
-  paymentCardLabel: {
-    fontSize: 7,
-    color: C.brandDark,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-    marginBottom: 2,
-  },
-  paymentCardValue: {
-    fontSize: 10,
-    fontWeight: "bold",
-    color: C.brandDark,
-    marginBottom: 1,
-  },
-  paymentCardSub: {
-    fontSize: 8,
-    color: C.gray[500],
-    marginBottom: 1,
-  },
-  paymentCardSubBold: {
-    fontSize: 9,
-    fontWeight: "bold",
-    color: C.black,
-    marginBottom: 1,
-  },
-  remainingCard: {
-    flex: 1,
-    backgroundColor: C.dangerBg,
-    borderRadius: 6,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#FECACA",
-  },
-  paidCard: {
-    flex: 1,
-    backgroundColor: C.successBg,
-    borderRadius: 6,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: "#A7F3D0",
-  },
+  // ── Payment ───────────────────────────────────────────────────────────────
+  payment: { alignItems: "center", marginBottom: 2 },
+  paymentLabel: { fontSize: 7, color: C.gray, marginBottom: 2 },
+  paymentName: { fontFamily: FONT_BOLD, fontSize: 9, marginBottom: 1 },
+  paymentNumber: { fontSize: 9, letterSpacing: 1.5, marginBottom: 1 },
+  paymentHolder: { fontSize: 7.5, color: C.gray },
 
-  // ── Footer ──────────────────────────────────────────────────────────────────
-  footer: {
-    paddingHorizontal: 20,
-    paddingVertical: 14,
+  // ── Footer ────────────────────────────────────────────────────────────────
+  footer: { alignItems: "center", marginTop: 4 },
+  footerText: { fontSize: 7, color: C.gray, textAlign: "center" },
+
+  // ── Tracking highlight — black box, white text ─────────────────────────────
+  trackingBox: {
+    backgroundColor: C.black,
+    marginTop: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
     alignItems: "center",
-    backgroundColor: C.gray[50],
   },
-  footerText: {
-    fontSize: 8,
-    color: C.gray[400],
-    textAlign: "center",
-  },
-  footerNote: {
-    fontSize: 9,
-    color: C.gray[500],
-    textAlign: "center",
-    marginTop: 3,
-  },
+  trackingLabel: { fontSize: 7, color: "#9ca3af", marginBottom: 2, letterSpacing: 0.5 },
+  trackingCode: { fontFamily: FONT_BOLD, fontSize: 12, color: C.white, letterSpacing: 2, marginBottom: 2 },
+  trackingHint: { fontSize: 7, color: "#9ca3af", textAlign: "center" },
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 type InvoiceItem = { description: string; quantity: number; unitPrice: number; total: number };
 type PaymentAccount = { id: string; type: string; name: string; accountNumber: string; accountHolder: string; isActive?: boolean };
@@ -331,36 +122,52 @@ interface ReceiptPDFProps {
   paymentStatus: string;
   agreedPrice: number;
   paymentAccounts?: PaymentAccount[];
+  clientToken?: string;
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(amount);
+function fmtRp(amount: number): string {
+  const n = Math.round(Number.isFinite(amount) ? amount : 0);
+  const digits = Math.abs(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${n < 0 ? "-" : ""}Rp ${digits}`;
 }
 
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
+function fmtDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "-";
+  const date = d.toLocaleDateString("id-ID", {
+    day: "numeric", month: "short", year: "numeric",
+    timeZone: "Asia/Jakarta",
   });
-}
-
-function formatTime(dateStr: string): string {
-  return new Date(dateStr).toLocaleTimeString("id-ID", {
-    hour: "2-digit",
-    minute: "2-digit",
+  const time = d.toLocaleTimeString("id-ID", {
+    hour: "2-digit", minute: "2-digit", hour12: false,
+    timeZone: "Asia/Jakarta",
   });
+  return `${date}, ${time} WIB`;
 }
 
-const statusLabels: Record<string, string> = {
+const STATUS_LABELS: Record<string, string> = {
   UNPAID: "BELUM BAYAR",
   PARTIALLY_PAID: "DP / CICILAN",
   PAID: "LUNAS",
 };
+
+function KV({ label, value, bold }: { label: string; value: string; bold?: boolean }) {
+  return (
+    <View style={styles.kvRow}>
+      <Text style={styles.kvLabel}>{label}</Text>
+      <Text style={[styles.kvValue, bold ? { fontFamily: FONT_BOLD } : {}]}>{value}</Text>
+    </View>
+  );
+}
+
+function SRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <View style={styles.sumRow}>
+      <Text style={styles.sumLabel}>{label}</Text>
+      <Text style={[styles.sumValue, accent ? styles.sumAccent : {}]}>{value}</Text>
+    </View>
+  );
+}
 
 export function ReceiptPDF({
   invoiceNumber,
@@ -374,141 +181,101 @@ export function ReceiptPDF({
   paidAmount,
   paymentStatus,
   paymentAccounts,
+  clientToken,
 }: ReceiptPDFProps) {
-  const statusLabel = statusLabels[paymentStatus] || paymentStatus;
+  const statusLabel = STATUS_LABELS[paymentStatus] || paymentStatus;
   const remaining = Math.max(0, total - paidAmount);
-  const accounts = paymentAccounts?.filter((a) => a.isActive !== false) ?? [];
+  const isPaid = remaining === 0;
+  const account = paymentAccounts?.find((a) => a.isActive !== false);
+  const showAccount = !isPaid && !!account;
 
   return (
     <Document>
-      <Page size={[W + 48, 720]} style={styles.page}>
-        <View style={styles.receiptBox}>
-          {/* Header Banner */}
-          <View style={styles.headerBanner}>
-            <Text style={styles.companyName}>YukDesain Studio</Text>
-            <Text style={styles.companyTagline}>Creative Design Agency · Jakarta</Text>
-          </View>
+      <Page size={[PW, 640]} style={styles.page}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.company}>YukDesain Studio</Text>
+          <Text style={styles.tagline}>Creative Design Agency, Jakarta</Text>
+        </View>
 
-          {/* Title Row */}
-          <View style={styles.titleRow}>
-            <Text style={styles.titleLabel}>STRUK PEMBAYARAN</Text>
-            <Text style={styles.titleNumber}>{invoiceNumber}</Text>
-          </View>
+        {/* Title */}
+        <View style={styles.titleBar}>
+          <Text style={styles.titleText}>STRUK PEMBAYARAN</Text>
+        </View>
 
-          {/* Info Section */}
-          <View style={styles.infoSection}>
-            <View style={styles.infoRow}>
-              <View style={styles.infoLeftCol}>
-                <Text style={styles.infoLabel}>Client</Text>
-                <Text style={styles.infoValueBold}>{clientName}</Text>
-                <Text style={styles.infoLabel}>Project</Text>
-                <Text style={styles.infoValue}>{projectNumber}</Text>
-                {serviceName && (
-                  <>
-                    <Text style={styles.infoLabel}>Layanan</Text>
-                    <Text style={styles.infoValue}>{serviceName}</Text>
-                  </>
-                )}
-              </View>
-              <View style={styles.infoRightCol}>
-                <Text style={styles.infoLabel}>Tanggal</Text>
-                <Text style={styles.infoValue}>{formatDate(issuedAt)}</Text>
-                <Text style={styles.infoLabel}>Pukul</Text>
-                <Text style={styles.infoValue}>{formatTime(issuedAt)}</Text>
-              </View>
+        {/* Meta */}
+        <KV label="NO." value={invoiceNumber} />
+        <KV label="TANGGAL" value={fmtDate(issuedAt)} />
+
+        <View style={styles.divider} />
+
+        {/* Info */}
+        <KV label="CLIENT" value={clientName} bold />
+        <KV label="PROJECT" value={projectNumber} bold />
+        {serviceName ? <KV label="LAYANAN" value={serviceName} /> : null}
+
+        <View style={styles.divider} />
+
+        {/* Items */}
+        {items.map((item, idx) => (
+          <View key={idx} style={styles.itemBlock}>
+            <Text style={styles.itemDesc}>{item.description}</Text>
+            <View style={styles.itemBottom}>
+              <Text style={styles.itemCalc}>
+                {item.quantity} x {fmtRp(item.unitPrice)}
+              </Text>
+              <Text style={styles.itemTotal}>{fmtRp(item.total)}</Text>
             </View>
           </View>
+        ))}
 
-          {/* Items Section */}
-          <View style={styles.itemsSection}>
-            <Text style={styles.sectionTitle}>Rincian Tagihan</Text>
+        <View style={styles.divider} />
 
-            {/* Table Header */}
-            <View style={styles.colHeader}>
-              <Text style={[styles.colDesc, styles.colHeaderText]}>Deskripsi</Text>
-              <Text style={[styles.colQty, styles.colHeaderText]}>Qty</Text>
-              <Text style={[styles.colPrice, styles.colHeaderText]}>Harga</Text>
-              <Text style={[styles.colTotal, styles.colHeaderText]}>Total</Text>
-            </View>
+        {/* Summary */}
+        <SRow label="Subtotal" value={fmtRp(subtotal)} />
+        {paidAmount > 0 && (
+          <SRow label="Sdh Bayar" value={`-${fmtRp(paidAmount)}`} accent />
+        )}
+        <View style={styles.totalRow}>
+          <Text style={styles.totalLabel}>TOTAL</Text>
+          <Text style={styles.totalValue}>{fmtRp(total)}</Text>
+        </View>
+        <SRow label="Sisa" value={fmtRp(remaining)} accent={!isPaid} />
 
-            {/* Item Rows */}
-            {items.map((item, idx) => (
-              <View key={idx} style={styles.itemRow}>
-                <Text style={styles.itemDesc}>{item.description}</Text>
-                <Text style={styles.itemQty}>{item.quantity}</Text>
-                <Text style={styles.itemPrice}>{formatCurrency(item.unitPrice)}</Text>
-                <Text style={styles.itemTotal}>{formatCurrency(item.total)}</Text>
-              </View>
-            ))}
-          </View>
+        <View style={styles.divider} />
 
-          {/* Summary Section */}
-          <View style={styles.summarySection}>
-            <View style={[styles.summaryLine, { marginLeft: "auto" }]}>
-              <Text style={styles.summaryLineLabel}>Subtotal</Text>
-              <Text style={styles.summaryLineValue}>{formatCurrency(subtotal)}</Text>
-            </View>
-            {paidAmount > 0 && (
-              <View style={[styles.summaryLinePaid, { marginLeft: "auto" }]}>
-                <Text style={styles.summaryLineLabel}>Sudah Dibayar</Text>
-                <Text style={[styles.summaryLineValue, { color: C.success }]}>
-                  -{formatCurrency(paidAmount)}
-                </Text>
-              </View>
-            )}
-            <View style={[styles.totalLine, { marginLeft: "auto" }]}>
-              <Text style={styles.totalLineLabel}>TOTAL</Text>
-              <Text style={styles.totalLineValue}>{formatCurrency(total)}</Text>
+        {/* Status */}
+        <View style={styles.status}>
+          <Text style={styles.statusBadge}>{statusLabel}</Text>
+        </View>
+
+        {/* Payment account */}
+        {showAccount && account ? (
+          <View>
+            <View style={styles.divider} />
+            <View style={styles.payment}>
+              <Text style={styles.paymentLabel}>
+                {account.type === "BANK" ? "TRANSFER BANK" : "E-WALLET"}
+              </Text>
+              <Text style={styles.paymentName}>{account.name}</Text>
+              <Text style={styles.paymentNumber}>{account.accountNumber}</Text>
+              <Text style={styles.paymentHolder}>a/n {account.accountHolder}</Text>
             </View>
           </View>
+        ) : null}
 
-          {/* Payment Info */}
-          <View style={styles.paymentSection}>
-            <Text style={styles.sectionTitle}>Informasi Pembayaran</Text>
-            <View style={styles.paymentGrid}>
-              {/* Left: Status + Amount */}
-              <View style={remaining > 0 ? styles.remainingCard : styles.paidCard}>
-                <Text style={styles.paymentCardLabel}>Status</Text>
-                <Text style={styles.paymentCardValue}>{statusLabel}</Text>
-                <Text style={styles.paymentCardLabel}>
-                  {remaining > 0 ? "Sisa Bayar" : "Total Bayar"}
-                </Text>
-                <Text style={[
-                  styles.paymentCardSubBold,
-                  { color: remaining > 0 ? C.danger : C.success },
-                ]}>
-                  {formatCurrency(remaining > 0 ? remaining : paidAmount)}
-                </Text>
-              </View>
-
-              {/* Right: Payment Account (first one) */}
-              {accounts.length > 0 ? (
-                <View style={styles.paymentCard}>
-                  <Text style={styles.paymentCardLabel}>
-                    {accounts[0].type === "BANK" ? "Transfer Bank" : "E-Wallet"}
-                  </Text>
-                  <Text style={styles.paymentCardValue}>{accounts[0].name}</Text>
-                  <Text style={styles.paymentCardSubBold}>{accounts[0].accountNumber}</Text>
-                  <Text style={styles.paymentCardSub}>a/n {accounts[0].accountHolder}</Text>
-                </View>
-              ) : remaining > 0 ? (
-                <View style={styles.paymentCard}>
-                  <Text style={styles.paymentCardLabel}>Transfer ke</Text>
-                  <Text style={[styles.paymentCardSubBold, { fontSize: 8 }]}>
-                    Hubungi admin untuk info rekening
-                  </Text>
-                </View>
-              ) : null}
-            </View>
+        {/* Tracking code — highlighted */}
+        {clientToken ? (
+          <View style={styles.trackingBox}>
+            <Text style={styles.trackingLabel}>KODE LACAK PESANAN</Text>
+            <Text style={styles.trackingCode}>{clientToken}</Text>
+            <Text style={styles.trackingHint}>Cek progress di Client Portal</Text>
           </View>
+        ) : null}
 
-          {/* Footer */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>
-              YukDesain Studio · Simpan struk ini sebagai bukti pembayaran
-            </Text>
-            <Text style={styles.footerNote}>Terima kasih atas kepercayaan Anda</Text>
-          </View>
+        {/* Footer */}
+        <View style={styles.footer}>
+          <Text style={styles.footerText}>Simpan struk ini sebagai bukti pembayaran</Text>
         </View>
       </Page>
     </Document>

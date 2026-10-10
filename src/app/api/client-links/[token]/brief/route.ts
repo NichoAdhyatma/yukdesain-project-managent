@@ -98,12 +98,27 @@ export async function POST(
       data: { status: "LOCKED", usedAt: new Date() },
     });
 
+    // Create a new active client link for tracking
+    const newLink = await prisma.clientLink.create({
+      data: {
+        projectId: link.project.id,
+        token: `${link.project.projectNumber.toLowerCase().replace(/[^a-z0-9]/g, "-")}-${Date.now().toString(36)}`,
+        status: "ACTIVE",
+        expiresAt: null,
+      },
+    });
+
     await prisma.project.update({
       where: { id: link.project.id },
       data: { status: "BELUM_DIKERJAKAN" },
     });
 
-    return NextResponse.json({ brief }, { status: 201 });
+    return NextResponse.json({
+      brief,
+      projectNumber: link.project.projectNumber,
+      clientName: link.project.clientName,
+      token: newLink.token,
+    }, { status: 201 });
   } catch (error) {
     console.error("Error submitting brief:", error);
     return NextResponse.json({ error: "Failed to submit brief" }, { status: 500 });

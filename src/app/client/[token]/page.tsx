@@ -1361,6 +1361,12 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmittingBrief, setIsSubmittingBrief] = useState(false);
 
+  const [briefSubmittedData, setBriefSubmittedData] = useState<{
+    projectNumber: string;
+    clientName: string;
+    token: string;
+  } | null>(null);
+
   const [isRevisionOpen, setIsRevisionOpen] = useState(false);
   const [isSubmittingRevision, setIsSubmittingRevision] = useState(false);
   const [revisionProgress, setRevisionProgress] = useState(0);
@@ -1402,10 +1408,15 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ responses, attachmentIds }),
       });
+      const data = await res.json();
       if (res.ok) {
-        window.location.reload();
+        setBriefSubmittedData({
+          projectNumber: data.projectNumber,
+          clientName: data.clientName,
+          token: data.token,
+        });
+        await fetchLink();
       } else {
-        const data = await res.json();
         toast(data.error || "Gagal submit brief", "error");
       }
     } catch {
@@ -1562,6 +1573,164 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             onSubmit={handleSubmitBrief}
             isSubmitting={isSubmittingBrief}
           />
+        </div>
+      </div>
+    );
+  }
+
+  // Brief submitted confirmation
+  if (briefSubmittedData) {
+    const submittedInvoice = project?.invoices?.[0];
+    const submittedPaymentAccounts = paymentAccounts;
+
+    const handleDownloadReceipt = async () => {
+      if (!submittedInvoice) return;
+      setIsDownloadingInvoice(true);
+      try {
+        const invoiceItems = submittedInvoice.items.map((item: { description: string; quantity: number; unitPrice: number; total: number }) => ({
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          total: item.total,
+        }));
+        const blob = await pdf(
+          <ReceiptPDF
+            invoiceNumber={submittedInvoice.invoiceNumber}
+            issuedAt={submittedInvoice.issuedAt}
+            clientName={briefSubmittedData.clientName}
+            projectNumber={briefSubmittedData.projectNumber}
+            serviceName={project?.service?.name}
+            items={invoiceItems}
+            subtotal={submittedInvoice.subtotal}
+            total={submittedInvoice.total}
+            paidAmount={project?.paidAmount ?? 0}
+            paymentStatus={project?.paymentStatus ?? "UNPAID"}
+            agreedPrice={project?.agreedPrice ?? submittedInvoice.total}
+            paymentAccounts={submittedPaymentAccounts}
+            clientToken={briefSubmittedData.projectNumber}
+          />
+        ).toBlob();
+        saveAs(blob, `struk-${briefSubmittedData.projectNumber}.pdf`);
+      } finally {
+        setIsDownloadingInvoice(false);
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="max-w-md mx-auto px-4 py-10 sm:py-16">
+
+          {/* Logo mark */}
+          <div className="text-center mb-10">
+            <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+              YukDesain Studio
+            </p>
+          </div>
+
+          {/* Main card */}
+          <div className="border border-border rounded-lg overflow-hidden">
+
+            {/* Top: confirmation */}
+            <div className="px-6 pt-6 pb-5 border-b border-border">
+              <div className="flex items-start gap-4">
+                {/* Check circle — minimal, unambiguous confirmation signal */}
+                <div className="shrink-0 w-10 h-10 rounded-full bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center mt-0.5">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-base font-semibold text-foreground leading-snug">
+                    Brief berhasil dikirim
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                    Brief Anda sudah diterima. Designer akan menghubungi melalui WhatsApp untuk konfirmasi berikutnya.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Tracking code — the ONE focal point: dashed border box */}
+            <div className="px-6 py-5 border-b border-border">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+                Kode Lacak Pesanan
+              </p>
+              <div className="border-2 border-dashed border-foreground/20 rounded-md px-4 py-3 text-center">
+                <p className="text-2xl font-bold font-mono tracking-widest text-foreground">
+                  {briefSubmittedData.projectNumber}
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 text-center">
+                Catat kode ini dan masukkan di Client Portal untuk melacak pesanan
+              </p>
+            </div>
+
+            {/* Bottom section: invoice + client portal */}
+            <div className="px-6 py-5 space-y-4">
+
+              {/* Invoice download */}
+              {submittedInvoice ? (
+                <div className="flex items-center justify-between py-1">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wide">Struk Pembayaran</p>
+                    <p className="text-sm font-semibold text-foreground mt-0.5">{submittedInvoice.invoiceNumber}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Intl.NumberFormat("id-ID", {
+                        style: "currency",
+                        currency: "IDR",
+                        minimumFractionDigits: 0,
+                      }).format(submittedInvoice.total)}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={handleDownloadReceipt}
+                    disabled={isDownloadingInvoice}
+                  >
+                    {isDownloadingInvoice ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
+                    Download
+                  </Button>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground py-1">
+                  Invoice akan tersedia setelah project diproses oleh designer
+                </p>
+              )}
+
+              {/* Client portal link */}
+              <div className="pt-1">
+                <p className="text-xs text-muted-foreground mb-1">Lacak pesanan</p>
+                <a
+                  href="/client-portal"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm font-medium text-foreground hover:text-primary underline underline-offset-4"
+                >
+                  Buka Client Portal
+                  <ExternalLink className="inline h-3.5 w-3.5 ml-1.5 align-middle" />
+                </a>
+              </div>
+            </div>
+
+            {/* Bottom action */}
+            <div className="px-6 pb-6 pt-2">
+              <Button
+                className="w-full"
+                onClick={() => setActiveTab("invoice")}
+              >
+                Lihat Halaman Tracking
+                <ChevronRight className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <p className="text-xs text-center text-muted-foreground mt-6">
+            Brief Required · YukDesain Studio · Jakarta
+          </p>
         </div>
       </div>
     );
