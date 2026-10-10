@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Link } from "@react-pdf/renderer";
 
 // Thermal receipt 80mm: black & white, Courier monospace.
 // Tracking code: highlighted box (black bg, white text) agar user mudah notice.
@@ -7,7 +7,7 @@ const C = {
   black: "#111111",
   gray: "#6b7280",
   white: "#FFFFFF",
-  blue: "#2563EB",
+  primary: "#013BA6",
 };
 
 const PW = 226; // 80mm ≈ 226pt
@@ -34,7 +34,7 @@ const styles = StyleSheet.create({
 
   // ── Title bar ──────────────────────────────────────────────────────────────
   titleBar: {
-    backgroundColor: C.black,
+    backgroundColor: C.primary,
     alignItems: "center",
     paddingVertical: 4,
     marginBottom: 8,
@@ -46,31 +46,57 @@ const styles = StyleSheet.create({
   kvLabel: { width: LABEL_W, fontSize: 8, color: C.gray },
   kvValue: { flex: 1, fontSize: 8 },
 
-  // ── Item ─────────────────────────────────────────────────────────────────
-  itemBlock: { marginBottom: 5 },
-  itemDesc: { fontFamily: FONT_BOLD, fontSize: 8.5, marginBottom: 1 },
-  itemBottom: { flexDirection: "row", justifyContent: "space-between" },
-  itemCalc: { fontSize: 8, color: C.gray },
-  itemTotal: { fontFamily: FONT_BOLD, fontSize: 8.5, textAlign: "right" },
+  // ── Item table ─────────────────────────────────────────────────────────────
+  tableHeader: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: C.black,
+    borderTopWidth: 1,
+    borderTopColor: C.black,
+    paddingVertical: 3,
+    marginBottom: 2,
+  },
+  thDesc: { flex: 1, fontFamily: FONT_BOLD, fontSize: 7.5, color: C.black, letterSpacing: 0.5 },
+  thQty: { width: 22, fontFamily: FONT_BOLD, fontSize: 7.5, color: C.black, textAlign: "center" },
+  thPrice: { width: 42, fontFamily: FONT_BOLD, fontSize: 7.5, color: C.black, textAlign: "right" },
+  thTotal: { width: 46, fontFamily: FONT_BOLD, fontSize: 7.5, color: C.black, textAlign: "right" },
+  tableRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 3,
+  },
+  rowDesc: { flex: 1, fontFamily: FONT_BOLD, fontSize: 8, color: C.black },
+  rowQty: { width: 22, fontFamily: FONT_BOLD, fontSize: 8, color: C.black, textAlign: "center" },
+  rowPrice: { width: 42, fontFamily: FONT_BOLD, fontSize: 8, color: C.black, textAlign: "right" },
+  rowTotal: { width: 46, fontFamily: FONT_BOLD, fontSize: 8, color: C.black, textAlign: "right" },
 
-  // ── Summary ────────────────────────────────────────────────────────────────
-  sumRow: { flexDirection: "row", justifyContent: "flex-end", marginBottom: 2 },
-  sumLabel: { fontSize: 8, color: C.gray, width: 100, textAlign: "right", paddingRight: 8 },
-  sumValue: { fontSize: 8, minWidth: 80, textAlign: "right" },
-  sumAccent: { color: C.blue },
+  // ── Summary table ──────────────────────────────────────────────────────────
+  summaryHeader: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: C.black,
+    paddingVertical: 2,
+    marginBottom: 1,
+  },
+  sumRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingVertical: 2,
+  },
+  sumLabel: { flex: 1, fontSize: 7.5, color: C.black },
+  sumValue: { width: 46, fontSize: 7.5, color: C.black, textAlign: "right" },
   totalRow: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    paddingTop: 3,
-    borderTopWidth: 0.5,
+    alignItems: "flex-start",
+    borderTopWidth: 1,
     borderTopColor: C.black,
-    marginTop: 2,
+    paddingVertical: 3,
   },
-  totalLabel: { fontFamily: FONT_BOLD, fontSize: 10, width: 100, textAlign: "right", paddingRight: 8 },
-  totalValue: { fontFamily: FONT_BOLD, fontSize: 10, minWidth: 80, textAlign: "right", color: C.blue },
+  totalLabel: { flex: 1, fontFamily: FONT_BOLD, fontSize: 9, color: C.black },
+  totalValue: { width: 46, fontFamily: FONT_BOLD, fontSize: 9, color: C.black, textAlign: "right" },
 
   // ── Divider ────────────────────────────────────────────────────────────────
-  divider: { borderBottomWidth: 0.5, borderBottomColor: C.black, marginVertical: 5 },
+  divider: { borderBottomWidth: 0.5, borderBottomColor: C.primary, marginVertical: 5 },
 
   // ── Status ────────────────────────────────────────────────────────────────
   status: { alignItems: "center", marginBottom: 4 },
@@ -82,26 +108,27 @@ const styles = StyleSheet.create({
 
   // ── Payment ───────────────────────────────────────────────────────────────
   payment: { alignItems: "center", marginBottom: 2 },
-  paymentLabel: { fontSize: 7, color: C.gray, marginBottom: 2 },
-  paymentName: { fontFamily: FONT_BOLD, fontSize: 9, marginBottom: 1 },
-  paymentNumber: { fontSize: 9, letterSpacing: 1.5, marginBottom: 1 },
-  paymentHolder: { fontSize: 7.5, color: C.gray },
+  paymentLabel: { fontSize: 7, color: C.black, marginBottom: 2 },
+  paymentName: { fontFamily: FONT_BOLD, fontSize: 9, marginBottom: 1, color: C.black },
+  paymentNumber: { fontSize: 9, letterSpacing: 1.5, marginBottom: 1, color: C.black },
+  paymentHolder: { fontSize: 7.5, color: C.black },
 
   // ── Footer ────────────────────────────────────────────────────────────────
   footer: { alignItems: "center", marginTop: 4 },
-  footerText: { fontSize: 7, color: C.gray, textAlign: "center" },
+  footerText: { fontSize: 7, color: C.black, textAlign: "center" },
 
-  // ── Tracking highlight — black box, white text ─────────────────────────────
+  // ── Tracking highlight — primary box, white text ─────────────────────────────
   trackingBox: {
-    backgroundColor: C.black,
+    backgroundColor: C.primary,
     marginTop: 6,
     paddingVertical: 8,
     paddingHorizontal: 10,
     alignItems: "center",
   },
-  trackingLabel: { fontSize: 7, color: "#9ca3af", marginBottom: 2, letterSpacing: 0.5 },
+  trackingLabel: { fontSize: 7, color: "rgba(255,255,255,0.7)", marginBottom: 2, letterSpacing: 0.5 },
   trackingCode: { fontFamily: FONT_BOLD, fontSize: 12, color: C.white, letterSpacing: 2, marginBottom: 2 },
-  trackingHint: { fontSize: 7, color: "#9ca3af", textAlign: "center" },
+  trackingHint: { fontSize: 7, color: "rgba(255,255,255,0.7)", textAlign: "center" },
+  trackingHintLink: { fontSize: 7, color: C.white, textDecoration: "underline", textAlign: "center" },
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -124,6 +151,7 @@ interface ReceiptPDFProps {
   paymentAccounts?: PaymentAccount[];
   clientToken?: string;
   studioName?: string;
+  clientPortalUrl?: string;
 }
 
 function fmtRp(amount: number): string {
@@ -161,15 +189,6 @@ function KV({ label, value, bold }: { label: string; value: string; bold?: boole
   );
 }
 
-function SRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
-  return (
-    <View style={styles.sumRow}>
-      <Text style={styles.sumLabel}>{label}</Text>
-      <Text style={[styles.sumValue, accent ? styles.sumAccent : {}]}>{value}</Text>
-    </View>
-  );
-}
-
 export function ReceiptPDF({
   invoiceNumber,
   issuedAt,
@@ -184,6 +203,7 @@ export function ReceiptPDF({
   paymentAccounts,
   clientToken,
   studioName = "YukDesain Studio",
+  clientPortalUrl = "/client-portal",
 }: ReceiptPDFProps) {
   const statusLabel = STATUS_LABELS[paymentStatus] || paymentStatus;
   const remaining = Math.max(0, total - paidAmount);
@@ -209,42 +229,44 @@ export function ReceiptPDF({
         <KV label="NO." value={invoiceNumber} />
         <KV label="TANGGAL" value={fmtDate(issuedAt)} />
 
-        <View style={styles.divider} />
-
         {/* Info */}
         <KV label="CLIENT" value={clientName} bold />
         <KV label="PROJECT" value={projectNumber} bold />
         {serviceName ? <KV label="LAYANAN" value={serviceName} /> : null}
 
-        <View style={styles.divider} />
-
         {/* Items */}
+        <View style={styles.tableHeader}>
+          <Text style={styles.thDesc}>DESKRIPSI</Text>
+          <Text style={styles.thQty}>QTY</Text>
+          <Text style={styles.thPrice}>HARGA</Text>
+          <Text style={styles.thTotal}>TOTAL</Text>
+        </View>
         {items.map((item, idx) => (
-          <View key={idx} style={styles.itemBlock}>
-            <Text style={styles.itemDesc}>{item.description}</Text>
-            <View style={styles.itemBottom}>
-              <Text style={styles.itemCalc}>
-                {item.quantity} x {fmtRp(item.unitPrice)}
-              </Text>
-              <Text style={styles.itemTotal}>{fmtRp(item.total)}</Text>
-            </View>
+          <View key={idx} style={styles.tableRow}>
+            <Text style={styles.rowDesc}>{item.description}</Text>
+            <Text style={styles.rowQty}>{item.quantity}</Text>
+            <Text style={styles.rowPrice}>{fmtRp(item.unitPrice)}</Text>
+            <Text style={styles.rowTotal}>{fmtRp(item.total)}</Text>
           </View>
         ))}
 
-        <View style={styles.divider} />
-
         {/* Summary */}
-        <SRow label="Subtotal" value={fmtRp(subtotal)} />
         {paidAmount > 0 && (
-          <SRow label="Sdh Bayar" value={`-${fmtRp(paidAmount)}`} accent />
+          <View style={styles.sumRow}>
+            <Text style={styles.sumLabel}>Sdh Bayar</Text>
+            <Text style={styles.sumValue}>-{fmtRp(paidAmount)}</Text>
+          </View>
         )}
         <View style={styles.totalRow}>
           <Text style={styles.totalLabel}>TOTAL</Text>
           <Text style={styles.totalValue}>{fmtRp(total)}</Text>
         </View>
-        <SRow label="Sisa" value={fmtRp(remaining)} accent={!isPaid} />
-
-        <View style={styles.divider} />
+        {remaining > 0 && (
+          <View style={styles.sumRow}>
+            <Text style={styles.sumLabel}>Sisa</Text>
+            <Text style={styles.sumValue}>{fmtRp(remaining)}</Text>
+          </View>
+        )}
 
         {/* Status */}
         <View style={styles.status}>
@@ -254,7 +276,6 @@ export function ReceiptPDF({
         {/* Payment account */}
         {showAccount && account ? (
           <View>
-            <View style={styles.divider} />
             <View style={styles.payment}>
               <Text style={styles.paymentLabel}>
                 {account.type === "BANK" ? "TRANSFER BANK" : "E-WALLET"}
@@ -271,7 +292,9 @@ export function ReceiptPDF({
           <View style={styles.trackingBox}>
             <Text style={styles.trackingLabel}>KODE LACAK PESANAN</Text>
             <Text style={styles.trackingCode}>{clientToken}</Text>
-            <Text style={styles.trackingHint}>Cek progress di Client Portal</Text>
+            <Link src={clientPortalUrl} style={styles.trackingHintLink}>
+              Cek progress di Client Portal
+            </Link>
           </View>
         ) : null}
 

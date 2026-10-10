@@ -120,6 +120,7 @@ export default function InvoicesPage() {
           paymentStatus={invoice.status}
           agreedPrice={invoice.project.agreedPrice}
           studioName={studioName}
+          clientPortalUrl={`${window.location.origin}/client-portal`}
         />
       );
       const blob = await pdf(doc).toBlob();

@@ -1621,6 +1621,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             paymentAccounts={submittedPaymentAccounts}
             clientToken={briefSubmittedData.projectNumber}
             studioName={studioName}
+            clientPortalUrl={`${window.location.origin}/client-portal`}
           />
         ).toBlob();
         saveAs(blob, `struk-${briefSubmittedData.projectNumber}.pdf`);
@@ -1728,16 +1729,6 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
               </div>
             </div>
 
-            {/* Bottom action */}
-            <div className="px-6 pb-6 pt-2">
-              <Button
-                className="w-full"
-                onClick={() => setActiveTab("invoice")}
-              >
-                Lihat Halaman Tracking
-                <ChevronRight className="h-4 w-4 ml-2" />
-              </Button>
-            </div>
           </div>
 
           {/* Footer */}
