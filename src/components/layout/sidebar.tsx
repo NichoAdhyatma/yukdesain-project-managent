@@ -23,6 +23,7 @@ import {
   Check,
   Shield,
   Wrench,
+  ImageIcon,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Package,
   MonitorPlay,
   History,
+  ImageIcon,
 };
 
 interface MenuItem {

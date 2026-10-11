@@ -88,6 +88,7 @@ async function upsertMenuItems() {
     { name: "Designers", href: "/designers", icon: "Users", group: "Work Management", order: 12 },
     { name: "Workspace", href: "/designer", icon: "MonitorPlay", group: "Designer", order: 20 },
     { name: "Invoices", href: "/invoices", icon: "Receipt", group: "Finance", order: 30 },
+    { name: "Media", href: "/media", icon: "ImageIcon", group: "Finance", order: 31 },
     { name: "Settings", href: "/settings", icon: "Settings", group: "Settings", order: 40 },
   ];
 
@@ -98,6 +99,7 @@ async function upsertMenuItems() {
     "/designers": ["OWNER"],
     "/designer": ["OWNER", "DESIGNER"],
     "/invoices": ["OWNER"],
+    "/media": ["OWNER"],
     "/settings": ["OWNER"],
   };
 
