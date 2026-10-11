@@ -28,7 +28,7 @@ async function main() {
   // Menu items & Menu2Role: upsert
   await upsertMenuItems();
 
-  // Users: upsert (preserve existing roles and customizations)
+  // Users
   await upsertUsers();
 
   // Seed project data
@@ -37,8 +37,9 @@ async function main() {
   console.log("");
   console.log("🎉 Seed completed!");
   console.log("");
-  console.log("Demo: owner@yukdesain.com / admin123");
-  console.log("Designer accounts: rina@yukdesain.com / admin123, budi@yukdesain.com / admin123");
+  console.log("Owner: rizal@yukdesain.com / portalowner123");
+  console.log("Full-time: ivan@yukdesain.com / fulltimeivan001, daffa@yukdesain.com / interndaffa002");
+  console.log("Freelance: farih@fukdesain.com / freelancefarih001, fia@fukdesain.com / freelancefia002, fahmi@fukdesain.com / freelancefahmi003, yasmin@fukdesain.com / freelanceyasmin004");
 }
 
 // Status labels
@@ -90,8 +91,6 @@ async function upsertMenuItems() {
     { name: "Settings", href: "/settings", icon: "Settings", group: "Settings", order: 40 },
   ];
 
-  // Menu2Role: OWNER sees Dashboard, Form Link, Projects, Designers, Workspace, Invoices, Settings
-  // DESIGNER sees only Workspace
   const menu2RoleDefs: Record<string, string[]> = {
     "/dashboard": ["OWNER"],
     "/form-link": ["OWNER"],
@@ -102,10 +101,9 @@ async function upsertMenuItems() {
     "/settings": ["OWNER"],
   };
 
-  const menuMap: Record<string, string> = {}; // href -> id
+  const menuMap: Record<string, string> = {};
 
   for (const def of menuDefs) {
-    // Find existing by href (no unique constraint), then upsert by id
     const existing = await prisma.menuItem.findFirst({ where: { href: def.href } });
     const menu = existing
       ? await prisma.menuItem.update({ where: { id: existing.id }, data: { name: def.name, icon: def.icon, group: def.group, order: def.order } })
@@ -114,11 +112,9 @@ async function upsertMenuItems() {
   }
   console.log(`✅ Seeded ${menuDefs.length} menu items (idempotent)`);
 
-  // Upsert Menu2Role entries
   for (const [href, roles] of Object.entries(menu2RoleDefs)) {
     const menuId = menuMap[href];
     if (!menuId) continue;
-
     for (const role of roles) {
       await prisma.menu2Role.upsert({
         where: { menuId_role: { menuId, role } },
@@ -131,45 +127,61 @@ async function upsertMenuItems() {
   console.log(`✅ Seeded ${totalRoles} menu2role entries (idempotent)`);
 }
 
-// Users: upsert by email, PRESERVE existing roles
+// Users: upsert by email
 async function upsertUsers() {
-  const passwordHash = await bcrypt.hash("admin123", 10);
-
-  // Owner: upsert, preserve existing roles if user already exists
-  const existingOwner = await prisma.user.findUnique({ where: { email: "owner@yukdesain.com" } });
-  const ownerRoles = existingOwner?.roles ?? ["OWNER", "DESIGNER"];
+  // Owner
   const owner = await prisma.user.upsert({
-    where: { email: "owner@yukdesain.com" },
-    create: { name: "Owner", email: "owner@yukdesain.com", passwordHash, roles: { set: ["OWNER", "DESIGNER"] } },
-    update: { name: "Owner", passwordHash }, // roles preserved from existing
+    where: { email: "rizal@yukdesain.com" },
+    create: { name: "Rizal", email: "rizal@yukdesain.com", passwordHash: await bcrypt.hash("portalowner123", 10), roles: { set: ["OWNER", "DESIGNER"] } },
+    update: { name: "Rizal", passwordHash: await bcrypt.hash("portalowner123", 10) },
   });
-  // Update roles if they changed
-  if (JSON.stringify(owner.roles) !== JSON.stringify(ownerRoles)) {
-    await prisma.user.update({ where: { id: owner.id }, data: { roles: { set: ownerRoles } } });
+  console.log("✅ Seeded owner:", owner.email);
+
+  // Full-time designers
+  const ivan = await prisma.user.upsert({
+    where: { email: "ivan@yukdesain.com" },
+    create: { name: "Ivan", email: "ivan@yukdesain.com", passwordHash: await bcrypt.hash("fulltimeivan001", 10), roles: { set: ["DESIGNER"] }, classification: "FULL_TIME" },
+    update: { name: "Ivan", passwordHash: await bcrypt.hash("fulltimeivan001", 10), classification: "FULL_TIME" },
+  });
+  console.log("✅ Seeded full-time:", ivan.email);
+
+  const daffa = await prisma.user.upsert({
+    where: { email: "daffa@yukdesain.com" },
+    create: { name: "Daffa", email: "daffa@yukdesain.com", passwordHash: await bcrypt.hash("interndaffa002", 10), roles: { set: ["DESIGNER"] }, classification: "FULL_TIME" },
+    update: { name: "Daffa", passwordHash: await bcrypt.hash("interndaffa002", 10), classification: "FULL_TIME" },
+  });
+  console.log("✅ Seeded full-time:", daffa.email);
+
+  // Freelance designers
+  const freelancers = [
+    { email: "farih@yukdesain.com", name: "Farih", password: "freelancefarih001" },
+    { email: "fia@yukdesain.com", name: "Fia", password: "freelancefia002" },
+    { email: "fahmi@yukdesain.com", name: "Fahmi", password: "freelancefahmi003" },
+    { email: "yasmin@yukdesain.com", name: "Yasmin", password: "freelanceyasmin004" },
+  ];
+
+  for (const f of freelancers) {
+    const user = await prisma.user.upsert({
+      where: { email: f.email },
+      create: { name: f.name, email: f.email, passwordHash: await bcrypt.hash(f.password, 10), roles: { set: ["DESIGNER"] }, classification: "FREELANCER" },
+      update: { name: f.name, passwordHash: await bcrypt.hash(f.password, 10), classification: "FREELANCER" },
+    });
+    console.log("✅ Seeded freelance:", user.email);
   }
-  console.log("✅ Seeded owner:", owner.email, "| roles:", JSON.stringify(ownerRoles));
 
-  // Designer: upsert
-  const designer1 = await prisma.user.upsert({
-    where: { email: "rina@yukdesain.com" },
-    create: { name: "Rina Wijaya", email: "rina@yukdesain.com", passwordHash, roles: { set: ["DESIGNER"] }, classification: "FULL_TIME" },
-    update: { name: "Rina Wijaya", passwordHash, classification: "FULL_TIME" },
-  });
-  console.log("✅ Seeded designer:", designer1.email);
-
-  const designer2 = await prisma.user.upsert({
-    where: { email: "budi@yukdesain.com" },
-    create: { name: "Budi Santoso", email: "budi@yukdesain.com", passwordHash, roles: { set: ["DESIGNER"] }, classification: "FREELANCER" },
-    update: { name: "Budi Santoso", passwordHash, classification: "FREELANCER" },
-  });
-  console.log("✅ Seeded designer:", designer2.email);
-
-  return { owner, designer1, designer2 };
+  // Remove old demo users
+  const oldUsers = ["owner@yukdesain.com", "rina@yukdesain.com", "budi@yukdesain.com"];
+  for (const email of oldUsers) {
+    const existing = await prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      await prisma.user.delete({ where: { id: existing.id } });
+      console.log("🗑️ Removed old user:", email);
+    }
+  }
 }
 
 // Services, clients, projects
 async function seedProjectData() {
-  // Services: upsert by code
   const serviceDefs = [
     { code: "SVC-01", name: "Logo Minimalis", description: "Desain logo minimalis modern untuk brand", outputFormat: "AI, PNG, SVG, PDF" },
     { code: "SVC-02", name: "Logo Ilustrasi", description: "Desain logo dengan ilustrasi custom", outputFormat: "AI, PNG, SVG, PDF" },
@@ -195,7 +207,6 @@ async function seedProjectData() {
   }
   console.log(`✅ Seeded ${serviceDefs.length} services (idempotent)`);
 
-  // Clients: upsert by email
   const clientDefs = [
     { name: "Cafe Nusantara", email: "cafe@nusantara.com", phone: "081234567890" },
     { name: "Toko Sebelah", email: "tokosebelah@mail.com", phone: "082345678901" },
@@ -214,13 +225,9 @@ async function seedProjectData() {
   }
   console.log(`✅ Seeded ${clientDefs.length} clients (idempotent)`);
 
-  // Users
-  const owner = await prisma.user.findUnique({ where: { email: "owner@yukdesain.com" } });
-  const designer2 = await prisma.user.findUnique({ where: { email: "budi@yukdesain.com" } });
-
+  const owner = await prisma.user.findUnique({ where: { email: "rizal@yukdesain.com" } });
   if (!owner) { console.log("⚠️ Owner not found, skipping project seed"); return; }
 
-  // Projects
   // Project 1
   const existingProject1 = await prisma.project.findUnique({ where: { projectNumber: "PRJ-001" } });
   if (!existingProject1) {
@@ -255,7 +262,8 @@ async function seedProjectData() {
 
   // Project 2
   const existingProject2 = await prisma.project.findUnique({ where: { projectNumber: "PRJ-002" } });
-  if (!existingProject2 && designer2) {
+  if (!existingProject2) {
+    const ivan = await prisma.user.findUnique({ where: { email: "ivan@yukdesain.com" } });
     await prisma.project.create({
       data: {
         projectNumber: "PRJ-002",
@@ -276,22 +284,24 @@ async function seedProjectData() {
             ],
           },
         },
-        assignments: {
-          create: {
-            designerId: designer2.id,
-            assignedBy: owner.id,
-            assignedAt: new Date("2026-09-19"),
-            freelancerPayout: 500000,
+        ...(ivan ? {
+          assignments: {
+            create: {
+              designerId: ivan.id,
+              assignedBy: owner.id,
+              assignedAt: new Date("2026-09-19"),
+              freelancerPayout: 500000,
+            },
           },
-        },
-        updates: {
-          createMany: {
-            data: [
-              { progress: 30, description: "Mockup awal sudah selesai", authorId: designer2.id, createdAt: new Date("2026-09-22") },
-              { progress: 65, description: "Design dalam finalisasi", authorId: designer2.id, createdAt: new Date("2026-09-25") },
-            ],
+          updates: {
+            createMany: {
+              data: [
+                { progress: 30, description: "Mockup awal sudah selesai", authorId: ivan.id, createdAt: new Date("2026-09-22") },
+                { progress: 65, description: "Design dalam finalisasi", authorId: ivan.id, createdAt: new Date("2026-09-25") },
+              ],
+            },
           },
-        },
+        } : {}),
         revisions: {
           create: {
             number: 1,
@@ -327,8 +337,8 @@ async function seedProjectData() {
 
     await prisma.clientLink.upsert({
       where: { token: "abc123xyz789def0" },
-      create: { token: "abc123xyz789def0", projectId: p3.id, status: "ACTIVE", expiresAt: new Date("2026-10-10") },
-      update: { projectId: p3.id, status: "ACTIVE", expiresAt: new Date("2026-10-10") },
+      create: { token: "abc123xyz789def0", projectId: p3.id, status: "ACTIVE", expiresAt: new Date("2026-12-31") },
+      update: { projectId: p3.id, status: "ACTIVE", expiresAt: new Date("2026-12-31") },
     });
     console.log("✅ Created project 3 + client link");
   } else {

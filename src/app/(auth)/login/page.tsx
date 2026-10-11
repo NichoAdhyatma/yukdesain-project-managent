@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2 } from "lucide-react";
+import { Loader2, Eye, EyeOff } from "lucide-react";
 import { STUDIO_DEFAULTS } from "@/lib/constants";
 
 function LoginForm() {
@@ -15,6 +15,7 @@ function LoginForm() {
   const redirectTo = searchParams.get("redirect") || "/dashboard";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
@@ -72,35 +73,32 @@ function LoginForm() {
 
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoComplete="current-password"
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                className="pr-10"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+              >
+                {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
           </div>
 
           <Button type="submit" className="w-full" disabled={isLoading}>
             {isLoading ? "Memuat..." : "Masuk"}
           </Button>
         </form>
-
-        <div className="mt-6 p-4 rounded-lg bg-muted/50 text-sm text-muted-foreground space-y-3">
-          <div>
-            <p className="font-medium mb-1">Demo Login Owner:</p>
-            <p>Email: owner@yukdesain.com</p>
-            <p>Password: admin123</p>
-          </div>
-          <div>
-            <p className="font-medium mb-1">Demo Login Designer:</p>
-            <p>Email: rina@yukdesain.com (full-time)</p>
-            <p>Email: budi@yukdesain.com (freelancer)</p>
-            <p>Password: admin123</p>
-          </div>
-        </div>
       </CardContent>
     </Card>
   );
