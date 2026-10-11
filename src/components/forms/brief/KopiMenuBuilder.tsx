@@ -164,11 +164,17 @@ export function KopiMenuBuilder({
                     disabled={disabled}
                     className="text-sm"
                   />
-                  <CurrencyInput
-                    value={parseInt(item.price ?? "", 10) || 0}
-                    onChange={(v) => updateItem(item.id, "price", String(v))}
-                    placeholder="Harga"
-                  />
+                  <div className="space-y-1">
+                    <Label htmlFor={`kopi-harga-${item.id}`} className="text-xs">
+                      Harga
+                    </Label>
+                    <CurrencyInput
+                      id={`kopi-harga-${item.id}`}
+                      value={parseInt(item.price ?? "", 10) || 0}
+                      onChange={(v) => updateItem(item.id, "price", String(v))}
+                      placeholder="Harga"
+                    />
+                  </div>
                   <Input
                     placeholder="Deskripsi (opsional)"
                     value={item.caption || ""}

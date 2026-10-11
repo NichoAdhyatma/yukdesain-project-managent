@@ -13,16 +13,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import {
   SERVICE_BRIEF_CONFIGS,
   type BriefResponses,
   type MenuItem,
   type CartSide,
 } from "./types";
-import { CurrencyInput } from "@/components/ui/currency-input";
 import { ReferenceUploader, type ReferenceItem } from "./ReferenceUploader";
-import { SingleImageUploader } from "./SingleImageUploader";
 import { LogoUploader, type LogoItem } from "./LogoUploader";
 import { BoxReferenceBuilder } from "./BoxReferenceBuilder";
 import { CartReferenceBuilder } from "./CartReferenceBuilder";
@@ -65,6 +63,7 @@ export function ServiceBriefForm({
   const [brandLogos, setBrandLogos] = useState<LogoItem[]>([]);
   const [vendorLogos, setVendorLogos] = useState<LogoItem[]>([]);
   const [progress, setProgress] = useState(0);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const updateField = (field: keyof BriefResponses, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -257,15 +256,15 @@ export function ServiceBriefForm({
       responses.logos_json = uploadedBrandLogos;
     }
 
-    // Upload menu item images
+    // Upload menu item images (immutable update)
+    const uploadedMenuItems: MenuItem[] = [];
     for (const item of menuItems) {
       if (item.name.trim()) {
         if (item.file) {
           const uploaded = await uploadFile(item.file, "brief-menu-item");
-          if (uploaded) {
-            item.image = uploaded.publicUrl;
-            item.file = undefined;
-          }
+          uploadedMenuItems.push(uploaded ? { ...item, image: uploaded.publicUrl, file: undefined } : item);
+        } else {
+          uploadedMenuItems.push(item);
         }
       }
       tick();
@@ -273,25 +272,25 @@ export function ServiceBriefForm({
 
     // Menu items for SVC-03/04/05
     if (serviceCode === "SVC-03" || serviceCode === "SVC-04" || serviceCode === "SVC-05") {
-      responses.menu_items_json = menuItems.filter((m) => m.name.trim());
+      responses.menu_items_json = uploadedMenuItems;
     }
 
     // Cart sides for SVC-11
     if (serviceCode === "SVC-11") {
-      // Upload kopi menu item images
+      // Upload kopi menu item images (immutable update)
+      const uploadedKopiItems: KopiMenuItem[] = [];
       for (const item of kopiMenuItems) {
         if (item.file) {
           const uploaded = await uploadFile(item.file, "brief-kopi-menu-item");
-          if (uploaded) {
-            item.image = uploaded.publicUrl;
-            item.file = undefined;
-          }
+          uploadedKopiItems.push(uploaded ? { ...item, image: uploaded.publicUrl, file: undefined } : item);
+        } else {
+          uploadedKopiItems.push(item);
         }
         tick();
       }
       responses.cart_sides_json = cartSides.filter((s) => s.textBrief.trim());
       responses.cart_references_json = uploadedCartRefs.filter((c) => c.imageUrl);
-      responses.kopi_menu_items_json = kopiMenuItems.filter((k) => k.name.trim());
+      responses.kopi_menu_items_json = uploadedKopiItems;
     }
 
     // Box references for SVC-07
@@ -318,8 +317,15 @@ export function ServiceBriefForm({
     }
 
     setProgress(100);
-    await onSubmit(responses, attachmentIds);
+    try {
+      await onSubmit(responses, attachmentIds);
+    } catch (err) {
+      setProgress(0);
+      setSubmitError(err instanceof Error ? err.message : "Terjadi kesalahan saat mengirim brief. Silakan coba lagi.");
+      return;
+    }
     setProgress(0);
+    setSubmitError(null);
   };
 
   // Common style options
@@ -344,8 +350,8 @@ export function ServiceBriefForm({
 
   // Photobooth size options
   const photoboothOptions = [
-    { value: "4R", label: "4R — Standar Strip / Grid Photo" },
-    { value: "A3", label: "Newspaper A3 — Tema Koran Unik & Aesthetic" },
+    { value: "4R", label: "4R: Standar Strip / Grid Photo" },
+    { value: "A3", label: "Newspaper A3: Tema Koran Unik & Aesthetic" },
   ];
 
   // Sosmed platform options
@@ -397,8 +403,24 @@ export function ServiceBriefForm({
   return (
     <>
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Service Header */}
-      <Card>
+      {submitError && (
+        <div
+          role="alert"
+          className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+        >
+          {submitError}
+          <button
+            type="button"
+            onClick={() => setSubmitError(null)}
+            className="ml-2 underline underline-offset-2 hover:no-underline"
+          >
+            Tutup
+          </button>
+        </div>
+      )}
+      {/* Service Header — identity accent: primary color bar at top */}
+      <Card className="overflow-hidden">
+        <div className="h-1 w-full bg-primary" />
         <CardHeader>
           <CardTitle>{serviceName}</CardTitle>
           <CardDescription>
