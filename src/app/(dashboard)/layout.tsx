@@ -11,7 +11,6 @@ export default async function DashboardLayout({
 }) {
   const user = await getCurrentUser();
 
-  // Fetch menus with Menu2Role entries, filter server-side
   const menus = await prisma.menuItem.findMany({
     where: { isActive: true },
     orderBy: [{ group: "asc" }, { order: "asc" }],
@@ -20,7 +19,6 @@ export default async function DashboardLayout({
     },
   });
 
-  // Filter: only show menus where user's activeRole is in Menu2Role
   const visibleMenus = menus.filter((menu) => {
     if (!menu.menu2Roles || menu.menu2Roles.length === 0) return true;
     return menu.menu2Roles.some((m2r) => m2r.role === user?.activeRole);

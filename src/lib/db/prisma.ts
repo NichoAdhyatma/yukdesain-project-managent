@@ -12,7 +12,4 @@ export const prisma =
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
-} else {
-  // In serverless, each cold start may share the same global across warm invocations
-  globalForPrisma.prisma = prisma;
 }
