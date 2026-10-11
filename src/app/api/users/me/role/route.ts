@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, getSessionToken, updateSessionActiveRole } from "@/lib/auth/session";
+import {
+  getCurrentUser,
+  createSessionWithRole,
+  setSessionCookieFromToken,
+} from "@/lib/auth/session";
 
 export async function PUT(request: Request) {
   try {
@@ -20,12 +24,15 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "Tidak diizinkan" }, { status: 403 });
     }
 
-    const token = await getSessionToken();
-    if (!token) {
-      return NextResponse.json({ error: "No session" }, { status: 401 });
-    }
-
-    await updateSessionActiveRole(token, activeRole);
+    // Re-create the JWT with the new activeRole
+    const token = await createSessionWithRole(
+      user.id,
+      user.name,
+      user.email,
+      user.roles,
+      activeRole
+    );
+    await setSessionCookieFromToken(token);
 
     return NextResponse.json({ success: true, activeRole });
   } catch (error) {

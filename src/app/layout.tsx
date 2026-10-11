@@ -6,6 +6,8 @@ import { getStudioSettings } from "@/lib/studio";
 import { STUDIO_DEFAULTS } from "@/lib/constants";
 import "./globals.css";
 
+export const dynamic = "force-dynamic";
+
 const poppins = Poppins({
   variable: "--font-sans",
   subsets: ["latin"],
