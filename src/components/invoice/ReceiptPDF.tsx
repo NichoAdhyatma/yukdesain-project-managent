@@ -217,7 +217,7 @@ export function ReceiptPDF({
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.company}>{studioName}</Text>
-          <Text style={styles.tagline}>Creative Design Agency, Jakarta</Text>
+          <Text style={styles.tagline}>Creative Design Studio, Surabaya</Text>
         </View>
 
         {/* Title */}
