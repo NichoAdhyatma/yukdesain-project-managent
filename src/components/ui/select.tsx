@@ -59,7 +59,8 @@ function SelectValue({
       {...props}
     >
       {(value: string | null) => {
-        if (!value || !ctx.options.length) return null
+        if (!value) return null
+        if (!ctx.options.length) return value
         const opt = ctx.options.find((o) => o.value === value)
         return opt ? opt.label : value
       }}

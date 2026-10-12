@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { type, name, accountNumber, accountHolder } = body;
+    const { type, name, accountNumber, accountHolder, logoUrl, qrisImageUrl } = body;
 
     if (!type || !name || !accountNumber || !accountHolder) {
       return NextResponse.json({ error: "All fields are required" }, { status: 400 });
@@ -44,6 +44,8 @@ export async function POST(request: Request) {
         name,
         accountNumber,
         accountHolder,
+        logoUrl: logoUrl || "",
+        qrisImageUrl: qrisImageUrl || "",
         order: (maxOrder._max.order ?? 0) + 1,
       },
     });
@@ -63,7 +65,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const { id, isActive, order } = body;
+    const { id, name, accountNumber, accountHolder, logoUrl, qrisImageUrl, isActive, order } = body;
 
     if (!id) {
       return NextResponse.json({ error: "ID is required" }, { status: 400 });
@@ -72,6 +74,11 @@ export async function PUT(request: Request) {
     const data: Record<string, unknown> = {};
     if (typeof isActive === "boolean") data.isActive = isActive;
     if (typeof order === "number") data.order = order;
+    if (name !== undefined) data.name = name;
+    if (accountNumber !== undefined) data.accountNumber = accountNumber;
+    if (accountHolder !== undefined) data.accountHolder = accountHolder;
+    if (logoUrl !== undefined) data.logoUrl = logoUrl;
+    if (qrisImageUrl !== undefined) data.qrisImageUrl = qrisImageUrl;
 
     const account = await prisma.paymentAccount.update({
       where: { id },

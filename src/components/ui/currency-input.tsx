@@ -40,7 +40,7 @@ export function CurrencyInput({
   useEffect(() => {
     if (!isFocused) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setDisplayValue(value ? formatRupiahDisplay(value) : "");
+      setDisplayValue(value && value > 0 ? formatRupiahDisplay(value) : "");
     }
   }, [value, isFocused]);
 
@@ -65,7 +65,7 @@ export function CurrencyInput({
 
   const handleBlur = () => {
     setIsFocused(false);
-    setDisplayValue(value ? formatRupiahDisplay(value) : "");
+    setDisplayValue(value && value > 0 ? formatRupiahDisplay(value) : "");
   };
 
   return (

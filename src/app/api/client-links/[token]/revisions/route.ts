@@ -19,6 +19,7 @@ export async function POST(
             revisions: {
               orderBy: { number: "desc" },
               take: 1,
+              select: { number: true },
             },
           },
         },
@@ -38,6 +39,9 @@ export async function POST(
     }
 
     const project = link.project;
+    const latestRevision = project.revisions[0];
+    const maxRevisionNumber = latestRevision?.number ?? 0;
+    const usedRevisions = latestRevision ? 1 : 0;
 
     // Block if already final approved
     if (project.finalApprovedAt) {
@@ -46,8 +50,6 @@ export async function POST(
         { status: 403 }
       );
     }
-
-    const usedRevisions = project.revisions.length;
 
     // Check quota
     if (usedRevisions >= MAX_REVISION_QUOTA) {
@@ -78,7 +80,7 @@ export async function POST(
     }
 
     // Create revision
-    const nextNumber = usedRevisions + 1;
+    const nextNumber = maxRevisionNumber + 1;
     const remainingQuota = MAX_REVISION_QUOTA - nextNumber;
 
     const revision = await prisma.revision.create({

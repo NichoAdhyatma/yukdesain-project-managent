@@ -462,6 +462,8 @@ model PaymentAccount {
   name      String   // e.g., "BCA", "GoPay", "OVO"
   accountNumber String
   accountHolder String
+  logoUrl   String  @default("")    // bank logo or e-wallet logo
+  qrisImageUrl String @default("")  // QRIS image for e-wallets
   isActive  Boolean  @default(true)
   order     Int      @default(0)
   createdAt DateTime @default(now())

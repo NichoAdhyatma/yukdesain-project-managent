@@ -9,7 +9,7 @@ const PUBLIC_URL_BASE = process.env.STORAGE_PUBLIC_URL_BASE!;
 
 let s3Client: S3Client | null = null;
 
-function getClient(): S3Client {
+export function getClient(): S3Client {
   if (s3Client) return s3Client;
 
   if (!BUCKET || !ENDPOINT || !ACCESS_KEY || !SECRET_KEY) {
@@ -28,7 +28,13 @@ function getClient(): S3Client {
   return s3Client;
 }
 
-export type UploadCategory = "brief-reference" | "progress" | "final" | "revision" | "logo";
+export async function deleteFile(storageKey: string): Promise<void> {
+  const client = getClient();
+  const command = new DeleteObjectCommand({ Bucket: BUCKET, Key: storageKey });
+  await client.send(command);
+}
+
+export type UploadCategory = "brief-reference" | "progress" | "final" | "revision" | "logo" | "payment-logo";
 
 function buildKey(category: UploadCategory, projectId: string, filename: string): string {
   const timestamp = Date.now();
@@ -99,12 +105,6 @@ export async function generateUploadUrlWithAttachment(
   const publicUrl = `${ENDPOINT}/${storageKey}`;
 
   return { uploadUrl, storageKey, attachmentId: attachment.id, publicUrl };
-}
-
-export async function deleteFile(storageKey: string): Promise<void> {
-  const client = getClient();
-  const command = new DeleteObjectCommand({ Bucket: BUCKET, Key: storageKey });
-  await client.send(command);
 }
 
 export async function fileExists(storageKey: string): Promise<boolean> {

@@ -170,8 +170,8 @@ export function KopiMenuBuilder({
                     </Label>
                     <CurrencyInput
                       id={`kopi-harga-${item.id}`}
-                      value={parseInt(item.price ?? "", 10) || 0}
-                      onChange={(v) => updateItem(item.id, "price", String(v))}
+                      value={item.price ? parseInt(item.price, 10) : undefined}
+                      onChange={(v) => updateItem(item.id, "price", v > 0 ? String(v) : "")}
                       placeholder="Harga"
                     />
                   </div>

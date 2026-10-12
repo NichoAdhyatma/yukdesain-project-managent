@@ -43,6 +43,7 @@ import {
   Eye,
   EyeOff,
   AlertTriangle,
+  Trash2,
 } from "lucide-react";
 
 type Designer = {
@@ -91,6 +92,10 @@ export default function DesignersPage() {
   const [newPassword, setNewPassword] = useState("");
   const [changePasswordSaving, setChangePasswordSaving] = useState(false);
   const [changePasswordError, setChangePasswordError] = useState("");
+
+  // Delete designer
+  const [deletingDesigner, setDeletingDesigner] = useState<Designer | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Error/success dialog
   const [alertOpen, setAlertOpen] = useState(false);
@@ -390,6 +395,13 @@ export default function DesignersPage() {
                             >
                               <Key className="h-4 w-4" />
                             </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setDeletingDesigner(designer)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -553,6 +565,54 @@ export default function DesignersPage() {
               disabled={changePasswordSaving || newPassword.length < 8}
             >
               {changePasswordSaving ? "Menyimpan..." : "Ubah Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Designer Dialog */}
+      <Dialog open={!!deletingDesigner} onOpenChange={(v) => !v && setDeletingDesigner(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Hapus Designer
+            </DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Yakin ingin menghapus designer <strong>&quot;{deletingDesigner?.name}&quot;</strong>?
+            Semua data designer ini akan dihapus permanen dan tidak dapat dikembalikan.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletingDesigner(null)} disabled={deleting}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                if (!deletingDesigner) return;
+                setDeleting(true);
+                try {
+                  const res = await fetch(`/api/designers/${deletingDesigner.id}`, { method: "DELETE" });
+                  if (res.ok) {
+                    setDeletingDesigner(null);
+                    loadDesigners();
+                  } else {
+                    const d = await res.json();
+                    setAlertMessage(d.error || "Gagal menghapus designer");
+                    setAlertOpen(true);
+                  }
+                } catch {
+                  setAlertMessage("Terjadi kesalahan");
+                  setAlertOpen(true);
+                } finally {
+                  setDeleting(false);
+                }
+              }}
+              disabled={deleting}
+            >
+              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              {deleting ? "Menghapus..." : "Hapus"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -64,6 +64,8 @@ type PaymentAccount = {
   name: string;
   accountNumber: string;
   accountHolder: string;
+  logoUrl: string;
+  qrisImageUrl: string;
   isActive: boolean;
   order: number;
 };
@@ -101,7 +103,7 @@ export default function SettingsPage() {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<PaymentAccount | null>(null);
-  const [paymentForm, setPaymentForm] = useState({ type: "BANK", name: "", accountNumber: "", accountHolder: "" });
+  const [paymentForm, setPaymentForm] = useState({ type: "BANK", name: "", accountNumber: "", accountHolder: "", logoUrl: "", qrisImageUrl: "" });
   const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [paymentConfirmOpen, setPaymentConfirmOpen] = useState(false);
@@ -238,14 +240,21 @@ export default function SettingsPage() {
 
   const openCreateAccount = () => {
     setEditingAccount(null);
-    setPaymentForm({ type: "BANK", name: "", accountNumber: "", accountHolder: "" });
+    setPaymentForm({ type: "BANK", name: "", accountNumber: "", accountHolder: "", logoUrl: "", qrisImageUrl: "" });
     setPaymentError("");
     setPaymentDialogOpen(true);
   };
 
   const openEditAccount = (acc: PaymentAccount) => {
     setEditingAccount(acc);
-    setPaymentForm({ type: acc.type, name: acc.name, accountNumber: acc.accountNumber, accountHolder: acc.accountHolder });
+    setPaymentForm({
+      type: acc.type,
+      name: acc.name,
+      accountNumber: acc.accountNumber,
+      accountHolder: acc.accountHolder,
+      logoUrl: acc.logoUrl || "",
+      qrisImageUrl: acc.qrisImageUrl || "",
+    });
     setPaymentError("");
     setPaymentDialogOpen(true);
   };
@@ -260,7 +269,14 @@ export default function SettingsPage() {
     try {
       const method = editingAccount ? "PUT" : "POST";
       const url = editingAccount ? "/api/settings/payment-accounts" : "/api/settings/payment-accounts";
-      const body: Record<string, unknown> = { ...paymentForm };
+      const body: Record<string, unknown> = {
+        type: paymentForm.type,
+        name: paymentForm.name,
+        accountNumber: paymentForm.accountNumber,
+        accountHolder: paymentForm.accountHolder,
+        logoUrl: paymentForm.logoUrl,
+        qrisImageUrl: paymentForm.qrisImageUrl,
+      };
       if (editingAccount) body.id = editingAccount.id;
       const res = await fetch(url, {
         method,
@@ -295,6 +311,16 @@ export default function SettingsPage() {
       setTimeout(() => setCopiedId(null), 2000);
     });
   };
+
+  async function uploadPaymentLogo(file: File, type: "logo" | "qris") {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("type", type);
+    const res = await fetch("/api/settings/payment-accounts/upload", { method: "POST", body: fd });
+    if (!res.ok) return null;
+    const { publicUrl } = await res.json();
+    return publicUrl as string;
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -676,9 +702,16 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                           {paymentAccounts.filter((a) => a.type === "BANK").map((acc) => (
                             <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
-                              <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center shrink-0">
-                                <Building className="h-4 w-4 text-blue-600" />
-                              </div>
+                              {acc.logoUrl ? (
+                                <div className="w-12 h-12 rounded-lg overflow-hidden bg-white shrink-0 flex items-center justify-center">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={acc.logoUrl} alt={acc.name} className="max-w-full max-h-full object-contain" />
+                                </div>
+                              ) : (
+                                <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center shrink-0">
+                                  <Building className="h-5 w-5 text-blue-600" />
+                                </div>
+                              )}
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-semibold text-foreground">{acc.name}</p>
                                 <p className="text-xs text-muted-foreground font-mono">{acc.accountNumber}</p>
@@ -709,8 +742,23 @@ export default function SettingsPage() {
                         <div className="space-y-2">
                           {paymentAccounts.filter((a) => a.type === "EWALLET").map((acc) => (
                             <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
-                              <div className="w-9 h-9 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center shrink-0">
-                                <Smartphone className="h-4 w-4 text-green-600" />
+                              <div className="flex items-center gap-2 shrink-0">
+                                {acc.logoUrl ? (
+                                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-white flex items-center justify-center">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={acc.logoUrl} alt={acc.name} className="max-w-full max-h-full object-contain" />
+                                  </div>
+                                ) : (
+                                  <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                                    <Smartphone className="h-4 w-4 text-green-600" />
+                                  </div>
+                                )}
+                                {acc.qrisImageUrl && (
+                                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-white border flex items-center justify-center" title="QRIS tersedia">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img src={acc.qrisImageUrl} alt="QRIS" className="max-w-full max-h-full object-contain" />
+                                  </div>
+                                )}
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-semibold text-foreground">{acc.name}</p>
@@ -849,7 +897,7 @@ export default function SettingsPage() {
 
       {/* Create/Edit Payment Account Dialog */}
       <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editingAccount ? "Edit Akun Pembayaran" : "Tambah Akun Pembayaran"}</DialogTitle>
           </DialogHeader>
@@ -864,7 +912,7 @@ export default function SettingsPage() {
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="BANK">Transfer Bank</SelectItem>
-                  <SelectItem value="EWALLET">E-Wallet</SelectItem>
+                  <SelectItem value="EWALLET">E-Wallet / QRIS</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -872,7 +920,7 @@ export default function SettingsPage() {
               <Label htmlFor="accName">Nama Bank / E-Wallet</Label>
               <Input
                 id="accName"
-                placeholder={paymentForm.type === "BANK" ? "BCA, Mandiri, BRI, ..." : "GoPay, OVO, Dana, ..."}
+                placeholder={paymentForm.type === "BANK" ? "BCA, Mandiri, BRI, ..." : "GoPay, OVO, Dana, DANA ..."}
                 value={paymentForm.name}
                 onChange={(e) => setPaymentForm((f) => ({ ...f, name: e.target.value }))}
               />
@@ -895,6 +943,87 @@ export default function SettingsPage() {
                 onChange={(e) => setPaymentForm((f) => ({ ...f, accountHolder: e.target.value }))}
               />
             </div>
+
+            {/* Logo Upload */}
+            <div className="space-y-2">
+              <Label>Logo {paymentForm.type === "BANK" ? "Bank" : "E-Wallet"}</Label>
+              <div className="flex items-center gap-3">
+                {paymentForm.logoUrl ? (
+                  <div className="relative w-16 h-16 rounded-lg border overflow-hidden shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={paymentForm.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    <button
+                      type="button"
+                      onClick={() => setPaymentForm((f) => ({ ...f, logoUrl: "" }))}
+                      className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5 hover:bg-destructive/80"
+                      aria-label="Hapus logo"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <label className="w-16 h-16 border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer hover:border-muted-foreground/50 transition-colors shrink-0">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const url = await uploadPaymentLogo(file, "logo");
+                        if (url) setPaymentForm((f) => ({ ...f, logoUrl: url }));
+                      }}
+                    />
+                    <Upload className="h-5 w-5 text-muted-foreground" />
+                  </label>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {paymentForm.logoUrl ? "Klik X untuk hapus logo" : "Upload logo bank atau e-wallet"}
+                </p>
+              </div>
+            </div>
+
+            {/* QRIS Image Upload — only for E-Wallet */}
+            {paymentForm.type === "EWALLET" && (
+              <div className="space-y-2">
+                <Label>Gambar QRIS</Label>
+                <div className="flex items-center gap-3">
+                  {paymentForm.qrisImageUrl ? (
+                    <div className="relative w-24 h-24 rounded-lg border overflow-hidden shrink-0 bg-white">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={paymentForm.qrisImageUrl} alt="QRIS" className="w-full h-full object-contain" />
+                      <button
+                        type="button"
+                        onClick={() => setPaymentForm((f) => ({ ...f, qrisImageUrl: "" }))}
+                        className="absolute -top-1.5 -right-1.5 bg-destructive text-destructive-foreground rounded-full p-0.5 hover:bg-destructive/80"
+                        aria-label="Hapus QRIS"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <label className="w-24 h-24 border-2 border-dashed rounded-lg flex flex-col items-center justify-center gap-1 cursor-pointer hover:border-muted-foreground/50 transition-colors shrink-0">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          const url = await uploadPaymentLogo(file, "qris");
+                          if (url) setPaymentForm((f) => ({ ...f, qrisImageUrl: url }));
+                        }}
+                      />
+                      <Upload className="h-5 w-5 text-muted-foreground" />
+                      <span className="text-[9px] text-muted-foreground text-center px-1">Upload QRIS</span>
+                    </label>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {paymentForm.qrisImageUrl ? "Klik X untuk hapus QRIS" : "Upload gambar QRIS untuk e-wallet ini"}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>
