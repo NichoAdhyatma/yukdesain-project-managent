@@ -24,6 +24,7 @@ import {
   Shield,
   Wrench,
   ImageIcon,
+  LayoutGrid,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   MonitorPlay,
   History,
   ImageIcon,
+  LayoutGrid,
 };
 
 interface MenuItem {
@@ -118,8 +120,23 @@ function groupMenus(menus: MenuItem[]): NavGroup[] {
     });
   }
 
-  // Sort groups and items by their original order (already sorted from API)
-  return Array.from(groupMap.values());
+  // Sort groups by their minimum item order, items within group by their order
+  return Array.from(groupMap.values())
+    .map((group) => ({
+      ...group,
+      items: group.items.sort(
+        (a, b) => {
+          const menuA = menus.find((m) => m.name === a.name);
+          const menuB = menus.find((m) => m.name === b.name);
+          return (menuA?.order ?? 0) - (menuB?.order ?? 0);
+        }
+      ),
+    }))
+    .sort((a, b) => {
+      const firstA = menus.find((m) => m.name === a.items[0]?.name);
+      const firstB = menus.find((m) => m.name === b.items[0]?.name);
+      return (firstA?.order ?? 0) - (firstB?.order ?? 0);
+    });
 }
 
 export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarProps) {

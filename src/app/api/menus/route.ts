@@ -15,7 +15,7 @@ export async function GET(request: Request) {
     // Admin settings page: return all menus with Menu2Role (no activeRole filter)
     if (all && user.roles.includes("OWNER")) {
       const menus = await prisma.menuItem.findMany({
-        orderBy: [{ group: "asc" }, { order: "asc" }],
+        orderBy: [{ order: "asc" }],
         include: { menu2Roles: true },
       });
       return NextResponse.json({ menus });
@@ -24,7 +24,7 @@ export async function GET(request: Request) {
     // Normal: fetch menus with their Menu2Role entries, filter by activeRole
     const menus = await prisma.menuItem.findMany({
       where: { isActive: true },
-      orderBy: [{ group: "asc" }, { order: "asc" }],
+      orderBy: [{ order: "asc" }],
       include: { menu2Roles: true },
     });
 

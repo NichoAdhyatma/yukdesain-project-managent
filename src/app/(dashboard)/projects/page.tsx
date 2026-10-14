@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, LayoutGrid, Kanban as KanbanIcon, Loader2, UserPlus, Plus } from "lucide-react";
+import { Search, LayoutGrid, Kanban as KanbanIcon, Loader2, UserPlus, Plus, Trash2 } from "lucide-react";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
 import type { ProjectCardData } from "@/components/kanban/kanban-board";
 import type { ProjectStatus } from "@/types";
@@ -73,6 +73,10 @@ export default function ProjectsPage() {
   const [paymentReference, setPaymentReference] = useState("");
   const [paymentNotes, setPaymentNotes] = useState("");
   const [recordingPayment, setRecordingPayment] = useState(false);
+
+  // Delete dialog state
+  const [deleteDialog, setDeleteDialog] = useState<Project | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -173,6 +177,26 @@ export default function ProjectsPage() {
       toast("Terjadi kesalahan", "error");
     } finally {
       setRecordingPayment(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteDialog) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/projects/${deleteDialog.id}`, { method: "DELETE" });
+      if (res.ok) {
+        setDeleteDialog(null);
+        loadData();
+      } else {
+        const data = await res.json();
+        toast(data.error || "Gagal menghapus project", "error");
+      }
+    } catch (e) {
+      console.error("Failed:", e);
+      toast("Terjadi kesalahan", "error");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -409,12 +433,13 @@ export default function ProjectsPage() {
                     <TableHead>Designer</TableHead>
                     <TableHead>Pembayaran</TableHead>
                     <TableHead>Deadline</TableHead>
+                    <TableHead className="w-16">Aksi</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredProjects.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         Tidak ada project
                       </TableCell>
                     </TableRow>
@@ -452,6 +477,16 @@ export default function ProjectsPage() {
                             </button>
                           </TableCell>
                           <TableCell>{p.deadline ? formatDate(p.deadline) : "-"}</TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                              onClick={() => setDeleteDialog(p)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
                         </TableRow>
                       );
                     })
@@ -637,6 +672,29 @@ export default function ProjectsPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteDialog} onOpenChange={() => !deleting && setDeleteDialog(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Hapus Project?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Project <span className="font-semibold text-foreground">{deleteDialog?.projectNumber}</span> ({deleteDialog?.clientName}) akan dihapus permanen beserta semua data terkait (brief, revisi, invoice, pembayaran, dll). Tindakan ini tidak bisa dibatalkan.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setDeleteDialog(null)} disabled={deleting}>
+                Batal
+              </Button>
+              <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
+                Hapus
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

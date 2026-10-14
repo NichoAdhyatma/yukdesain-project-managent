@@ -1,4 +1,4 @@
-import { Document, Page, Text, View, StyleSheet, Link } from "@react-pdf/renderer";
+import { Document, Page, Text, View, StyleSheet, Link, Image } from "@react-pdf/renderer";
 
 // Thermal receipt 80mm: black & white, Courier monospace.
 // Tracking code: highlighted box (black bg, white text) agar user mudah notice.
@@ -112,6 +112,9 @@ const styles = StyleSheet.create({
   paymentName: { fontFamily: FONT_BOLD, fontSize: 9, marginBottom: 1, color: C.black },
   paymentNumber: { fontSize: 9, letterSpacing: 1.5, marginBottom: 1, color: C.black },
   paymentHolder: { fontSize: 7.5, color: C.black },
+  paymentLogoRow: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 4 },
+  paymentLogo: { width: 48, height: 24, objectFit: "contain" },
+  paymentQris: { width: 72, height: 72, objectFit: "contain" },
 
   // ── Footer ────────────────────────────────────────────────────────────────
   footer: { alignItems: "center", marginTop: 4 },
@@ -134,7 +137,7 @@ const styles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 
 type InvoiceItem = { description: string; quantity: number; unitPrice: number; total: number };
-type PaymentAccount = { id: string; type: string; name: string; accountNumber: string; accountHolder: string; isActive?: boolean };
+type PaymentAccount = { id: string; type: string; name: string; accountNumber: string; accountHolder: string; isActive?: boolean; logoUrl?: string; qrisImageUrl?: string };
 
 interface ReceiptPDFProps {
   invoiceNumber: string;
@@ -280,6 +283,16 @@ export function ReceiptPDF({
               <Text style={styles.paymentLabel}>
                 {account.type === "BANK" ? "TRANSFER BANK" : "E-WALLET"}
               </Text>
+              {(account.logoUrl || account.qrisImageUrl) ? (
+                <View style={styles.paymentLogoRow}>
+                  {account.logoUrl && (
+                    <Image src={account.logoUrl} style={styles.paymentLogo} />
+                  )}
+                  {account.qrisImageUrl && (
+                    <Image src={account.qrisImageUrl} style={styles.paymentQris} />
+                  )}
+                </View>
+              ) : null}
               <Text style={styles.paymentName}>{account.name}</Text>
               <Text style={styles.paymentNumber}>{account.accountNumber}</Text>
               <Text style={styles.paymentHolder}>a/n {account.accountHolder}</Text>

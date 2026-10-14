@@ -82,14 +82,30 @@ async function upsertPaymentStatusLabels() {
 // Menu items and Menu2Role
 async function upsertMenuItems() {
   const menuDefs = [
+    // Overview
     { name: "Dashboard", href: "/dashboard", icon: "LayoutDashboard", group: "Overview", order: 1 },
-    { name: "Form Link", href: "/form-link", icon: "Link", group: "Work Management", order: 10 },
-    { name: "Projects", href: "/projects", icon: "Briefcase", group: "Work Management", order: 11 },
-    { name: "Designers", href: "/designers", icon: "Users", group: "Work Management", order: 12 },
-    { name: "Workspace", href: "/designer", icon: "MonitorPlay", group: "Designer", order: 20 },
-    { name: "Invoices", href: "/invoices", icon: "Receipt", group: "Finance", order: 30 },
-    { name: "Media", href: "/media", icon: "ImageIcon", group: "Finance", order: 31 },
-    { name: "Settings", href: "/settings", icon: "Settings", group: "Settings", order: 40 },
+
+    // Work
+    { name: "Form Link", href: "/form-link", icon: "Link", group: "Work", order: 10 },
+    { name: "Projects", href: "/projects", icon: "Briefcase", group: "Work", order: 11 },
+
+    // Team
+    { name: "Designers", href: "/designers", icon: "Users", group: "Team", order: 20 },
+    { name: "Services", href: "/services", icon: "LayoutGrid", group: "Team", order: 21 },
+
+    // Assets
+    { name: "Media", href: "/media", icon: "ImageIcon", group: "Assets", order: 30 },
+
+    // Finance
+    { name: "Invoices", href: "/invoices", icon: "Receipt", group: "Finance", order: 40 },
+    { name: "Financial", href: "/financial", icon: "Wallet", group: "Finance", order: 41 },
+
+    // Settings
+    { name: "Settings", href: "/settings", icon: "Settings", group: "Settings", order: 50 },
+    { name: "Activity History", href: "/activity-history", icon: "History", group: "Settings", order: 51 },
+
+    // Workspace (designer role)
+    { name: "Workspace", href: "/designer", icon: "MonitorPlay", group: "Workspace", order: 60 },
   ];
 
   const menu2RoleDefs: Record<string, string[]> = {
@@ -97,10 +113,13 @@ async function upsertMenuItems() {
     "/form-link": ["OWNER"],
     "/projects": ["OWNER"],
     "/designers": ["OWNER"],
+    "/services": ["OWNER"],
     "/designer": ["OWNER", "DESIGNER"],
     "/invoices": ["OWNER"],
+    "/financial": ["OWNER"],
     "/media": ["OWNER"],
     "/settings": ["OWNER"],
+    "/activity-history": ["OWNER"],
   };
 
   const menuMap: Record<string, string> = {};

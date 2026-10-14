@@ -107,6 +107,8 @@ type PaymentAccount = {
   name: string;
   accountNumber: string;
   accountHolder: string;
+  logoUrl?: string;
+  qrisImageUrl?: string;
 };
 
 type TimelineEvent = {
@@ -1042,14 +1044,33 @@ function InvoiceTab({
               <div className="space-y-3">
                 {paymentAccounts.map((acc) => (
                   <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg bg-background/80">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                      acc.type === "BANK" ? "bg-blue-100 dark:bg-blue-900/50" : "bg-green-100 dark:bg-green-900/50"
-                    )}>
-                      {acc.type === "BANK" ? (
-                        <Building className="h-4 w-4 text-blue-600" />
+                    <div className="flex items-center gap-2 shrink-0">
+                      {acc.logoUrl ? (
+                        <ImageViewer
+                          src={acc.logoUrl}
+                          alt={acc.name}
+                          imgClassName="w-9 h-9 rounded-lg object-contain"
+                          containerClassName="w-9 h-9 rounded-lg overflow-hidden bg-white"
+                        />
                       ) : (
-                        <Smartphone className="h-4 w-4 text-green-600" />
+                        <div className={cn(
+                          "w-9 h-9 rounded-full flex items-center justify-center",
+                          acc.type === "BANK" ? "bg-blue-100 dark:bg-blue-900/50" : "bg-green-100 dark:bg-green-900/50"
+                        )}>
+                          {acc.type === "BANK" ? (
+                            <Building className="h-4 w-4 text-blue-600" />
+                          ) : (
+                            <Smartphone className="h-4 w-4 text-green-600" />
+                          )}
+                        </div>
+                      )}
+                      {acc.type === "EWALLET" && acc.qrisImageUrl && (
+                        <ImageViewer
+                          src={acc.qrisImageUrl}
+                          alt="QRIS"
+                          imgClassName="w-9 h-9 rounded-lg object-contain"
+                          containerClassName="w-9 h-9 rounded-lg overflow-hidden bg-white border"
+                        />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -1075,9 +1096,11 @@ function InvoiceTab({
 function PaymentTab({
   project,
   formatCurrency,
+  paymentAccounts,
 }: {
   project: NonNullable<ClientLink["project"]>;
   formatCurrency: (n: number) => string;
+  paymentAccounts: PaymentAccount[];
 }) {
   const paymentCfg = paymentStatusConfig[project.paymentStatus] || paymentStatusConfig.UNPAID;
   const remaining = project.agreedPrice - project.paidAmount;
@@ -1164,6 +1187,56 @@ function PaymentTab({
                 Pembayaran sudah lunas. Terima kasih!
               </p>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Payment Accounts */}
+      {paymentAccounts.length > 0 && (
+        <Card>
+          <CardContent className="p-4 space-y-3">
+            <div className="flex items-center gap-2 mb-1">
+              <CreditCard className="h-4 w-4 text-muted-foreground" />
+              <p className="text-xs font-medium text-muted-foreground">Rekening Pembayaran</p>
+            </div>
+            {paymentAccounts.map((acc) => (
+              <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {acc.logoUrl ? (
+                    <ImageViewer
+                      src={acc.logoUrl}
+                      alt={acc.name}
+                      imgClassName="w-9 h-9 rounded-lg object-contain"
+                      containerClassName="w-9 h-9 rounded-lg overflow-hidden bg-white"
+                    />
+                  ) : (
+                    <div className={cn(
+                      "w-9 h-9 rounded-full flex items-center justify-center",
+                      acc.type === "BANK" ? "bg-blue-100 dark:bg-blue-900/50" : "bg-green-100 dark:bg-green-900/50"
+                    )}>
+                      {acc.type === "BANK" ? (
+                        <Building className="h-4 w-4 text-blue-600" />
+                      ) : (
+                        <Smartphone className="h-4 w-4 text-green-600" />
+                      )}
+                    </div>
+                  )}
+                  {acc.type === "EWALLET" && acc.qrisImageUrl && (
+                    <ImageViewer
+                      src={acc.qrisImageUrl}
+                      alt="QRIS"
+                      imgClassName="w-9 h-9 rounded-lg object-contain"
+                      containerClassName="w-9 h-9 rounded-lg overflow-hidden bg-white border"
+                    />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{acc.name}</p>
+                  <p className="text-sm font-mono text-foreground">{acc.accountNumber}</p>
+                  <p className="text-xs text-muted-foreground">a/n {acc.accountHolder}</p>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
@@ -1876,7 +1949,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             />
           )}
           {activeTab === "payment" && (
-            <PaymentTab project={project} formatCurrency={formatCurrency} />
+            <PaymentTab project={project} formatCurrency={formatCurrency} paymentAccounts={paymentAccounts} />
           )}
         </div>
 

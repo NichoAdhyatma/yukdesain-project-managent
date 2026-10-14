@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -173,8 +173,8 @@ export default function ActivityHistoryPage() {
                       ? `[${log.metadata.projectNumber}]`
                       : log.entityId.slice(0, 8);
                     return (
-                      <>
-                        <TableRow key={log.id} className="cursor-pointer" onClick={() => toggleRow(log.id)}>
+                      <Fragment key={log.id}>
+                        <TableRow className="cursor-pointer" onClick={() => toggleRow(log.id)}>
                           <TableCell>
                             {isExpanded ? (
                               <ChevronUp className="h-4 w-4 text-muted-foreground" />
@@ -199,7 +199,7 @@ export default function ActivityHistoryPage() {
                           <TableCell className="text-sm font-mono text-muted-foreground">{detail}</TableCell>
                         </TableRow>
                         {isExpanded && (
-                          <TableRow key={`${log.id}-detail`}>
+                          <TableRow>
                             <TableCell colSpan={6} className="bg-muted/30 px-6 py-3">
                               <div className="grid grid-cols-2 gap-4 text-sm">
                                 {log.previousValue && (
@@ -229,7 +229,7 @@ export default function ActivityHistoryPage() {
                             </TableCell>
                           </TableRow>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })
                 )}

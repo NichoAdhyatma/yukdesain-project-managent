@@ -89,6 +89,8 @@ export async function GET(
         name: true,
         accountNumber: true,
         accountHolder: true,
+        logoUrl: true,
+        qrisImageUrl: true,
       },
     });
 
