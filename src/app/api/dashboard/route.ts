@@ -14,88 +14,95 @@ export async function GET() {
     const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
     const threeDaysFromNow = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
 
-    // Count projects
-    const totalProjects = await prisma.project.count();
-    const activeProjects = await prisma.project.count({ where: { status: "SEDANG_DIKERJAKAN" } });
-    const completedThisMonth = await prisma.project.count({
-      where: {
-        status: "SELESAI",
-        updatedAt: { gte: startOfMonth, lt: startOfNextMonth },
-      },
-    });
-    const revisionProjects = await prisma.revision.count({ where: { status: "PENDING" } });
+    // Parallel queries
+    const [
+      totalProjects,
+      activeProjects,
+      completedThisMonth,
+      revisionProjects,
+      outstandingProjects,
+      unassignedProjects,
+      projectsByStatus,
+      freelancerAssignments,
+    ] = await Promise.all([
+      prisma.project.count(),
+      prisma.project.count({ where: { status: "SEDANG_DIKERJAKAN" } }),
+      prisma.project.count({
+        where: {
+          status: "SELESAI",
+          updatedAt: { gte: startOfMonth, lt: startOfNextMonth },
+        },
+      }),
+      prisma.revision.count({ where: { status: "PENDING" } }),
+      prisma.project.findMany({
+        where: { paymentStatus: { in: ["UNPAID", "PARTIALLY_PAID"] } },
+        select: { agreedPrice: true, paidAmount: true },
+      }),
+      prisma.project.count({
+        where: {
+          status: { in: ["DRAFT", "BELUM_DIKERJAKAN"] },
+          assignments: { none: {} },
+        },
+      }),
+      prisma.project.groupBy({ by: ["status"], _count: { id: true } }),
+      prisma.projectAssignment.findMany({
+        where: {
+          assignedAt: { gte: startOfMonth, lt: startOfNextMonth },
+          freelancerPayout: { not: null },
+        },
+        select: { freelancerPayout: true },
+      }),
+    ]);
 
-    // Get upcoming deadlines
-    const upcomingDeadlines = await prisma.project.findMany({
-      where: {
-        deadline: { gte: now, lte: threeDaysFromNow },
-        status: { not: "SELESAI" },
-      },
-      select: {
-        id: true,
-        deadline: true,
-        clientName: true,
-        service: { select: { name: true } },
-      },
-      orderBy: { deadline: "asc" },
-      take: 5,
-    });
-
-    // Financial (BRD Appendix D: Gross Income = SUM(Order Prices), Net = Gross - Freelancer Expenses)
-    const monthlyProjects = await prisma.project.findMany({
-      where: { createdAt: { gte: startOfMonth, lt: startOfNextMonth } },
-      select: { agreedPrice: true, paidAmount: true },
-    });
-
-    const grossIncome = monthlyProjects.reduce((sum, p) => sum + p.agreedPrice, 0);
-    monthlyProjects.reduce((sum, p) => sum + p.paidAmount, 0);
-
-    // Freelancer expenses: sum of freelancer payouts for assignments made this month
-    const freelancerAssignments = await prisma.projectAssignment.findMany({
-      where: {
-        assignedAt: { gte: startOfMonth, lt: startOfNextMonth },
-        freelancerPayout: { not: null },
-      },
-      select: { freelancerPayout: true },
-    });
+    // Freelancer expenses
     const freelancerExpenses = freelancerAssignments.reduce((sum, a) => sum + (a.freelancerPayout || 0), 0);
-    const netRevenue = grossIncome - freelancerExpenses;
 
     // Outstanding payments
-    const outstandingProjects = await prisma.project.findMany({
-      where: {
-        paymentStatus: { in: ["UNPAID", "PARTIALLY_PAID"] },
-      },
-      select: { agreedPrice: true, paidAmount: true },
-    });
-
     const outstandingPaymentsTotal = outstandingProjects.reduce(
-      (sum, p) => sum + (p.agreedPrice - p.paidAmount),
-      0
+      (sum, p) => sum + (p.agreedPrice - p.paidAmount), 0
     );
 
-    // Unassigned projects
-    const unassignedProjects = await prisma.project.count({
-      where: {
-        status: { in: ["DRAFT", "BELUM_DIKERJAKAN"] },
-        assignments: { none: {} },
-      },
-    });
+    // Parallel: upcoming deadlines, monthly projects, designer assignments, pending revisions, recent revisions
+    const [
+      upcomingDeadlines,
+      monthlyProjects,
+      designerAssignments,
+      pendingRevisions,
+      recentRevisions,
+    ] = await Promise.all([
+      prisma.project.findMany({
+        where: { deadline: { gte: now, lte: threeDaysFromNow }, status: { not: "SELESAI" } },
+        select: { id: true, deadline: true, clientName: true, service: { select: { name: true } } },
+        orderBy: { deadline: "asc" }, take: 5,
+      }),
+      prisma.project.findMany({
+        where: { createdAt: { gte: startOfMonth, lt: startOfNextMonth } },
+        select: { agreedPrice: true },
+      }),
+      prisma.projectAssignment.findMany({
+        where: { project: { status: "SEDANG_DIKERJAKAN" } },
+        include: { designer: { select: { id: true, name: true } } },
+        orderBy: { assignedAt: "desc" },
+      }),
+      prisma.revision.findMany({
+        where: { status: "PENDING" },
+        select: {
+          id: true, number: true, description: true, requestedAt: true,
+          project: { select: { id: true, projectNumber: true, clientName: true, service: { select: { name: true } } } },
+        },
+        orderBy: { requestedAt: "desc" }, take: 5,
+      }),
+      prisma.revision.findMany({
+        select: { id: true, status: true, requestedAt: true, project: { select: { id: true, projectNumber: true } } },
+        orderBy: { requestedAt: "desc" }, take: 10,
+      }),
+    ]);
 
-    // Projects by status
-    const projectsByStatus = await prisma.project.groupBy({
-      by: ["status"],
-      _count: { id: true },
-    });
+    // Financial
+    const grossIncome = monthlyProjects.reduce((sum, p) => sum + p.agreedPrice, 0);
+    const netRevenue = grossIncome - freelancerExpenses;
 
-    // Assigned designers summary
-    const designerAssignments = await prisma.projectAssignment.findMany({
-      where: { project: { status: "SEDANG_DIKERJAKAN" } },
-      include: {
-        designer: { select: { id: true, name: true } },
-      },
-      orderBy: { assignedAt: "desc" },
-    });
+    // Compute assigned designers summary
     const assignedDesigners = designerAssignments.reduce<Record<string, { name: string; count: number }>>(
       (acc, a) => {
         const id = a.designer.id;
@@ -105,32 +112,6 @@ export async function GET() {
       },
       {}
     );
-
-    // Pending revisions (client reviews)
-    const pendingRevisions = await prisma.revision.findMany({
-      where: { status: "PENDING" },
-      select: {
-        id: true,
-        number: true,
-        description: true,
-        requestedAt: true,
-        project: { select: { id: true, projectNumber: true, clientName: true, service: { select: { name: true } } } },
-      },
-      orderBy: { requestedAt: "desc" },
-      take: 5,
-    });
-
-    // Recent revisions activity
-    const recentRevisions = await prisma.revision.findMany({
-      select: {
-        id: true,
-        status: true,
-        requestedAt: true,
-        project: { select: { id: true, projectNumber: true } },
-      },
-      orderBy: { requestedAt: "desc" },
-      take: 10,
-    });
 
     return NextResponse.json({
       metrics: {

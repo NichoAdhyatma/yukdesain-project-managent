@@ -36,7 +36,7 @@ export type StorageStats = {
   byCategory: Record<string, { count: number; size: number }>;
 };
 
-const CATEGORIES = ["brief-reference", "progress", "final", "revision", "logo"];
+const CATEGORIES = ["brief-reference", "progress", "final", "revision", "logo", "payment-logo"];
 
 function parseKey(key: string): { category: string; filename: string } {
   const parts = key.split("/");
@@ -91,7 +91,16 @@ export async function listAllObjects(
   return objects;
 }
 
+// Simple in-memory cache for storage stats (1-minute TTL)
+let _statsCache: { data: StorageStats; timestamp: number } | null = null;
+const STATS_CACHE_TTL = 60 * 1000; // 1 minute
+
 export async function getStorageStats(): Promise<StorageStats> {
+  const now = Date.now();
+  if (_statsCache && now - _statsCache.timestamp < STATS_CACHE_TTL) {
+    return _statsCache.data;
+  }
+
   const objects = await listAllObjects();
 
   const stats: StorageStats = {
@@ -115,6 +124,7 @@ export async function getStorageStats(): Promise<StorageStats> {
     stats.byCategory[cat].size += obj.size;
   }
 
+  _statsCache = { data: stats, timestamp: now };
   return stats;
 }
 

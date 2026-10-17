@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useDeferredValue } from "react";
+import Image from "next/image";
 import { toast } from "@/components/ui/toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -420,7 +421,7 @@ export default function MediaPage() {
                         <TableCell>
                           <div className="flex items-center gap-3">
                             <div
-                              className={`w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 ${
+                              className={`relative w-10 h-10 rounded-lg border flex items-center justify-center shrink-0 ${
                                 isImg ? "bg-muted cursor-pointer hover:bg-muted/80" : "bg-muted"
                               }`}
                               onClick={() => isImg && setPreviewUrl(getPublicUrl(item.key))}
@@ -434,13 +435,12 @@ export default function MediaPage() {
                               } : undefined}
                             >
                               {isImg && !imageErrors.has(item.key) ? (
-                                <img
+                                <Image
                                   src={getPublicUrl(item.key)}
                                   alt={item.filename}
-                                  className="w-full h-full object-cover rounded-lg"
-                                  loading="lazy"
-                                  width={40}
-                                  height={40}
+                                  fill
+                                  className="object-cover rounded-lg"
+                                  sizes="40px"
                                   onError={() => setImageErrors((prev) => new Set(prev).add(item.key))}
                                 />
                               ) : (
@@ -552,6 +552,7 @@ export default function MediaPage() {
           </DialogHeader>
           {previewUrl && (
             <div className="overflow-auto max-h-[calc(80vh-60px)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={previewUrl}
                 alt={previewUrl?.split("/").pop() ?? "Preview"}

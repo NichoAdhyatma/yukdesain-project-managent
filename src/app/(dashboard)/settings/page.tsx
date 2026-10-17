@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { toast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -703,9 +704,8 @@ export default function SettingsPage() {
                           {paymentAccounts.filter((a) => a.type === "BANK").map((acc) => (
                             <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
                               {acc.logoUrl ? (
-                                <div className="w-12 h-12 rounded-lg overflow-hidden bg-white shrink-0 flex items-center justify-center">
-                                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                                  <img src={acc.logoUrl} alt={acc.name} className="max-w-full max-h-full object-contain" />
+                                <div className="relative w-12 h-12 rounded-lg overflow-hidden bg-white shrink-0">
+                                  <Image src={acc.logoUrl} alt={acc.name} fill className="object-contain" unoptimized />
                                 </div>
                               ) : (
                                 <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/50 flex items-center justify-center shrink-0">
@@ -744,9 +744,8 @@ export default function SettingsPage() {
                             <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
                               <div className="flex items-center gap-2 shrink-0">
                                 {acc.logoUrl ? (
-                                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-white flex items-center justify-center">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={acc.logoUrl} alt={acc.name} className="max-w-full max-h-full object-contain" />
+                                  <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-white">
+                                    <Image src={acc.logoUrl} alt={acc.name} fill className="object-contain" unoptimized />
                                   </div>
                                 ) : (
                                   <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
@@ -754,9 +753,8 @@ export default function SettingsPage() {
                                   </div>
                                 )}
                                 {acc.qrisImageUrl && (
-                                  <div className="w-10 h-10 rounded-lg overflow-hidden bg-white border flex items-center justify-center" title="QRIS tersedia">
-                                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                                    <img src={acc.qrisImageUrl} alt="QRIS" className="max-w-full max-h-full object-contain" />
+                                  <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-white border" title="QRIS tersedia">
+                                    <Image src={acc.qrisImageUrl} alt="QRIS" fill className="object-contain" unoptimized />
                                   </div>
                                 )}
                               </div>
@@ -950,8 +948,7 @@ export default function SettingsPage() {
               <div className="flex items-center gap-3">
                 {paymentForm.logoUrl ? (
                   <div className="relative w-16 h-16 rounded-lg border overflow-hidden shrink-0">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={paymentForm.logoUrl} alt="Logo" className="w-full h-full object-contain" />
+                    <Image src={paymentForm.logoUrl} alt="Logo" fill className="object-contain" unoptimized />
                     <button
                       type="button"
                       onClick={() => setPaymentForm((f) => ({ ...f, logoUrl: "" }))}
@@ -990,8 +987,7 @@ export default function SettingsPage() {
                 <div className="flex items-center gap-3">
                   {paymentForm.qrisImageUrl ? (
                     <div className="relative w-24 h-24 rounded-lg border overflow-hidden shrink-0 bg-white">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={paymentForm.qrisImageUrl} alt="QRIS" className="w-full h-full object-contain" />
+                      <Image src={paymentForm.qrisImageUrl} alt="QRIS" fill className="object-contain" unoptimized />
                       <button
                         type="button"
                         onClick={() => setPaymentForm((f) => ({ ...f, qrisImageUrl: "" }))}
