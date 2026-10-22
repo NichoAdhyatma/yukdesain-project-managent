@@ -140,11 +140,15 @@ export async function requireOwner(): Promise<SessionUser> {
   return user;
 }
 
-export async function updateSessionActiveRole(token: string, activeRole: string): Promise<void> {
+// Rotating the token on role change keeps any cached session state from
+// serving the previous role for the next request.
+export async function rotateSessionRole(token: string, activeRole: string): Promise<string> {
+  const newToken = generateToken();
   await prisma.session.update({
     where: { token },
-    data: { activeRole },
+    data: { token: newToken, activeRole },
   });
+  return newToken;
 }
 
 export async function getSessionToken(): Promise<string | null> {

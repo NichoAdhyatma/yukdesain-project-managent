@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser, getSessionToken, updateSessionActiveRole } from "@/lib/auth/session";
+import { getCurrentUser, getSessionToken, rotateSessionRole, setSessionCookie } from "@/lib/auth/session";
 
 export async function PUT(request: Request) {
   try {
@@ -24,7 +24,8 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: "No session" }, { status: 401 });
     }
 
-    await updateSessionActiveRole(token, activeRole);
+    const newToken = await rotateSessionRole(token, activeRole);
+    await setSessionCookie(newToken);
 
     return NextResponse.json({ success: true, activeRole });
   } catch (error) {
