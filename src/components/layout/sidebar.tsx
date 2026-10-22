@@ -155,6 +155,9 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
   const [alertMessage, setAlertMessage] = useState("");
   const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
 
+  // Designers land on their workspace, not the owner dashboard
+  const homeHref = user?.activeRole === "OWNER" ? "/dashboard" : "/designer";
+
   useEffect(() => {
     fetch("/api/settings/studio")
       .then((r) => r.json())
@@ -229,7 +232,7 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
       {/* Logo */}
       <div className="flex items-center h-14 px-4 border-b border-sidebar-border">
         {!collapsed ? (
-          <Link href="/dashboard" className="flex items-center gap-2">
+          <Link href={homeHref} className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
               <span className="text-sidebar-primary-foreground font-bold text-sm">
                 YD
@@ -245,7 +248,7 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
             </div>
           </Link>
         ) : (
-          <Link href="/dashboard" className="mx-auto">
+          <Link href={homeHref} className="mx-auto">
             <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
               <span className="text-sidebar-primary-foreground font-bold text-sm">
                 YD

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -45,7 +46,6 @@ import {
   AlertTriangle,
   Trash2,
 } from "lucide-react";
-
 type Designer = {
   id: string;
   name: string;
@@ -66,12 +66,23 @@ const statusConfig: Record<string, { label: string; variant: "default" | "second
 };
 
 export default function DesignersPage() {
-  const [designers, setDesigners] = useState<Designer[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery<{ designers: Designer[] }>({
+    queryKey: ["designers"],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const res = await fetch("/api/designers");
+      return res.json();
+    },
+  });
+
+  const designers = data?.designers ?? [];
+
+  // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [newDesigner, setNewDesigner] = useState({
     name: "",
     email: "",
@@ -90,60 +101,99 @@ export default function DesignersPage() {
   // Change password
   const [changePasswordDesigner, setChangePasswordDesigner] = useState<Designer | null>(null);
   const [newPassword, setNewPassword] = useState("");
-  const [changePasswordSaving, setChangePasswordSaving] = useState(false);
   const [changePasswordError, setChangePasswordError] = useState("");
 
   // Delete designer
   const [deletingDesigner, setDeletingDesigner] = useState<Designer | null>(null);
-  const [deleting, setDeleting] = useState(false);
 
   // Error/success dialog
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
 
-  useEffect(() => {
-    loadDesigners();
-  }, []);
-
-  async function loadDesigners() {
-    try {
-      const res = await fetch("/api/designers");
-      const data = await res.json();
-      if (data.designers) setDesigners(data.designers);
-    } catch (e) {
-      console.error("Failed to load designers:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const handleCreateDesigner = async () => {
-    if (!newDesigner.name || !newDesigner.email) return;
-    setSaving(true);
-    try {
+  // Mutations
+  const createMutation = useMutation({
+    mutationFn: async (body: { name: string; email: string; classification: "FULL_TIME" | "FREELANCER" }) => {
       const res = await fetch("/api/designers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newDesigner),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
-      if (res.ok) {
-        setNewDesigner({ name: "", email: "", classification: "FULL_TIME" });
-        setGeneratedPassword(data.rawPassword || "");
-        setIsCreateOpen(false);
-        loadDesigners();
-      } else {
-        setAlertMessage(data.error || "Gagal membuat designer");
-        setAlertOpen(true);
-      }
-    } catch (e) {
-      console.error("Failed:", e);
-      setAlertMessage("Terjadi kesalahan");
+      if (!res.ok) throw new Error(data.error || "Gagal membuat designer");
+      return data;
+    },
+    onSuccess: (data) => {
+      setNewDesigner({ name: "", email: "", classification: "FULL_TIME" });
+      setGeneratedPassword(data.rawPassword || "");
+      setIsCreateOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["designers"] });
+    },
+    onError: (err: Error) => {
+      setAlertMessage(err.message || "Gagal membuat designer");
       setAlertOpen(true);
-    } finally {
-      setSaving(false);
-    }
-  };
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: { name: string; classification: "FULL_TIME" | "FREELANCER" } }) => {
+      const res = await fetch(`/api/designers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal update");
+      return data;
+    },
+    onSuccess: () => {
+      setEditingDesigner(null);
+      queryClient.invalidateQueries({ queryKey: ["designers"] });
+    },
+    onError: (err: Error) => {
+      setAlertMessage(err.message || "Gagal update");
+      setAlertOpen(true);
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: async ({ id, newPassword: pw }: { id: string; newPassword: string }) => {
+      const res = await fetch(`/api/designers/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword: pw }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal ubah password");
+      return data;
+    },
+    onSuccess: () => {
+      setChangePasswordDesigner(null);
+      setNewPassword("");
+      setAlertMessage("Password berhasil diubah");
+      setAlertOpen(true);
+    },
+    onError: (err: Error) => {
+      setChangePasswordError(err.message || "Gagal ubah password");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/designers/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal menghapus designer");
+      }
+    },
+    onSuccess: () => {
+      setDeletingDesigner(null);
+      queryClient.invalidateQueries({ queryKey: ["designers"] });
+    },
+    onError: (err: Error) => {
+      setAlertMessage(err.message || "Gagal menghapus designer");
+      setAlertOpen(true);
+    },
+  });
 
   const filteredDesigners = designers.filter((designer) => {
     const query = searchQuery.toLowerCase();
@@ -167,7 +217,7 @@ export default function DesignersPage() {
       .slice(0, 2);
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -183,62 +233,67 @@ export default function DesignersPage() {
             <h1 className="text-2xl font-semibold text-foreground">Designers</h1>
             <p className="text-muted-foreground">Kelola designer dan freelancer</p>
           </div>
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger>
-              <Button><Plus className="w-4 h-4 mr-2" />Designer Baru</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Tambah Designer Baru</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Nama</Label>
-                  <Input
-                    id="name"
-                    value={newDesigner.name}
-                    onChange={(e) => setNewDesigner((p) => ({ ...p, name: e.target.value }))}
-                    placeholder="Nama lengkap"
-                  />
+          <div className="flex items-center gap-2">
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger>
+                <Button><Plus className="w-4 h-4 mr-2" />Designer Baru</Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Tambah Designer Baru</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nama</Label>
+                    <Input
+                      id="name"
+                      value={newDesigner.name}
+                      onChange={(e) => setNewDesigner((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="Nama lengkap"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={newDesigner.email}
+                      onChange={(e) => setNewDesigner((p) => ({ ...p, email: e.target.value }))}
+                      placeholder="email@example.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="type">Tipe</Label>
+                    <Select
+                      value={newDesigner.classification}
+                      options={[
+                        { value: "FULL_TIME", label: "Full Time" },
+                        { value: "FREELANCER", label: "Freelancer" },
+                      ]}
+                      onValueChange={(v) => v && setNewDesigner((p) => ({ ...p, classification: v as "FULL_TIME" | "FREELANCER" }))}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FULL_TIME">Full Time</SelectItem>
+                        <SelectItem value="FREELANCER">Freelancer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Batal</Button>
+                    <Button
+                      onClick={() => createMutation.mutate(newDesigner)}
+                      disabled={createMutation.isPending || !newDesigner.name || !newDesigner.email}
+                    >
+                      {createMutation.isPending ? "Menyimpan..." : "Simpan"}
+                    </Button>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input
-                    id="email"
-                    type="email"
-                    value={newDesigner.email}
-                    onChange={(e) => setNewDesigner((p) => ({ ...p, email: e.target.value }))}
-                    placeholder="email@example.com"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="type">Tipe</Label>
-                  <Select
-                    value={newDesigner.classification}
-                    options={[
-                      { value: "FULL_TIME", label: "Full Time" },
-                      { value: "FREELANCER", label: "Freelancer" },
-                    ]}
-                    onValueChange={(v) => v && setNewDesigner((p) => ({ ...p, classification: v as "FULL_TIME" | "FREELANCER" }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="FULL_TIME">Full Time</SelectItem>
-                      <SelectItem value="FREELANCER">Freelancer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Batal</Button>
-                  <Button onClick={handleCreateDesigner} disabled={saving || !newDesigner.name || !newDesigner.email}>
-                    {saving ? "Menyimpan..." : "Simpan"}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Filters */}
@@ -478,33 +533,16 @@ export default function DesignersPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingDesigner(null)}>Batal</Button>
             <Button
-              onClick={async () => {
+              onClick={() => {
                 if (!editingDesigner) return;
-                setSaving(true);
-                try {
-                  const res = await fetch(`/api/designers/${editingDesigner.id}`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ name: editName, classification: editClassification }),
-                  });
-                  if (res.ok) {
-                    setEditingDesigner(null);
-                    loadDesigners();
-                  } else {
-                    const d = await res.json();
-                    setAlertMessage(d.error || "Gagal update");
-                    setAlertOpen(true);
-                  }
-                } catch {
-                  setAlertMessage("Terjadi kesalahan");
-                  setAlertOpen(true);
-                } finally {
-                  setSaving(false);
-                }
+                updateMutation.mutate({
+                  id: editingDesigner.id,
+                  body: { name: editName, classification: editClassification },
+                });
               }}
-              disabled={saving || !editName}
+              disabled={updateMutation.isPending || !editName}
             >
-              {saving ? "Menyimpan..." : "Simpan"}
+              {updateMutation.isPending ? "Menyimpan..." : "Simpan"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -533,38 +571,18 @@ export default function DesignersPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setChangePasswordDesigner(null)}>Batal</Button>
             <Button
-              onClick={async () => {
+              onClick={() => {
                 if (!changePasswordDesigner) return;
                 if (newPassword.length < 8) {
                   setChangePasswordError("Password minimal 8 karakter");
                   return;
                 }
-                setChangePasswordSaving(true);
                 setChangePasswordError("");
-                try {
-                  const res = await fetch(`/api/designers/${changePasswordDesigner.id}`, {
-                    method: "PUT",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ newPassword }),
-                  });
-                  if (res.ok) {
-                    setChangePasswordDesigner(null);
-                    setNewPassword("");
-                    setAlertMessage("Password berhasil diubah");
-                    setAlertOpen(true);
-                  } else {
-                    const d = await res.json();
-                    setChangePasswordError(d.error || "Gagal ubah password");
-                  }
-                } catch {
-                  setChangePasswordError("Terjadi kesalahan");
-                } finally {
-                  setChangePasswordSaving(false);
-                }
+                changePasswordMutation.mutate({ id: changePasswordDesigner.id, newPassword });
               }}
-              disabled={changePasswordSaving || newPassword.length < 8}
+              disabled={changePasswordMutation.isPending || newPassword.length < 8}
             >
-              {changePasswordSaving ? "Menyimpan..." : "Ubah Password"}
+              {changePasswordMutation.isPending ? "Menyimpan..." : "Ubah Password"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -584,35 +602,19 @@ export default function DesignersPage() {
             Semua data designer ini akan dihapus permanen dan tidak dapat dikembalikan.
           </p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeletingDesigner(null)} disabled={deleting}>
+            <Button variant="outline" onClick={() => setDeletingDesigner(null)} disabled={deleteMutation.isPending}>
               Batal
             </Button>
             <Button
               variant="destructive"
-              onClick={async () => {
+              onClick={() => {
                 if (!deletingDesigner) return;
-                setDeleting(true);
-                try {
-                  const res = await fetch(`/api/designers/${deletingDesigner.id}`, { method: "DELETE" });
-                  if (res.ok) {
-                    setDeletingDesigner(null);
-                    loadDesigners();
-                  } else {
-                    const d = await res.json();
-                    setAlertMessage(d.error || "Gagal menghapus designer");
-                    setAlertOpen(true);
-                  }
-                } catch {
-                  setAlertMessage("Terjadi kesalahan");
-                  setAlertOpen(true);
-                } finally {
-                  setDeleting(false);
-                }
+                deleteMutation.mutate(deletingDesigner.id);
               }}
-              disabled={deleting}
+              disabled={deleteMutation.isPending}
             >
-              {deleting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-              {deleting ? "Menghapus..." : "Hapus"}
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              {deleteMutation.isPending ? "Menghapus..." : "Hapus"}
             </Button>
           </DialogFooter>
         </DialogContent>

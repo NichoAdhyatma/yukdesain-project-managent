@@ -28,7 +28,9 @@ function LoginForm() {
       const result = await login(email, password);
 
       if (result.success) {
-        window.location.href = redirectTo;
+        const fallback = result.user.activeRole === "OWNER" ? "/dashboard" : "/designer";
+        const target = redirectTo === "/dashboard" ? fallback : redirectTo;
+        window.location.href = target;
       } else {
         setError(result.error);
       }

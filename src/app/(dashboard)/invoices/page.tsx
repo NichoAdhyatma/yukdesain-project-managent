@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
 import { pdf } from "@react-pdf/renderer";
 import { saveAs } from "file-saver";
@@ -70,38 +71,31 @@ function formatDate(dateStr: string) {
 }
 
 export default function InvoicesPage() {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
 
-  useEffect(() => {
-    fetch("/api/settings/studio")
-      .then((r) => r.json())
-      .then((s) => { if (s.name) setStudioName(s.name); })
-      .catch(() => {});
-  }, []);
-
-  async function loadInvoices() {
-    try {
+  const { data: invoices = [], isLoading: invoicesLoading } = useQuery({
+    queryKey: ["invoices"],
+    staleTime: Infinity,
+    queryFn: async () => {
       const res = await fetch("/api/invoices");
       const data = await res.json();
-      if (data.invoices) setInvoices(data.invoices);
-    } catch (e) {
-      console.error("Failed to load invoices:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
+      return (data.invoices ?? []) as Invoice[];
+    },
+  });
 
-  /* eslint-disable react-hooks/set-state-in-effect -- pre-existing pattern in codebase */
-  useEffect(() => {
-    loadInvoices();
-  }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const { data: studioName = STUDIO_DEFAULTS.name } = useQuery({
+    queryKey: ["studio"],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const res = await fetch("/api/settings/studio");
+      const data = await res.json();
+      return (data.name ?? STUDIO_DEFAULTS.name) as string;
+    },
+  });
 
   async function handleDownloadPDF(invoice: Invoice) {
     setDownloadingId(invoice.id);
@@ -143,7 +137,7 @@ export default function InvoicesPage() {
     return matchesSearch && matchesStatus;
   });
 
-  if (loading) {
+  if (invoicesLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -158,7 +152,6 @@ export default function InvoicesPage() {
           <h1 className="text-2xl font-semibold text-foreground">Struk Pembayaran</h1>
           <p className="text-muted-foreground text-sm">Struk pembayaran auto-generated per project</p>
         </div>
-
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

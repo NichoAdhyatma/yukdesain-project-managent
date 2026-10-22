@@ -1,8 +1,10 @@
 "use client";
 
-import { useState, useEffect, Fragment } from "react";
+import { useState, Fragment } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -54,28 +56,20 @@ function ActionBadge({ action }: { action: string }) {
 }
 
 export default function ActivityHistoryPage() {
-  const [logs, setLogs] = useState<ActivityLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [entityFilter, setEntityFilter] = useState("all");
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
 
-  async function loadLogs() {
-    try {
+  const { data: logs = [], isLoading } = useQuery({
+    queryKey: ["activity-logs"],
+    staleTime: Infinity,
+    queryFn: async () => {
       const res = await fetch("/api/activity-logs");
       const data = await res.json();
-      if (data.logs) setLogs(data.logs);
-    } catch (e) {
-      console.error("Failed to load activity logs:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadLogs();
-  }, []);
+      return (data.logs ?? []) as ActivityLog[];
+    },
+  });
 
   const toggleRow = (id: string) => {
     setExpandedRows((prev) => {
@@ -98,7 +92,7 @@ export default function ActivityHistoryPage() {
     return matchesSearch && matchesEntity;
   });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -113,7 +107,6 @@ export default function ActivityHistoryPage() {
           <h1 className="text-2xl font-semibold text-foreground">Activity History</h1>
           <p className="text-muted-foreground">Riwayat aktivitas sistem</p>
         </div>
-
         <div className="flex items-center gap-3">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

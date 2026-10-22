@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, LayoutGrid, Kanban as KanbanIcon, Loader2, UserPlus, Plus, Trash2 } from "lucide-react";
+import { Search, LayoutGrid, Kanban as KanbanIcon, Loader2, UserPlus, Plus, Trash2, ChevronLeft, ChevronRight } from "lucide-react";
 import { KanbanBoard } from "@/components/kanban/kanban-board";
 import type { ProjectCardData } from "@/components/kanban/kanban-board";
 import type { ProjectStatus } from "@/types";
@@ -41,17 +42,36 @@ const paymentStatusMap: Record<string, { label: string; variant: "default" | "se
 };
 
 const paymentMethods = ["Bank Transfer", "Cash", "E-Wallet", "QRIS", "Lainnya"];
+const PAGE_SIZE = 20;
 
 type ViewMode = "grid" | "kanban";
 
+interface ProjectsResponse {
+  projects: Project[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+function buildProjectParams(page: number, filterService: string, filterStatus: string, filterPayment: string, filterDesigner: string, filterWorkerType: string, filterDeadline: string, search: string) {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+  if (filterService !== "all") params.set("service", filterService);
+  if (filterStatus !== "all") params.set("status", filterStatus);
+  if (filterPayment !== "all") params.set("payment", filterPayment);
+  if (filterDesigner !== "all") params.set("designer", filterDesigner);
+  if (filterWorkerType !== "all") params.set("workerType", filterWorkerType);
+  if (filterDeadline) params.set("deadline", filterDeadline);
+  if (search) params.set("search", search);
+  return params.toString();
+}
+
 export default function ProjectsPage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [designers, setDesigners] = useState<Designer[]>([]);
+  const queryClient = useQueryClient();
+
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
-  const [loading, setLoading] = useState(true);
-
-  // Filter state
+  const [currentPage, setCurrentPage] = useState(1);
   const [filterService, setFilterService] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
   const [filterPayment, setFilterPayment] = useState("all");
@@ -59,13 +79,11 @@ export default function ProjectsPage() {
   const [filterWorkerType, setFilterWorkerType] = useState("all");
   const [filterDeadline, setFilterDeadline] = useState("");
 
-  // Assign dialog state
   const [assignDialog, setAssignDialog] = useState<Project | null>(null);
   const [selectedDesigner, setSelectedDesigner] = useState("");
   const [freelancerPayout, setFreelancerPayout] = useState(0);
   const [assigning, setAssigning] = useState(false);
 
-  // Payment dialog state
   const [paymentDialog, setPaymentDialog] = useState<Project | null>(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
   const [paymentDate, setPaymentDate] = useState("");
@@ -74,46 +92,82 @@ export default function ProjectsPage() {
   const [paymentNotes, setPaymentNotes] = useState("");
   const [recordingPayment, setRecordingPayment] = useState(false);
 
-  // Delete dialog state
   const [deleteDialog, setDeleteDialog] = useState<Project | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  // page NOT in queryKey — navigating pages uses cached data, no refetch
+  const { data: projectsData, isLoading } = useQuery<ProjectsResponse>({
+    queryKey: ["projects", filterService, filterStatus, filterPayment, filterDesigner, filterWorkerType, filterDeadline, search],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects?${buildProjectParams(currentPage, filterService, filterStatus, filterPayment, filterDesigner, filterWorkerType, filterDeadline, search)}`);
+      if (!res.ok) throw new Error("Failed to fetch projects");
+      return res.json();
+    },
+    staleTime: Infinity,
+  });
 
-  async function loadData() {
-    try {
-      const [projectsRes, designersRes] = await Promise.all([
-        fetch("/api/projects"),
-        fetch("/api/designers"),
-      ]);
-      const projectsData = await projectsRes.json();
-      const designersData = await designersRes.json();
-      if (projectsData.projects) setProjects(projectsData.projects);
-      if (designersData.designers) setDesigners(designersData.designers);
-    } catch (e) {
-      console.error("Failed to load data:", e);
-    } finally {
-      setLoading(false);
-    }
+  const { data: designersData } = useQuery<{ designers: Designer[] }>({
+    queryKey: ["designers"],
+    queryFn: async () => {
+      const res = await fetch("/api/designers");
+      if (!res.ok) throw new Error("Failed to fetch designers");
+      return res.json();
+    },
+  });
+
+  const projects = projectsData?.projects ?? [];
+  const totalProjects = projectsData?.total ?? 0;
+  const totalPages = projectsData?.totalPages ?? 1;
+  const designers = designersData?.designers ?? [];
+
+  const serviceOptions = [
+    { value: "all", label: "Semua Layanan" },
+    ...Array.from(
+      new Map(
+        projects
+          .filter((p) => p.service)
+          .map((p) => [p.service!.id, { value: p.service!.id, label: p.service!.name }])
+      ).values()
+    ).sort((a, b) => a.label.localeCompare(b.label)),
+  ];
+
+  const designerOptions = [
+    { value: "all", label: "Semua Designer" },
+    ...designers.map((d) => ({ value: d.id, label: d.name })),
+  ];
+
+  const hasActiveFilters =
+    filterService !== "all" ||
+    filterStatus !== "all" ||
+    filterPayment !== "all" ||
+    filterDesigner !== "all" ||
+    filterWorkerType !== "all" ||
+    filterDeadline !== "";
+
+  function handleFilterChange(newPage = 1) {
+    setCurrentPage(newPage);
   }
 
-  const handleProjectMove = async (projectId: string, newStatus: ProjectStatus) => {
-    setProjects((prev) =>
-      prev.map((p) => (p.id === projectId ? { ...p, status: newStatus } : p))
-    );
-    try {
+  function handlePageChange(page: number) {
+    setCurrentPage(page);
+  }
+
+  const handleProjectMove = useMutation({
+    mutationFn: async ({ projectId, newStatus }: { projectId: string; newStatus: ProjectStatus }) => {
       const res = await fetch(`/api/projects/${projectId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (!res.ok) loadData();
-    } catch {
-      loadData();
-    }
-  };
+      if (!res.ok) throw new Error("Failed to update status");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: () => {
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+    },
+  });
 
   async function handleAssignDesigner() {
     if (!assignDialog || !selectedDesigner) return;
@@ -131,7 +185,7 @@ export default function ProjectsPage() {
         setAssignDialog(null);
         setSelectedDesigner("");
         setFreelancerPayout(0);
-        loadData();
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
       } else {
         const data = await res.json();
         toast(data.error || "Gagal assign designer", "error");
@@ -167,7 +221,7 @@ export default function ProjectsPage() {
         setPaymentMethod("");
         setPaymentReference("");
         setPaymentNotes("");
-        loadData();
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
       } else {
         const data = await res.json();
         toast(data.error || "Gagal record payment", "error");
@@ -187,7 +241,7 @@ export default function ProjectsPage() {
       const res = await fetch(`/api/projects/${deleteDialog.id}`, { method: "DELETE" });
       if (res.ok) {
         setDeleteDialog(null);
-        loadData();
+        queryClient.invalidateQueries({ queryKey: ["projects"] });
       } else {
         const data = await res.json();
         toast(data.error || "Gagal menghapus project", "error");
@@ -210,73 +264,7 @@ export default function ProjectsPage() {
     setPaymentDialog(project);
   };
 
-  const filteredProjects = projects.filter((p) => {
-    const query = search.toLowerCase();
-    const matchesSearch =
-      !query ||
-      p.projectNumber.toLowerCase().includes(query) ||
-      p.clientName.toLowerCase().includes(query);
-
-    const matchesService = filterService === "all" || p.service?.id === filterService;
-    const matchesStatus = filterStatus === "all" || p.status === filterStatus;
-    const matchesPayment = filterPayment === "all" || p.paymentStatus === filterPayment;
-
-    const assigned = p.assignments?.[0]?.designer;
-    const matchesDesigner = filterDesigner === "all" || assigned?.id === filterDesigner;
-
-    if (filterWorkerType !== "all" && assigned) {
-      const isFreelancer = assigned.classification === "FREELANCER";
-      if (filterWorkerType === "freelancer" && !isFreelancer) return false;
-      if (filterWorkerType === "fulltime" && isFreelancer) return false;
-    } else if (filterWorkerType !== "all" && !assigned) {
-      return false;
-    }
-
-    if (filterDeadline) {
-      const deadline = p.deadline ? new Date(p.deadline) : null;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      if (filterDeadline === "overdue" && (!deadline || deadline >= today)) return false;
-      if (filterDeadline === "today" && (!deadline || deadline.toDateString() !== today.toDateString())) return false;
-      if (filterDeadline === "week") {
-        const weekEnd = new Date(today);
-        weekEnd.setDate(weekEnd.getDate() + 7);
-        if (!deadline || deadline < today || deadline > weekEnd) return false;
-      }
-      if (filterDeadline === "month") {
-        const monthEnd = new Date(today);
-        monthEnd.setMonth(monthEnd.getMonth() + 1);
-        if (!deadline || deadline < today || deadline > monthEnd) return false;
-      }
-    }
-
-    return matchesSearch && matchesService && matchesStatus && matchesPayment && matchesDesigner;
-  });
-
-  const serviceOptions = [
-    { value: "all", label: "Semua Layanan" },
-    ...projects.reduce<{ value: string; label: string }[]>((acc, p) => {
-      if (p.service && !acc.find(a => a.value === p.service!.id)) {
-        acc.push({ value: p.service.id, label: p.service.name });
-      }
-      return acc;
-    }, []),
-  ];
-
-  const designerOptions = [
-    { value: "all", label: "Semua Designer" },
-    ...designers.map(d => ({ value: d.id, label: d.name })),
-  ];
-
-  const hasActiveFilters =
-    filterService !== "all" ||
-    filterStatus !== "all" ||
-    filterPayment !== "all" ||
-    filterDesigner !== "all" ||
-    filterWorkerType !== "all" ||
-    filterDeadline !== "";
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -306,11 +294,17 @@ export default function ProjectsPage() {
       <div className="flex flex-wrap items-center gap-2 px-6 py-3 border-b">
         <div className="relative w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Cari project..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-8 text-sm" />
+          <Input
+            placeholder="Cari project..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") handleFilterChange(); }}
+            className="pl-9 h-8 text-sm"
+          />
         </div>
 
         {/* Service filter */}
-        <Select value={filterService} options={serviceOptions} onValueChange={(v) => v && setFilterService(v)}>
+        <Select value={filterService} options={serviceOptions} onValueChange={(v) => { if (v) { setFilterService(v); handleFilterChange(); } }}>
           <SelectTrigger className="w-44 h-8 text-sm"><SelectValue placeholder="Layanan" /></SelectTrigger>
           <SelectContent>
             {serviceOptions.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
@@ -324,7 +318,7 @@ export default function ProjectsPage() {
           { value: "BELUM_DIKERJAKAN", label: "Menunggu Brief" },
           { value: "SEDANG_DIKERJAKAN", label: "Dikerjakan" },
           { value: "SELESAI", label: "Selesai" },
-        ]} onValueChange={(v) => v && setFilterStatus(v)}>
+        ]} onValueChange={(v) => { if (v) { setFilterStatus(v); handleFilterChange(); } }}>
           <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Semua Status</SelectItem>
@@ -341,7 +335,7 @@ export default function ProjectsPage() {
           { value: "UNPAID", label: "Belum Bayar" },
           { value: "PARTIALLY_PAID", label: "DP" },
           { value: "PAID", label: "Lunas" },
-        ]} onValueChange={(v) => v && setFilterPayment(v)}>
+        ]} onValueChange={(v) => { if (v) { setFilterPayment(v); handleFilterChange(); } }}>
           <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Pembayaran" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Semua Pembayaran</SelectItem>
@@ -352,7 +346,7 @@ export default function ProjectsPage() {
         </Select>
 
         {/* Designer filter */}
-        <Select value={filterDesigner} options={designerOptions} onValueChange={(v) => v && setFilterDesigner(v)}>
+        <Select value={filterDesigner} options={designerOptions} onValueChange={(v) => { if (v) { setFilterDesigner(v); handleFilterChange(); } }}>
           <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Designer" /></SelectTrigger>
           <SelectContent>
             {designerOptions.map(d => <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>)}
@@ -364,7 +358,7 @@ export default function ProjectsPage() {
           { value: "all", label: "Semua Tipe" },
           { value: "fulltime", label: "Full Time" },
           { value: "freelancer", label: "Freelancer" },
-        ]} onValueChange={(v) => v && setFilterWorkerType(v)}>
+        ]} onValueChange={(v) => { if (v) { setFilterWorkerType(v); handleFilterChange(); } }}>
           <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Tipe Worker" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Semua Tipe</SelectItem>
@@ -380,7 +374,7 @@ export default function ProjectsPage() {
           { value: "today", label: "Hari ini" },
           { value: "week", label: "7 hari ke depan" },
           { value: "month", label: "30 hari ke depan" },
-        ]} onValueChange={(v) => setFilterDeadline(v ?? "")}>
+        ]} onValueChange={(v) => { setFilterDeadline(v ?? ""); handleFilterChange(); }}>
           <SelectTrigger className="w-44 h-8 text-sm"><SelectValue placeholder="Deadline" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="">Semua Deadline</SelectItem>
@@ -391,7 +385,6 @@ export default function ProjectsPage() {
           </SelectContent>
         </Select>
 
-        {/* Clear filters */}
         {hasActiveFilters && (
           <Button
             variant="ghost"
@@ -405,21 +398,25 @@ export default function ProjectsPage() {
               setFilterDesigner("all");
               setFilterWorkerType("all");
               setFilterDeadline("");
+              handleFilterChange();
             }}
           >
             Reset
           </Button>
         )}
 
-        {/* Result count */}
         <span className="ml-auto text-xs text-muted-foreground">
-          {filteredProjects.length} dari {projects.length} project
+          {totalProjects} project
         </span>
       </div>
 
       <div className="flex-1 overflow-auto p-6">
         {viewMode === "kanban" ? (
-          <KanbanBoard projects={filteredProjects} onProjectMove={handleProjectMove} onAssignDesigner={setAssignDialog} />
+          <KanbanBoard
+            projects={projects}
+            onProjectMove={(projectId, newStatus) => handleProjectMove.mutate({ projectId, newStatus })}
+            onAssignDesigner={setAssignDialog}
+          />
         ) : (
           <Card>
             <CardContent className="p-0">
@@ -437,14 +434,14 @@ export default function ProjectsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredProjects.length === 0 ? (
+                  {projects.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                         Tidak ada project
                       </TableCell>
                     </TableRow>
                   ) : (
-                    filteredProjects.map((p) => {
+                    projects.map((p) => {
                       const st = statusMap[p.status] || statusMap.DRAFT;
                       const pst = paymentStatusMap[p.paymentStatus] || paymentStatusMap.UNPAID;
                       const assigned = p.assignments?.[0]?.designer;
@@ -497,6 +494,58 @@ export default function ProjectsPage() {
           </Card>
         )}
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-6 py-3 border-t bg-background">
+          <span className="text-xs text-muted-foreground">
+            Halaman {currentPage} dari {totalPages}
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage <= 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+              .reduce<{ value: number; el: React.ReactElement }[]>((acc, page, idx, arr) => {
+                if (idx > 0 && page - (arr[idx - 1] as number) > 1) {
+                  acc.push({ value: -1, el: <span key="ellipsis" className="px-1 text-muted-foreground">…</span> });
+                }
+                acc.push({
+                  value: page,
+                  el: (
+                    <Button
+                      key={page}
+                      variant={page === currentPage ? "default" : "outline"}
+                      size="sm"
+                      className="h-8 w-8"
+                      onClick={() => handlePageChange(page)}
+                    >
+                      {page}
+                    </Button>
+                  ),
+                });
+                return acc;
+              }, [])
+              .map((item) => item.el)}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Assign Designer Dialog */}
       <Dialog open={!!assignDialog} onOpenChange={() => { setAssignDialog(null); setSelectedDesigner(""); setFreelancerPayout(0); }}>
@@ -574,7 +623,6 @@ export default function ProjectsPage() {
           </DialogHeader>
           {paymentDialog && (
             <div className="space-y-4">
-              {/* Summary */}
               <div className="rounded-md bg-muted/50 p-3 space-y-1">
                 <p className="text-sm font-medium">{paymentDialog.projectNumber}</p>
                 <div className="flex justify-between text-xs text-muted-foreground">
@@ -593,7 +641,6 @@ export default function ProjectsPage() {
                 </div>
               </div>
 
-              {/* Payment History */}
               {paymentDialog.payments && paymentDialog.payments.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Riwayat Pembayaran</p>
@@ -611,7 +658,6 @@ export default function ProjectsPage() {
                 </div>
               )}
 
-              {/* Record Payment Form */}
               <div className="space-y-3 pt-2 border-t">
                 <p className="text-sm font-medium">Catat Pembayaran</p>
                 <div className="grid grid-cols-2 gap-3">

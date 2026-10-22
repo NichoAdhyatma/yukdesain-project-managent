@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -45,9 +46,7 @@ const statusMap: Record<string, { label: string; variant: "default" | "secondary
 
 
 export default function FormLinkPage() {
-  const [services, setServices] = useState<Service[]>([]);
-  const [projects, setProjects] = useState<ProjectData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [generatedClientName, setGeneratedClientName] = useState<string>("");
@@ -60,43 +59,40 @@ export default function FormLinkPage() {
     deadline: "",
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const { data: servicesData, isLoading: servicesLoading } = useQuery({
+    queryKey: ["services"],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const res = await fetch("/api/services");
+      const data = await res.json();
+      return data.services as Service[];
+    },
+  });
 
-  async function loadData() {
-    try {
-      const [servicesRes, projectsRes] = await Promise.all([
-        fetch("/api/services"),
-        fetch("/api/form-links/projects"),
-      ]);
-      const servicesData = await servicesRes.json();
-      const projectsData = await projectsRes.json();
-      if (servicesData.services) setServices(servicesData.services);
-      if (projectsData.projects) setProjects(projectsData.projects);
-    } catch (e) {
-      console.error("Failed to load data:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { data: projectsData, isLoading: projectsLoading } = useQuery({
+    queryKey: ["form-link-projects"],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const res = await fetch("/api/form-links/projects");
+      const data = await res.json();
+      return data.projects as ProjectData[];
+    },
+  });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setGeneratedLink(null);
+  const services = servicesData ?? [];
+  const projects = projectsData ?? [];
 
-    try {
+  const createProjectAndLinkMutation = useMutation({
+    mutationFn: async (payload: { clientName: string; serviceId: string; agreedPrice: number; paidAmount: number; deadline: string }) => {
       const projectRes = await fetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       });
 
       if (!projectRes.ok) {
         const data = await projectRes.json();
-        toast(data.error || "Gagal membuat project", "error");
-        return;
+        throw new Error(data.error || "Gagal membuat project");
       }
 
       const projectData = await projectRes.json();
@@ -111,34 +107,30 @@ export default function FormLinkPage() {
       if (!linkRes.ok) {
         const data = await linkRes.json();
         if (linkRes.status === 409 && data.link) {
-          const fullLink = `${window.location.origin}/client/${data.link.token}`;
-          setGeneratedLink(fullLink);
-          setGeneratedClientName(form.clientName);
-          loadData();
-        } else {
-          toast(data.error || "Gagal generate link", "error");
-          loadData();
+          return { link: data.link, isConflict: true };
         }
-        return;
+        throw new Error(data.error || "Gagal generate link");
       }
 
       const linkData = await linkRes.json();
-      const fullLink = `${window.location.origin}/client/${linkData.link.token}`;
+      return { link: linkData.link, isConflict: false };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["form-link-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      const fullLink = `${window.location.origin}/client/${result.link.token}`;
       setGeneratedLink(fullLink);
       setGeneratedClientName(form.clientName);
+    },
+    onError: (err: Error) => {
+      toast(err.message || "Terjadi kesalahan", "error");
+      queryClient.invalidateQueries({ queryKey: ["form-link-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+    },
+  });
 
-      loadData();
-
-    } catch (e) {
-      console.error("Failed:", e);
-      toast("Terjadi kesalahan", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function handleGenerateLink(projectId: string, clientName: string) {
-    try {
+  const generateLinkMutation = useMutation({
+    mutationFn: async ({ projectId, clientName }: { projectId: string; clientName: string }) => {
       const res = await fetch("/api/client-links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -148,30 +140,45 @@ export default function FormLinkPage() {
       if (!res.ok) {
         const data = await res.json();
         if (res.status === 409 && data.link) {
-          const fullLink = `${window.location.origin}/client/${data.link.token}`;
-          setGeneratedLink(fullLink);
-          setGeneratedClientName(clientName);
-          loadData();
-        } else {
-          toast(data.error || "Gagal generate link", "error");
-          loadData();
+          return { link: data.link, clientName, isConflict: true };
         }
-        return;
+        throw new Error(data.error || "Gagal generate link");
       }
 
       const data = await res.json();
-      const fullLink = `${window.location.origin}/client/${data.link.token}`;
+      return { link: data.link, clientName, isConflict: false };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["form-link-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      const fullLink = `${window.location.origin}/client/${result.link.token}`;
       setGeneratedLink(fullLink);
-      setGeneratedClientName(clientName);
-      toast("Link berhasil di-generate!", "success");
+      setGeneratedClientName(result.clientName);
+      if (!result.isConflict) {
+        toast("Link berhasil di-generate!", "success");
+      }
+    },
+    onError: (err: Error) => {
+      toast(err.message || "Gagal generate link", "error");
+      queryClient.invalidateQueries({ queryKey: ["form-link-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+    },
+  });
 
-      loadData();
-    } catch (e) {
-      console.error("Failed:", e);
-    }
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setGeneratedLink(null);
+    createProjectAndLinkMutation.mutate(form, {
+      onSettled: () => setSaving(false),
+    });
   }
 
-  if (loading) {
+  function handleGenerateLink(projectId: string, clientName: string) {
+    generateLinkMutation.mutate({ projectId, clientName });
+  }
+
+  if (servicesLoading || projectsLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -256,8 +263,8 @@ export default function FormLinkPage() {
                   <Input id="deadline" type="date" value={form.deadline} onChange={(e) => setForm((f) => ({ ...f, deadline: e.target.value }))} required />
                 </div>
               </div>
-              <Button type="submit" className="w-full" disabled={saving}>
-                {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Membuat...</> : <><LinkIcon className="h-4 w-4 mr-2" />Buat Project & Generate Link</>}
+              <Button type="submit" className="w-full" disabled={saving || createProjectAndLinkMutation.isPending}>
+                {saving || createProjectAndLinkMutation.isPending ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Membuat...</> : <><LinkIcon className="h-4 w-4 mr-2" />Buat Project & Generate Link</>}
               </Button>
             </form>
           </CardContent>
@@ -374,8 +381,8 @@ export default function FormLinkPage() {
                               </Button>
                             </div>
                           ) : (
-                            <Button size="sm" variant="outline" onClick={() => handleGenerateLink(p.id, p.clientName)}>
-                              <Plus className="h-3 w-3 mr-1" /> Generate
+                            <Button size="sm" variant="outline" onClick={() => handleGenerateLink(p.id, p.clientName)} disabled={generateLinkMutation.isPending}>
+                              {generateLinkMutation.isPending ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Plus className="h-3 w-3 mr-1" />} Generate
                             </Button>
                           )}
                         </TableCell>

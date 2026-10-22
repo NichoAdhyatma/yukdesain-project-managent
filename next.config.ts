@@ -23,6 +23,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "picsum.photos",
       },
+      {
+        protocol: "https",
+        hostname: "assets.yukdesain.com",
+      },
     ],
     // Prefer AVIF for better compression
     formats: ["image/avif", "image/webp"],

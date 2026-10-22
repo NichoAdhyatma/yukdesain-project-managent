@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -74,8 +75,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function DesignerWorkspacePage() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
@@ -89,100 +89,119 @@ export default function DesignerWorkspacePage() {
   const [submitFinalFiles, setSubmitFinalFiles] = useState<UploadedFile[]>([]);
   const [submittingFinal, setSubmittingFinal] = useState(false);
 
-  useEffect(() => {
-    loadProjects();
-  }, []);
-
-  async function loadProjects() {
-    try {
+  const { data, isLoading } = useQuery({
+    queryKey: ["designer-projects"],
+    staleTime: Infinity,
+    queryFn: async () => {
       const res = await fetch("/api/designer/projects");
       const data = await res.json();
-      if (data.projects) setProjects(data.projects);
-    } catch (e) {
-      console.error("Failed to load projects:", e);
-    } finally {
-      setLoading(false);
-    }
-  }
+      return data.projects as Project[];
+    },
+  });
 
-  async function handleUpdateStatus(projectId: string, newStatus: ProjectStatus) {
-    try {
+  const projects = data ?? [];
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ projectId, newStatus }: { projectId: string; newStatus: ProjectStatus }) => {
       const res = await fetch(`/api/projects/${projectId}/status`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      if (res.ok) {
-        loadProjects();
-        if (selectedProject?.id === projectId) {
-          const updated = projects.find((p) => p.id === projectId);
-          if (updated) setSelectedProject({ ...updated, status: newStatus });
-        }
+      if (!res.ok) throw new Error("Failed to update status");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
+    },
+  });
+
+  const postUpdateMutation = useMutation({
+    mutationFn: async ({ projectId, payload }: { projectId: string; payload: { description: string; progress: number | null; attachmentIds: string[] } }) => {
+      const res = await fetch(`/api/designer/projects/${projectId}/updates`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal posting update");
       }
-    } catch (e) {
-      console.error("Failed to update status:", e);
-    }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
+      setUpdateDialogOpen(false);
+      setUpdateDesc("");
+      setUpdateProgress("");
+      setUploadedFiles([]);
+    },
+    onError: (err: Error) => {
+      toast(err.message || "Gagal posting update", "error");
+    },
+  });
+
+  const submitFinalMutation = useMutation({
+    mutationFn: async ({ projectId, payload }: { projectId: string; payload: { description: string; attachmentIds: string[] } }) => {
+      const res = await fetch(`/api/designer/projects/${projectId}/submit-final`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal submit final");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
+      setSubmitFinalOpen(false);
+      setSubmitFinalDesc("");
+      setSubmitFinalFiles([]);
+    },
+    onError: (err: Error) => {
+      toast(err.message || "Gagal submit final", "error");
+    },
+  });
+
+  function handleUpdateStatus(projectId: string, newStatus: ProjectStatus) {
+    updateStatusMutation.mutate({ projectId, newStatus });
   }
 
-  async function handlePostUpdate() {
+  function handlePostUpdate() {
     if (!selectedProject || !updateDesc.trim()) return;
     setSaving(true);
-    try {
-      const attachmentIds = uploadedFiles.map((f) => f.id);
-
-      const res = await fetch(`/api/designer/projects/${selectedProject.id}/updates`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+    postUpdateMutation.mutate(
+      {
+        projectId: selectedProject.id,
+        payload: {
           description: updateDesc.trim(),
           progress: updateProgress ? parseInt(updateProgress) : null,
-          attachmentIds,
-        }),
-      });
-      if (res.ok) {
-        setUpdateDialogOpen(false);
-        setUpdateDesc("");
-        setUpdateProgress("");
-        setUploadedFiles([]);
-        loadProjects();
-      } else {
-        const data = await res.json();
-        toast(data.error || "Gagal posting update", "error");
+          attachmentIds: uploadedFiles.map((f) => f.id),
+        },
+      },
+      {
+        onSettled: () => setSaving(false),
       }
-    } catch (e) {
-      console.error("Failed:", e);
-      toast("Terjadi kesalahan", "error");
-    } finally {
-      setSaving(false);
-    }
+    );
   }
 
-  async function handleSubmitFinal() {
+  function handleSubmitFinal() {
     if (!selectedProject || !submitFinalDesc.trim()) return;
     setSubmittingFinal(true);
-    try {
-      const res = await fetch(`/api/designer/projects/${selectedProject.id}/submit-final`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+    submitFinalMutation.mutate(
+      {
+        projectId: selectedProject.id,
+        payload: {
           description: submitFinalDesc.trim(),
           attachmentIds: submitFinalFiles.map((f) => f.id),
-        }),
-      });
-      if (res.ok) {
-        setSubmitFinalOpen(false);
-        setSubmitFinalDesc("");
-        setSubmitFinalFiles([]);
-        loadProjects();
-      } else {
-        const data = await res.json();
-        toast(data.error || "Gagal submit final", "error");
+        },
+      },
+      {
+        onSettled: () => setSubmittingFinal(false),
       }
-    } catch {
-      toast("Terjadi kesalahan", "error");
-    } finally {
-      setSubmittingFinal(false);
-    }
+    );
   }
 
   const filteredProjects = projects.filter((p) => {
@@ -193,7 +212,7 @@ export default function DesignerWorkspacePage() {
     return matchesSearch && matchesStatus;
   });
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -208,7 +227,6 @@ export default function DesignerWorkspacePage() {
           <h1 className="text-2xl font-semibold">Workspace</h1>
           <p className="text-muted-foreground text-sm">Project yang assigned ke kamu</p>
         </div>
-        <Badge variant="secondary">{filteredProjects.length} project</Badge>
       </div>
 
       <div className="flex items-center gap-3 p-4">
@@ -397,7 +415,7 @@ export default function DesignerWorkspacePage() {
                   {selectedProject.finalSubmittedAt && !selectedProject.finalApprovedAt && (
                     <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 p-3">
                       <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                        ✅ Final Submitted
+                        Final Submitted
                       </p>
                       <p className="text-xs text-green-700 dark:text-green-300 mt-1">
                         Menunggu client approval
@@ -408,7 +426,7 @@ export default function DesignerWorkspacePage() {
                   {selectedProject.finalApprovedAt && (
                     <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-3">
                       <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                        🎉 Final Approved
+                        Final Approved
                       </p>
                       <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
                         Project selesai. Approved {formatDate(selectedProject.finalApprovedAt)}
@@ -564,7 +582,7 @@ export default function DesignerWorkspacePage() {
           <div className="space-y-4">
             <div className="rounded-md border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950 p-3">
               <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                ⚠️ Setelah submit final, client akan bisa approve atau request revisi (kuota 3x). Pastikan hasil kerja sudah final sebelum submit.
+                Setelah submit final, client akan bisa approve atau request revisi (kuota 3x). Pastikan hasil kerja sudah final sebelum submit.
               </p>
             </div>
             <div className="space-y-2">

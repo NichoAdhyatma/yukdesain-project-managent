@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useDeferredValue } from "react";
+import { useState, useDeferredValue, useEffect } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import Image from "next/image";
 import { toast } from "@/components/ui/toast";
 import { Card, CardContent } from "@/components/ui/card";
@@ -66,6 +67,12 @@ type PaginationInfo = {
   totalPages: number;
 };
 
+type StorageResponse = {
+  items: StorageObject[];
+  stats: StorageStats;
+  pagination: PaginationInfo;
+};
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -97,8 +104,7 @@ const CATEGORIES = [
 const MAX_FREE_GB = 10;
 
 export default function MediaPage() {
-  const [stats, setStats] = useState<StorageStats | null>(null);
-  const [items, setItems] = useState<StorageObject[]>([]);
+  const queryClient = useQueryClient();
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
     limit: 20,
@@ -108,82 +114,93 @@ export default function MediaPage() {
   const [category, setCategory] = useState("all");
   const [search, setSearch] = useState("");
   const deferredSearch = useDeferredValue(search);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [deleting, setDeleting] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
 
-  /* eslint-disable react-hooks/set-state-in-effect */
-  // This effect fetches data on mount and whenever filters/pagination/refreshKey change.
-  // setLoading/setStats/setItems/setPagination are all necessary state updates for this pattern.
-  useEffect(() => {
-    setLoading(true);
-    setLoadError(null);
-    const params = new URLSearchParams({
-      page: pagination.page.toString(),
-      limit: pagination.limit.toString(),
-      ...(category !== "all" ? { category } : {}),
-    });
-    fetch(`/api/storage?${params}`)
-      .then((r) => r.json())
-      .then((data) => {
-        if (data.error) throw new Error(data.error);
-        setStats(data.stats);
-        setItems(data.items);
-        setPagination((p) => ({ ...p, ...data.pagination }));
-      })
-      .catch((err) => {
-        const msg = err instanceof Error ? err.message : "Gagal memuat data storage";
-        setLoadError(msg);
-        toast(msg, "error");
-      })
-      .finally(() => setLoading(false));
-  }, [pagination.page, pagination.limit, category, refreshKey]);
+  const { data, isLoading, isError, error } = useQuery<StorageResponse>({
+    queryKey: ["storage", pagination.page, pagination.limit, category],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        ...(category !== "all" ? { category } : {}),
+      });
+      const res = await fetch(`/api/storage?${params}`);
+      if (!res.ok) throw new Error("Gagal memuat data storage");
+      return res.json();
+    },
+  });
 
+  const items = data?.items ?? [];
+  const stats = data?.stats ?? null;
+  const loadError = isError ? (error?.message ?? "Gagal memuat data storage") : null;
+
+  /* eslint-disable react-hooks/set-state-in-effect */
+  // Sync pagination from query data
+  useEffect(() => {
+    if (data?.pagination) {
+      const p = data.pagination;
+      setPagination((prev) =>
+        prev.page !== p.page ||
+        prev.limit !== p.limit ||
+        prev.total !== p.total ||
+        prev.totalPages !== p.totalPages
+          ? { ...prev, ...p }
+          : prev
+      );
+    }
+  }, [data?.pagination]);
+
+  // Reset image errors when items change
   useEffect(() => {
     setImageErrors(new Set());
-  }, [items]);
+  }, [data]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const handleDelete = async () => {
-    if (selected.size === 0) return;
-    if (!confirm(`Hapus ${selected.size} file yang dipilih?`)) return;
-
-    setDeleting(true);
-    try {
-      const keys = Array.from(selected).join(",");
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (keys: string) => {
       const res = await fetch(`/api/storage/delete?keys=${encodeURIComponent(keys)}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error();
+    },
+    onSuccess: () => {
       toast(`${selected.size} file berhasil dihapus`, "success");
       setSelected(new Set());
-      setRefreshKey((k) => k + 1);
-    } catch {
+      queryClient.invalidateQueries({ queryKey: ["storage", pagination.page, pagination.limit, category] });
+    },
+    onError: () => {
       toast("Gagal menghapus file", "error");
-    } finally {
-      setDeleting(false);
-    }
-  };
+    },
+  });
 
-  const handleDeleteSingle = async (key: string) => {
-    if (!confirm("Hapus file ini?")) return;
-    setDeleting(true);
-    try {
+  const singleDeleteMutation = useMutation({
+    mutationFn: async (key: string) => {
       const res = await fetch(`/api/storage/delete?key=${encodeURIComponent(key)}`, {
         method: "DELETE",
       });
       if (!res.ok) throw new Error();
+    },
+    onSuccess: () => {
       toast("File berhasil dihapus", "success");
-      setRefreshKey((k) => k + 1);
-    } catch {
+      queryClient.invalidateQueries({ queryKey: ["storage", pagination.page, pagination.limit, category] });
+    },
+    onError: () => {
       toast("Gagal menghapus file", "error");
-    } finally {
-      setDeleting(false);
-    }
+    },
+  });
+
+  const handleDelete = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Hapus ${selected.size} file yang dipilih?`)) return;
+    bulkDeleteMutation.mutate(Array.from(selected).join(","));
+  };
+
+  const handleDeleteSingle = async (key: string) => {
+    if (!confirm("Hapus file ini?")) return;
+    singleDeleteMutation.mutate(key);
   };
 
   const toggleSelect = (key: string) => {
@@ -312,22 +329,14 @@ export default function MediaPage() {
               ))}
             </SelectContent>
           </Select>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setRefreshKey((k) => k + 1)}
-            disabled={loading}
-          >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-          </Button>
           {selected.size > 0 && (
             <Button
               variant="destructive"
               size="sm"
               onClick={handleDelete}
-              disabled={deleting}
+              disabled={bulkDeleteMutation.isPending}
             >
-              {deleting ? (
+              {bulkDeleteMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Trash2 className="h-4 w-4" />
@@ -340,7 +349,7 @@ export default function MediaPage() {
 
       {/* Table */}
       <div className="flex-1 overflow-auto p-4 sm:p-6">
-        {loading ? (
+        {isLoading ? (
           <div className="flex items-center justify-center h-48" aria-live="polite" aria-label="Memuat data">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
@@ -348,7 +357,7 @@ export default function MediaPage() {
           <div className="flex flex-col items-center justify-center h-48 gap-3 text-destructive" role="alert">
             <AlertTriangle className="h-10 w-10 opacity-60" />
             <p className="text-sm font-medium">{loadError}</p>
-            <Button variant="outline" size="sm" onClick={() => setRefreshKey((k) => k + 1)}>
+            <Button variant="outline" size="sm" onClick={() => queryClient.invalidateQueries({ queryKey: ["storage", pagination.page, pagination.limit, category] })}>
               <RefreshCw className="h-4 w-4 mr-1" />
               Coba lagi
             </Button>
@@ -493,10 +502,10 @@ export default function MediaPage() {
                               size="icon"
                               className="h-11 w-11 text-destructive hover:text-destructive"
                               onClick={() => handleDeleteSingle(item.key)}
-                              disabled={deleting}
+                              disabled={singleDeleteMutation.isPending}
                               aria-label="Hapus file"
                             >
-                              {deleting ? (
+                              {singleDeleteMutation.isPending ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
                               ) : (
                                 <Trash2 className="h-4 w-4" />
@@ -514,7 +523,7 @@ export default function MediaPage() {
         )}
 
         {/* Pagination */}
-        {pagination.totalPages > 1 && !loading && !loadError && (
+        {pagination.totalPages > 1 && !isLoading && !loadError && (
           <div className="flex items-center justify-between mt-4">
             <p className="text-sm text-muted-foreground">
               Halaman {pagination.page} dari {pagination.totalPages} ({pagination.total} file)

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import Image from "next/image";
 import { toast } from "@/components/ui/toast";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -71,7 +72,19 @@ type PaymentAccount = {
   order: number;
 };
 
+type MenusResponse = { menus: MenuItem[] };
+type StudioSettings = {
+  name?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+};
+type PaymentAccountsResponse = { accounts: PaymentAccount[] };
+
 export default function SettingsPage() {
+  const queryClient = useQueryClient();
+
+  // Studio settings form state (pre-populated from defaults, updated from query)
   const [studioName, setStudioName] = useState<string>(STUDIO_DEFAULTS.name);
   const [studioEmail, setStudioEmail] = useState<string>(STUDIO_DEFAULTS.email);
   const [studioPhone, setStudioPhone] = useState<string>(STUDIO_DEFAULTS.phone);
@@ -88,57 +101,68 @@ export default function SettingsPage() {
   const [autoArchive, setAutoArchive] = useState(true);
   const [revisionQuota, setRevisionQuota] = useState("3");
 
-  // Menu management
-  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [menuLoading, setMenuLoading] = useState(false);
+  // Menu management state
   const [menuDialogOpen, setMenuDialogOpen] = useState(false);
   const [editingMenu, setEditingMenu] = useState<MenuItem | null>(null);
   const [menuForm, setMenuForm] = useState({ name: "", href: "", icon: "LayoutDashboard", group: "Overview", roles: [] as string[] });
-  const [menuSaving, setMenuSaving] = useState(false);
   const [menuError, setMenuError] = useState("");
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<MenuItem | null>(null);
 
-  // Payment accounts
-  const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
-  const [paymentLoading, setPaymentLoading] = useState(false);
+  // Payment accounts state
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<PaymentAccount | null>(null);
   const [paymentForm, setPaymentForm] = useState({ type: "BANK", name: "", accountNumber: "", accountHolder: "", logoUrl: "", qrisImageUrl: "" });
-  const [paymentSaving, setPaymentSaving] = useState(false);
   const [paymentError, setPaymentError] = useState("");
   const [paymentConfirmOpen, setPaymentConfirmOpen] = useState(false);
   const [paymentConfirmTarget, setPaymentConfirmTarget] = useState<PaymentAccount | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [studioSaving, setStudioSaving] = useState(false);
 
-  const loadMenus = async () => {
-    setMenuLoading(true);
-    try {
+  // Queries
+  const { data: menusData, isLoading: menusLoading } = useQuery<MenusResponse>({
+    queryKey: ["menus"],
+    staleTime: Infinity,
+    queryFn: async () => {
       const res = await fetch("/api/menus?all=true");
-      const data = await res.json();
-      setMenuItems(data.menus || []);
-    } catch {
-      setMenuError("Gagal memuat menu");
-    } finally {
-      setMenuLoading(false);
-    }
-  };
+      return res.json();
+    },
+  });
+  const menuItems = menusData?.menus ?? [];
 
-  const loadStudioSettings = async () => {
-    try {
+  const { data: studioData } = useQuery<StudioSettings>({
+    queryKey: ["studio-settings"],
+    staleTime: Infinity,
+    queryFn: async () => {
       const res = await fetch("/api/settings/studio");
-      const data = await res.json();
-      if (data.name) setStudioName(data.name);
-      if (data.email) setStudioEmail(data.email);
-      if (data.phone !== undefined) setStudioPhone(data.phone || "");
-      if (data.address) setStudioAddress(data.address);
-    } catch { /* silent */ }
-  };
+      return res.json();
+    },
+  });
 
-  const handleSaveStudio = async () => {
-    setStudioSaving(true);
-    try {
+  // Sync studio form fields from query data
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (studioData) {
+      if (studioData.name) setStudioName(studioData.name);
+      if (studioData.email) setStudioEmail(studioData.email);
+      if (studioData.phone !== undefined) setStudioPhone(studioData.phone || "");
+      if (studioData.address) setStudioAddress(studioData.address);
+    }
+  }, [studioData]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  const { data: paymentData, isLoading: paymentLoading } = useQuery<PaymentAccountsResponse>({
+    queryKey: ["payment-accounts"],
+    staleTime: Infinity,
+    queryFn: async () => {
+      const res = await fetch("/api/settings/payment-accounts");
+      return res.json();
+    },
+  });
+  const paymentAccounts = paymentData?.accounts ?? [];
+
+  // Mutations
+  const saveStudioMutation = useMutation({
+    mutationFn: async () => {
       const res = await fetch("/api/settings/studio", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -149,18 +173,97 @@ export default function SettingsPage() {
           address: studioAddress,
         }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) throw new Error("Gagal menyimpan");
+    },
+    onSuccess: () => {
       toast("Pengaturan berhasil disimpan", "success");
-    } catch {
+      queryClient.invalidateQueries({ queryKey: ["studio-settings"] });
+    },
+    onError: () => {
       toast("Gagal menyimpan pengaturan", "error");
-    } finally {
-      setStudioSaving(false);
-    }
-  };
+    },
+  });
 
-  /* eslint-disable react-hooks/set-state-in-effect -- pre-existing pattern in codebase */
-  useEffect(() => { loadMenus(); loadStudioSettings(); }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const saveMenuMutation = useMutation({
+    mutationFn: async ({ id, body }: { id?: string; body: typeof menuForm }) => {
+      const method = id ? "PUT" : "POST";
+      const url = id ? `/api/menus/${id}` : "/api/menus";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal menyimpan");
+      return data;
+    },
+    onSuccess: () => {
+      setMenuDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["menus"] });
+    },
+    onError: (err: Error) => {
+      setMenuError(err.message || "Gagal menyimpan");
+    },
+  });
+
+  const toggleMenuMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      await fetch(`/api/menus/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["menus"] });
+    },
+  });
+
+  const deleteMenuMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await fetch(`/api/menus/${id}`, { method: "DELETE" });
+    },
+    onSuccess: () => {
+      setConfirmOpen(false);
+      setConfirmTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["menus"] });
+    },
+  });
+
+  const saveAccountMutation = useMutation({
+    mutationFn: async ({ id, body }: { id?: string; body: typeof paymentForm }) => {
+      const method = id ? "PUT" : "POST";
+      const url = "/api/settings/payment-accounts";
+      const reqBody: Record<string, unknown> = { ...body };
+      if (id) reqBody.id = id;
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reqBody),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Gagal menyimpan");
+      return data;
+    },
+    onSuccess: () => {
+      setPaymentDialogOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["payment-accounts"] });
+    },
+    onError: (err: Error) => {
+      setPaymentError(err.message || "Gagal menyimpan");
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await fetch(`/api/settings/payment-accounts?id=${id}`, { method: "DELETE" });
+    },
+    onSuccess: () => {
+      setPaymentConfirmOpen(false);
+      setPaymentConfirmTarget(null);
+      queryClient.invalidateQueries({ queryKey: ["payment-accounts"] });
+    },
+  });
 
   const openCreateMenu = () => {
     setEditingMenu(null);
@@ -176,47 +279,18 @@ export default function SettingsPage() {
     setMenuDialogOpen(true);
   };
 
-  const handleSaveMenu = async () => {
+  const handleSaveMenu = () => {
     if (!menuForm.name || !menuForm.href) { setMenuError("Nama dan path harus diisi"); return; }
     if (menuForm.roles.length === 0) { setMenuError("Minimal pilih satu role"); return; }
-    setMenuSaving(true);
     setMenuError("");
-    try {
-      const method = editingMenu ? "PUT" : "POST";
-      const url = editingMenu ? `/api/menus/${editingMenu.id}` : "/api/menus";
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(menuForm),
-      });
-      if (!res.ok) { const d = await res.json(); setMenuError(d.error || "Gagal menyimpan"); return; }
-      setMenuDialogOpen(false);
-      loadMenus();
-    } catch { setMenuError("Gagal menyimpan"); } finally { setMenuSaving(false); }
+    saveMenuMutation.mutate({
+      id: editingMenu?.id,
+      body: menuForm,
+    });
   };
 
-  const handleToggleActive = async (menu: MenuItem) => {
-    try {
-      await fetch(`/api/menus/${menu.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !menu.isActive }),
-      });
-      setMenuItems((items) =>
-        items.map((m) => m.id === menu.id ? { ...m, isActive: !m.isActive } : m)
-      );
-    } catch { /* silent fail */ }
-  };
-
-  const handleDeleteMenu = async () => {
-    if (!confirmTarget) return;
-    try {
-      await fetch(`/api/menus/${confirmTarget.id}`, { method: "DELETE" });
-      loadMenus();
-    } catch { /* silent fail */ } finally {
-      setConfirmOpen(false);
-      setConfirmTarget(null);
-    }
+  const handleToggleActive = (menu: MenuItem) => {
+    toggleMenuMutation.mutate({ id: menu.id, isActive: !menu.isActive });
   };
 
   const openDeleteConfirm = (menu: MenuItem) => {
@@ -224,20 +298,10 @@ export default function SettingsPage() {
     setConfirmOpen(true);
   };
 
-  const loadPaymentAccounts = async () => {
-    setPaymentLoading(true);
-    try {
-      const res = await fetch("/api/settings/payment-accounts");
-      const data = await res.json();
-      setPaymentAccounts(data.accounts || []);
-    } catch { /* silent */ } finally {
-      setPaymentLoading(false);
-    }
+  const handleDeleteMenu = () => {
+    if (!confirmTarget) return;
+    deleteMenuMutation.mutate(confirmTarget.id);
   };
-
-  /* eslint-disable react-hooks/set-state-in-effect -- pre-existing pattern in codebase */
-  useEffect(() => { loadPaymentAccounts(); }, []);
-  /* eslint-enable react-hooks/set-state-in-effect */
 
   const openCreateAccount = () => {
     setEditingAccount(null);
@@ -260,34 +324,16 @@ export default function SettingsPage() {
     setPaymentDialogOpen(true);
   };
 
-  const handleSaveAccount = async () => {
+  const handleSaveAccount = () => {
     if (!paymentForm.name || !paymentForm.accountNumber || !paymentForm.accountHolder) {
       setPaymentError("Semua field harus diisi");
       return;
     }
-    setPaymentSaving(true);
     setPaymentError("");
-    try {
-      const method = editingAccount ? "PUT" : "POST";
-      const url = editingAccount ? "/api/settings/payment-accounts" : "/api/settings/payment-accounts";
-      const body: Record<string, unknown> = {
-        type: paymentForm.type,
-        name: paymentForm.name,
-        accountNumber: paymentForm.accountNumber,
-        accountHolder: paymentForm.accountHolder,
-        logoUrl: paymentForm.logoUrl,
-        qrisImageUrl: paymentForm.qrisImageUrl,
-      };
-      if (editingAccount) body.id = editingAccount.id;
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) { const d = await res.json(); setPaymentError(d.error || "Gagal menyimpan"); return; }
-      setPaymentDialogOpen(false);
-      loadPaymentAccounts();
-    } catch { setPaymentError("Gagal menyimpan"); } finally { setPaymentSaving(false); }
+    saveAccountMutation.mutate({
+      id: editingAccount?.id,
+      body: paymentForm,
+    });
   };
 
   const openDeleteAccount = (acc: PaymentAccount) => {
@@ -295,15 +341,9 @@ export default function SettingsPage() {
     setPaymentConfirmOpen(true);
   };
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = () => {
     if (!paymentConfirmTarget) return;
-    try {
-      await fetch(`/api/settings/payment-accounts?id=${paymentConfirmTarget.id}`, { method: "DELETE" });
-      loadPaymentAccounts();
-    } catch { /* silent */ } finally {
-      setPaymentConfirmOpen(false);
-      setPaymentConfirmTarget(null);
-    }
+    deleteAccountMutation.mutate(paymentConfirmTarget.id);
   };
 
   const copyToClipboard = (text: string, id: string) => {
@@ -409,9 +449,9 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div className="pt-4">
-                  <Button onClick={handleSaveStudio} disabled={studioSaving}>
-                    {studioSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                    {studioSaving ? "Menyimpan..." : "Save Changes"}
+                  <Button onClick={() => saveStudioMutation.mutate()} disabled={saveStudioMutation.isPending}>
+                    {saveStudioMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                    {saveStudioMutation.isPending ? "Menyimpan..." : "Save Changes"}
                   </Button>
                 </div>
               </CardContent>
@@ -614,13 +654,15 @@ export default function SettingsPage() {
                     Kelola menu sidebar. Nonaktifkan menu tanpa menghapus dari database.
                   </CardDescription>
                 </div>
-                <Button size="sm" onClick={openCreateMenu}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Tambah Menu
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={openCreateMenu}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Tambah Menu
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                {menuLoading ? (
+                {menusLoading ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">Memuat...</p>
                 ) : menuItems.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-4 text-center">Belum ada menu</p>
@@ -677,10 +719,12 @@ export default function SettingsPage() {
                     Akun pembayaran yang ditampilkan ke client di portal
                   </CardDescription>
                 </div>
-                <Button size="sm" onClick={openCreateAccount}>
-                  <Plus className="h-4 w-4 mr-1" />
-                  Tambah Akun
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button size="sm" onClick={openCreateAccount}>
+                    <Plus className="h-4 w-4 mr-1" />
+                    Tambah Akun
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {paymentLoading ? (
@@ -862,8 +906,8 @@ export default function SettingsPage() {
               <X className="h-4 w-4 mr-1" />
               Batal
             </Button>
-            <Button onClick={handleSaveMenu} disabled={menuSaving}>
-              {menuSaving ? "Menyimpan..." : "Simpan"}
+            <Button onClick={handleSaveMenu} disabled={saveMenuMutation.isPending}>
+              {saveMenuMutation.isPending ? "Menyimpan..." : "Simpan"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -886,7 +930,7 @@ export default function SettingsPage() {
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>
               Batal
             </Button>
-            <Button variant="destructive" onClick={handleDeleteMenu}>
+            <Button variant="destructive" onClick={handleDeleteMenu} disabled={deleteMenuMutation.isPending}>
               Hapus
             </Button>
           </DialogFooter>
@@ -1026,8 +1070,8 @@ export default function SettingsPage() {
               <X className="h-4 w-4 mr-1" />
               Batal
             </Button>
-            <Button onClick={handleSaveAccount} disabled={paymentSaving}>
-              {paymentSaving ? "Menyimpan..." : "Simpan"}
+            <Button onClick={handleSaveAccount} disabled={saveAccountMutation.isPending}>
+              {saveAccountMutation.isPending ? "Menyimpan..." : "Simpan"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1050,7 +1094,7 @@ export default function SettingsPage() {
             <Button variant="outline" onClick={() => setPaymentConfirmOpen(false)}>
               Batal
             </Button>
-            <Button variant="destructive" onClick={handleDeleteAccount}>
+            <Button variant="destructive" onClick={handleDeleteAccount} disabled={deleteAccountMutation.isPending}>
               Hapus
             </Button>
           </DialogFooter>

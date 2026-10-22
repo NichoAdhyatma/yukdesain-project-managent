@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,12 +27,11 @@ type Service = {
 };
 
 export default function ServicesPage() {
-  const [services, setServices] = useState<Service[]>([]);
+  const queryClient = useQueryClient();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({ name: "", description: "", outputFormat: "" });
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newService, setNewService] = useState({ name: "", description: "", outputFormat: "" });
-  const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -39,24 +39,103 @@ export default function ServicesPage() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
 
-  const fetchServices = async () => {
-    try {
+  const { data, isLoading } = useQuery({
+    queryKey: ["services"],
+    staleTime: Infinity,
+    queryFn: async () => {
       const res = await fetch("/api/services");
       const data = await res.json();
-      if (data.services) {
-        setServices(data.services);
-      }
-    } catch (error) {
-      console.error("Failed to fetch services:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      return data.services as Service[];
+    },
+  });
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchServices();
-  }, []);
+  const services = data ?? [];
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: { name: string; description: string; outputFormat: string }) => {
+      const res = await fetch("/api/services", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal membuat layanan.");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      setNewService({ name: "", description: "", outputFormat: "" });
+      setIsCreateOpen(false);
+    },
+    onError: (err: Error) => {
+      setAlertMessage(err.message || "Gagal membuat layanan.");
+      setAlertOpen(true);
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, payload }: { id: string; payload: { name: string; description: string; outputFormat: string } }) => {
+      const res = await fetch(`/api/services/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal menyimpan perubahan.");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      setEditingId(null);
+    },
+    onError: (err: Error) => {
+      setAlertMessage(err.message || "Gagal menyimpan perubahan.");
+      setAlertOpen(true);
+      setIsSaving(false);
+    },
+  });
+
+  const toggleActiveMutation = useMutation({
+    mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
+      const res = await fetch(`/api/services/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive }),
+      });
+      if (!res.ok) throw new Error("Gagal memperbarui layanan.");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+    },
+    onError: () => {
+      setAlertMessage("Gagal memperbarui layanan.");
+      setAlertOpen(true);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/services/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal menghapus layanan.");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["services"] });
+      setDeleteConfirmOpen(false);
+    },
+    onError: (err: Error) => {
+      setAlertMessage(err.message || "Gagal menghapus layanan.");
+      setAlertOpen(true);
+    },
+  });
 
   const handleStartEdit = (service: Service) => {
     setEditingId(service.id);
@@ -67,51 +146,21 @@ export default function ServicesPage() {
     });
   };
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = () => {
     if (!editingId) return;
     setIsSaving(true);
-    try {
-      const res = await fetch(`/api/services/${editingId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editForm.name, description: editForm.description, outputFormat: editForm.outputFormat }),
-      });
-      if (res.ok) {
-        setServices((prev) =>
-          prev.map((s) =>
-            s.id === editingId
-              ? { ...s, name: editForm.name, description: editForm.description, outputFormat: editForm.outputFormat }
-              : s
-          )
-        );
-        setEditingId(null);
-      } else {
-        setAlertMessage("Gagal menyimpan perubahan.");
-        setAlertOpen(true);
-      }
-    } finally {
-      setIsSaving(false);
-    }
+    updateMutation.mutate(
+      { id: editingId, payload: editForm },
+      { onSettled: () => setIsSaving(false) }
+    );
   };
 
   const handleCancelEdit = () => {
     setEditingId(null);
   };
 
-  const handleToggleActive = async (id: string, currentActive: boolean) => {
-    try {
-      await fetch(`/api/services/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ isActive: !currentActive }),
-      });
-      setServices((prev) =>
-        prev.map((s) => (s.id === id ? { ...s, isActive: !currentActive } : s))
-      );
-    } catch {
-      setAlertMessage("Gagal memperbarui layanan.");
-      setAlertOpen(true);
-    }
+  const handleToggleActive = (id: string, currentActive: boolean) => {
+    toggleActiveMutation.mutate({ id, isActive: !currentActive });
   };
 
   const openDeleteConfirm = (id: string, name: string) => {
@@ -120,47 +169,20 @@ export default function ServicesPage() {
     setDeleteConfirmOpen(true);
   };
 
-  const handleDeleteService = async () => {
+  const handleDeleteService = () => {
     if (!deleteTargetId) return;
     setIsSaving(true);
-    try {
-      const res = await fetch(`/api/services/${deleteTargetId}`, { method: "DELETE" });
-      if (res.ok) {
-        setServices((prev) => prev.filter((s) => s.id !== deleteTargetId));
-        setDeleteConfirmOpen(false);
-      } else {
-        setAlertMessage("Gagal menghapus layanan.");
-        setAlertOpen(true);
-      }
-    } catch {
-      setAlertMessage("Gagal menghapus layanan.");
-      setAlertOpen(true);
-    } finally {
-      setIsSaving(false);
-    }
+    deleteMutation.mutate(deleteTargetId, {
+      onSettled: () => setIsSaving(false),
+    });
   };
 
-  const handleCreateService = async () => {
+  const handleCreateService = () => {
     if (!newService.name) return;
     setIsSaving(true);
-    try {
-      const res = await fetch("/api/services", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newService),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setServices((prev) => [...prev, data.service]);
-        setNewService({ name: "", description: "", outputFormat: "" });
-        setIsCreateOpen(false);
-      } else {
-        setAlertMessage("Gagal membuat layanan.");
-        setAlertOpen(true);
-      }
-    } finally {
-      setIsSaving(false);
-    }
+    createMutation.mutate(newService, {
+      onSettled: () => setIsSaving(false),
+    });
   };
 
   if (isLoading) {
@@ -182,50 +204,52 @@ export default function ServicesPage() {
               Kelola katalog layanan desain
             </p>
           </div>
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger render={<Button><Plus className="w-4 h-4 mr-2" />Layanan Baru</Button>} />
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Tambah Layanan Baru</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="newName">Nama Layanan</Label>
-                  <Input
-                    id="newName"
-                    value={newService.name}
-                    onChange={(e) => setNewService((p) => ({ ...p, name: e.target.value }))}
-                    placeholder="Contoh: Logo Minimalis"
-                  />
+          <div className="flex items-center gap-2">
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger render={<Button><Plus className="w-4 h-4 mr-2" />Layanan Baru</Button>} />
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Tambah Layanan Baru</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="newName">Nama Layanan</Label>
+                    <Input
+                      id="newName"
+                      value={newService.name}
+                      onChange={(e) => setNewService((p) => ({ ...p, name: e.target.value }))}
+                      placeholder="Contoh: Logo Minimalis"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="newDesc">Deskripsi</Label>
+                    <Input
+                      id="newDesc"
+                      value={newService.description}
+                      onChange={(e) => setNewService((p) => ({ ...p, description: e.target.value }))}
+                      placeholder="Deskripsi layanan"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="newFormat">Format Output</Label>
+                    <Input
+                      id="newFormat"
+                      value={newService.outputFormat}
+                      onChange={(e) => setNewService((p) => ({ ...p, outputFormat: e.target.value }))}
+                      placeholder="Contoh: AI, PNG, SVG"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Batal</Button>
+                    <Button onClick={handleCreateService} disabled={isSaving || createMutation.isPending}>
+                      {isSaving || createMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                      Simpan
+                    </Button>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="newDesc">Deskripsi</Label>
-                  <Input
-                    id="newDesc"
-                    value={newService.description}
-                    onChange={(e) => setNewService((p) => ({ ...p, description: e.target.value }))}
-                    placeholder="Deskripsi layanan"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="newFormat">Format Output</Label>
-                  <Input
-                    id="newFormat"
-                    value={newService.outputFormat}
-                    onChange={(e) => setNewService((p) => ({ ...p, outputFormat: e.target.value }))}
-                    placeholder="Contoh: AI, PNG, SVG"
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Batal</Button>
-                  <Button onClick={handleCreateService} disabled={isSaving}>
-                    {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                    Simpan
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
       </div>
 
@@ -274,8 +298,8 @@ export default function ServicesPage() {
                       <Button size="sm" variant="outline" onClick={handleCancelEdit}>
                         <X className="h-4 w-4 mr-1" /> Batal
                       </Button>
-                      <Button size="sm" onClick={handleSaveEdit} disabled={isSaving}>
-                        {isSaving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />} Simpan
+                      <Button size="sm" onClick={handleSaveEdit} disabled={isSaving || updateMutation.isPending}>
+                        {isSaving || updateMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />} Simpan
                       </Button>
                     </div>
                   </>
@@ -329,8 +353,8 @@ export default function ServicesPage() {
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Batal</Button>
-            <Button variant="destructive" onClick={handleDeleteService} disabled={isSaving}>
-              {isSaving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            <Button variant="destructive" onClick={handleDeleteService} disabled={isSaving || deleteMutation.isPending}>
+              {isSaving || deleteMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
               Hapus
             </Button>
           </DialogFooter>

@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { redirect } from "next/navigation";
 
-export const revalidate = 60; // ISR: revalidate every 60 seconds
+export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const user = await getCurrentUser();
@@ -11,6 +12,11 @@ export default async function DashboardPage() {
         <p className="text-muted-foreground">Loading...</p>
       </div>
     );
+  }
+
+  // Owner/Admin only — designers have their own workspace
+  if (user.activeRole !== "OWNER") {
+    redirect("/designer");
   }
 
   // Parallel data fetching — no waterfalls

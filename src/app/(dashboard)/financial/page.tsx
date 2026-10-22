@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -40,31 +40,25 @@ function formatCurrency(amount: number) {
 }
 
 export default function FinancialPage() {
-  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
-  const [outstandingPayments, setOutstandingPayments] = useState<OutstandingPayment[]>([]);
-  const [totalOutstanding, setTotalOutstanding] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
-  const fetchFinancial = async () => {
-    try {
+  const { data: financialData, isLoading } = useQuery({
+    queryKey: ["financial"],
+    staleTime: Infinity,
+    queryFn: async () => {
       const res = await fetch("/api/financial");
       const data = await res.json();
-      if (data.monthlyData) {
-        setMonthlyData(data.monthlyData);
-        setOutstandingPayments(data.outstandingPayments || []);
-        setTotalOutstanding(data.totalOutstanding || 0);
-      }
-    } catch (error) {
-      console.error("Failed to fetch financial:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+      return {
+        monthlyData: (data.monthlyData ?? []) as MonthlyData[],
+        outstandingPayments: (data.outstandingPayments ?? []) as OutstandingPayment[],
+        totalOutstanding: (data.totalOutstanding ?? 0) as number,
+      };
+    },
+  });
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchFinancial();
-  }, []);
+  const monthlyData = financialData?.monthlyData ?? [];
+  const outstandingPayments = financialData?.outstandingPayments ?? [];
+  const totalOutstanding = financialData?.totalOutstanding ?? 0;
 
   if (isLoading) {
     return (
@@ -90,10 +84,12 @@ export default function FinancialPage() {
               Ringkasan keuangan studio
             </p>
           </div>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline">
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          </div>
         </div>
       </div>
 
