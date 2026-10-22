@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { generateProjectCode } from "@/lib/project-code";
 
 export async function GET(request: Request) {
   try {
@@ -139,17 +140,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { clientName, serviceId, agreedPrice, deadline, notes, clientId, paidAmount } = body;
 
-    // Generate project number
-    const lastProject = await prisma.project.findFirst({
-      orderBy: { createdAt: "desc" },
-    });
-
-    let nextNumber = 1;
-    if (lastProject?.projectNumber) {
-      const lastNum = parseInt(lastProject.projectNumber.replace("PRJ-", ""));
-      nextNumber = lastNum + 1;
+    // Project code: unik dan tidak bisa ditebak — endpoint lookup di client
+    // portal bersifat publik, kode berurutan bisa dienumerate.
+    let projectNumber = generateProjectCode();
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const clash = await prisma.project.findUnique({
+        where: { projectNumber },
+        select: { id: true },
+      });
+      if (!clash) break;
+      projectNumber = generateProjectCode();
     }
-    const projectNumber = `PRJ-${String(nextNumber).padStart(3, "0")}`;
 
     // Create or get client
     let client;

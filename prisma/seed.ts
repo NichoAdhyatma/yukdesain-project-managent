@@ -250,11 +250,11 @@ async function seedProjectData() {
   if (!owner) { console.log("⚠️ Owner not found, skipping project seed"); return; }
 
   // Project 1
-  const existingProject1 = await prisma.project.findUnique({ where: { projectNumber: "PRJ-001" } });
+  const existingProject1 = await prisma.project.findUnique({ where: { projectNumber: "PRJ-20261010-K7M4Q2" } });
   if (!existingProject1) {
     await prisma.project.create({
       data: {
-        projectNumber: "PRJ-001",
+        projectNumber: "PRJ-20261010-K7M4Q2",
         clientId: clients[0],
         clientName: clientDefs[0].name,
         serviceId: services["SVC-01"],
@@ -282,12 +282,12 @@ async function seedProjectData() {
   }
 
   // Project 2
-  const existingProject2 = await prisma.project.findUnique({ where: { projectNumber: "PRJ-002" } });
+  const existingProject2 = await prisma.project.findUnique({ where: { projectNumber: "PRJ-20261010-P8W4X9" } });
   if (!existingProject2) {
     const ivan = await prisma.user.findUnique({ where: { email: "ivan@yukdesain.com" } });
     await prisma.project.create({
       data: {
-        projectNumber: "PRJ-002",
+        projectNumber: "PRJ-20261010-P8W4X9",
         clientId: clients[1],
         clientName: clientDefs[1].name,
         serviceId: services["SVC-04"],
@@ -339,11 +339,11 @@ async function seedProjectData() {
   }
 
   // Project 3
-  const existingProject3 = await prisma.project.findUnique({ where: { projectNumber: "PRJ-003" } });
+  const existingProject3 = await prisma.project.findUnique({ where: { projectNumber: "PRJ-20261010-T6Y2HN" } });
   if (!existingProject3) {
     const p3 = await prisma.project.create({
       data: {
-        projectNumber: "PRJ-003",
+        projectNumber: "PRJ-20261010-T6Y2HN",
         clientId: clients[2],
         clientName: clientDefs[2].name,
         serviceId: services["SVC-07"],

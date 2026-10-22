@@ -70,7 +70,7 @@ export default function ClientPortalPage() {
                 <Label htmlFor="code">Kode Project</Label>
                 <Input
                   id="code"
-                  placeholder="Contoh: PRJ-20261010-001"
+                  placeholder="Contoh: PRJ-20261010-K7M4Q2"
                   value={code}
                   onChange={(e) => setCode(e.target.value.toUpperCase())}
                   className="text-center font-mono text-base tracking-wider"
@@ -109,7 +109,7 @@ export default function ClientPortalPage() {
             Kode project diberikan oleh designer setelah brief diterima.
           </p>
           <p className="text-xs text-muted-foreground">
-            Contoh: <code className="font-mono bg-muted px-1.5 py-0.5 rounded">PRJ-20261010-001</code>
+            Contoh: <code className="font-mono bg-muted px-1.5 py-0.5 rounded">PRJ-20261010-K7M4Q2</code>
           </p>
         </div>
       </div>

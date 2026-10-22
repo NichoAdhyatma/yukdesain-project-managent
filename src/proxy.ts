@@ -11,6 +11,8 @@ const PUBLIC_PATHS = [
   "/client-portal",
   // Client portal is token-authenticated, not session-authenticated
   "/api/client-links/",
+  // Lookup by project code — the code itself is the secret
+  "/api/portal/lookup",
 ];
 
 // API endpoints that expose owner-scoped data. Derived from the owner-only

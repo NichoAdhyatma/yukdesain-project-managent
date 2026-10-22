@@ -200,7 +200,7 @@ model Service {
 
 model Project {
   id            String        @id @default(cuid())
-  projectNumber String        @unique  // e.g., "PRJ-001"
+  projectNumber String        @unique  // e.g., "PRJ-20261010-K7M4Q2"
 
   // Client info
   clientId      String
