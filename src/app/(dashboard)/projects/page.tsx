@@ -241,7 +241,14 @@ export default function ProjectsPage() {
       const res = await fetch(`/api/projects/${deleteDialog.id}`, { method: "DELETE" });
       if (res.ok) {
         setDeleteDialog(null);
+        // Project yang dihapus juga muncul di halaman lain (form link recap,
+        // invoice, keuangan, activity log, workspace designer).
         queryClient.invalidateQueries({ queryKey: ["projects"] });
+        queryClient.invalidateQueries({ queryKey: ["form-link-projects"] });
+        queryClient.invalidateQueries({ queryKey: ["invoices"] });
+        queryClient.invalidateQueries({ queryKey: ["financial"] });
+        queryClient.invalidateQueries({ queryKey: ["activity-logs"] });
+        queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
       } else {
         const data = await res.json();
         toast(data.error || "Gagal menghapus project", "error");

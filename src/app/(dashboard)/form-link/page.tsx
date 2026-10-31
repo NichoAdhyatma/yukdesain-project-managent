@@ -10,8 +10,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Link as LinkIcon, Check, Loader2, ExternalLink, Search, Plus, MessageCircle } from "lucide-react";
+import { Link as LinkIcon, Check, Loader2, ExternalLink, Search, Plus, MessageCircle, Trash2 } from "lucide-react";
 import { CurrencyInput } from "@/components/ui/currency-input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Service = { id: string; code: string; name: string };
 type ClientLink = { id: string; token: string; status: string; projectId: string };
@@ -51,6 +57,8 @@ export default function FormLinkPage() {
   const [generatedLink, setGeneratedLink] = useState<string | null>(null);
   const [generatedClientName, setGeneratedClientName] = useState<string>("");
   const [search, setSearch] = useState("");
+  const [deleteTarget, setDeleteTarget] = useState<ProjectData | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [form, setForm] = useState({
     clientName: "",
     serviceId: "",
@@ -163,6 +171,31 @@ export default function FormLinkPage() {
       queryClient.invalidateQueries({ queryKey: ["form-link-projects"] });
       queryClient.invalidateQueries({ queryKey: ["services"] });
     },
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (projectId: string) => {
+      const res = await fetch(`/api/projects/${projectId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Gagal menghapus project");
+      }
+    },
+    onSuccess: () => {
+      setDeleteTarget(null);
+      toast("Project berhasil dihapus", "success");
+      // Project ini juga tampil di halaman lain — invalidate semua yang terkait
+      queryClient.invalidateQueries({ queryKey: ["form-link-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["financial"] });
+      queryClient.invalidateQueries({ queryKey: ["activity-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
+    },
+    onError: (err: Error) => {
+      toast(err.message || "Terjadi kesalahan", "error");
+    },
+    onSettled: () => setDeleting(false),
   });
 
   function handleSubmit(e: React.FormEvent) {
@@ -333,11 +366,12 @@ export default function FormLinkPage() {
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Harga</TableHead>
                   <TableHead>Deadline</TableHead>
+                  <TableHead className="w-12" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredProjects.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">Tidak ada project</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Tidak ada project</TableCell></TableRow>
                 ) : (
                   filteredProjects.map((p) => {
                     const st = statusMap[p.status] || statusMap.DRAFT;
@@ -389,6 +423,17 @@ export default function FormLinkPage() {
                         <TableCell><Badge variant={st.variant}>{st.label}</Badge></TableCell>
                         <TableCell className="text-right">{formatCurrency(p.agreedPrice)}</TableCell>
                         <TableCell>{formatDate(p.deadline)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => setDeleteTarget(p)}
+                            aria-label={`Hapus project ${p.projectNumber}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     );
                   })
@@ -398,6 +443,37 @@ export default function FormLinkPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteTarget} onOpenChange={(open) => !open && !deleting && setDeleteTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Hapus Project?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Project <span className="font-semibold text-foreground">{deleteTarget?.projectNumber}</span> ({deleteTarget?.clientName}) akan dihapus permanen beserta semua data terkait (brief, revisi, invoice, pembayaran, link client, dll). Tindakan ini tidak bisa dibatalkan.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                Batal
+              </Button>
+              <Button
+                variant="destructive"
+                disabled={deleting}
+                onClick={() => {
+                  if (!deleteTarget) return;
+                  setDeleting(true);
+                  deleteProjectMutation.mutate(deleteTarget.id);
+                }}
+              >
+                {deleting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Trash2 className="h-4 w-4 mr-1" />}
+                Hapus
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

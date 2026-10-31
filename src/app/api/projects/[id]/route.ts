@@ -73,8 +73,26 @@ export async function DELETE(
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    // Child ids first — attachments can hang off a brief/update/revision
+    // without carrying projectId, and the FKs are NO ACTION.
+    const [briefs, updates, revisions] = await Promise.all([
+      prisma.brief.findMany({ where: { projectId: id }, select: { id: true } }),
+      prisma.projectUpdate.findMany({ where: { projectId: id }, select: { id: true } }),
+      prisma.revision.findMany({ where: { projectId: id }, select: { id: true } }),
+    ]);
+
     // Delete in transaction — cascade through all related records
     await prisma.$transaction([
+      prisma.attachment.deleteMany({
+        where: {
+          OR: [
+            { projectId: id },
+            { briefId: { in: briefs.map((b) => b.id) } },
+            { updateId: { in: updates.map((u) => u.id) } },
+            { revisionId: { in: revisions.map((r) => r.id) } },
+          ],
+        },
+      }),
       // Delete related records in dependency order
       prisma.projectUpdate.deleteMany({ where: { projectId: id } }),
       prisma.revision.deleteMany({ where: { projectId: id } }),
@@ -83,7 +101,6 @@ export async function DELETE(
       prisma.projectAssignment.deleteMany({ where: { projectId: id } }),
       prisma.clientLink.deleteMany({ where: { projectId: id } }),
       prisma.brief.deleteMany({ where: { projectId: id } }),
-      prisma.attachment.deleteMany({ where: { projectId: id } }),
       // Delete the project itself
       prisma.project.delete({ where: { id } }),
       // Log activity
