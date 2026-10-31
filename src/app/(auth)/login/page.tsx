@@ -49,7 +49,7 @@ function LoginForm() {
         </div>
         <CardTitle className="text-2xl">Masuk</CardTitle>
         <CardDescription>
-          {STUDIO_DEFAULTS.name} Portal
+          {STUDIO_DEFAULTS.name} Internal Portal
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -90,7 +90,7 @@ function LoginForm() {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
@@ -98,7 +98,7 @@ function LoginForm() {
           </div>
 
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? "Memuat..." : "Masuk"}
+            {isLoading ? "Memuat..." : "Login"}
           </Button>
         </form>
       </CardContent>
