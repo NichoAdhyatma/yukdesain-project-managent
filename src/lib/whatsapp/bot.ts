@@ -1,9 +1,10 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
 import { WhatsAppApiError, markAsRead, sendText } from "./client-api";
 import { maskPhone } from "./phone";
 import { storeInboundMedia, type MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
-import { clampReply, stripPriceMentions } from "./ai/reply-guard";
+import { clampReply, sanitizeReply, stripPriceMentions } from "./ai/reply-guard";
 
 // Orkestrasi pesan masuk (docs/WHATSAPP_AI_CHATBOT.md §10.3).
 
@@ -110,7 +111,12 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
     turn = await runAiTurn({ conversationId: conversation.id, messageId: message.id });
   } catch (error) {
     // Hanya nama error: pesan error API bisa memuat potongan isi chat.
-    const reason = (error as Error).message === "AI_REFUSAL" ? "refusal" : (error as Error).name;
+    const reason =
+      error instanceof Anthropic.APIError
+        ? `api_${error.status ?? "connection"}`
+        : (error as Error).message === "AI_REFUSAL"
+          ? "refusal"
+          : (error as Error).name;
     console.error(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)}: ${reason}`);
     await setHumanMode(conversation.id);
     await sendBotText(conversation, BOT_REPLIES.busy);
@@ -126,8 +132,16 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   // Klien sudah mengirim pesan baru selama AI berpikir → biarkan giliran itu yang membalas.
   if (await isSuperseded(conversation.id, message.createdAt)) return;
 
+  const sanitized = sanitizeReply(turn.reply);
+  if (sanitized.rejected) {
+    console.error(`[whatsapp] balasan AI rusak untuk ${maskPhone(conversation.waId)}, dialihkan ke admin`);
+    await setHumanMode(conversation.id);
+    await sendBotText(conversation, BOT_REPLIES.busy);
+    return;
+  }
+
   const safe = PRE_QUOTE_STATUSES.has(turn.intakeStatus)
-    ? stripPriceMentions(turn.reply, turn.briefText).text
-    : turn.reply;
+    ? stripPriceMentions(sanitized.text, turn.briefText).text
+    : sanitized.text;
   await sendBotText(conversation, clampReply(safe));
 }

@@ -1,11 +1,12 @@
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
 import { getStudioSettings } from "@/lib/studio";
-import { getWhatsAppEnv } from "../env";
 import { mimeFromStorageKey, readPrivateMedia } from "../media";
 import { aiWritableBriefFields, imageTargetFields, missingRequiredFields, type BriefDraft } from "./brief-schema";
 import { buildStateBlock, buildSystemPrompt } from "./system-prompt";
 import { ACTIVE_INTAKE_STATUSES } from "../intake";
+import { getAiConfig, getAnthropicClient } from "./ai-config";
+import { modelRequestOptions } from "./model-profile";
 import { INTAKE_TOOLS, executeTool, findActiveIntake } from "./tools";
 
 // Satu giliran AI untuk satu pesan masuk (§10.3 langkah 7–8).
@@ -13,12 +14,6 @@ import { INTAKE_TOOLS, executeTool, findActiveIntake } from "./tools";
 const HISTORY_LIMIT = 20;
 const MAX_TOOL_ROUNDS = 4;
 const MAX_PENDING_IMAGES = 3;
-
-let client: Anthropic | null = null;
-function getClient(): Anthropic {
-  client ??= new Anthropic({ apiKey: getWhatsAppEnv().ANTHROPIC_API_KEY, timeout: 30_000, maxRetries: 2 });
-  return client;
-}
 
 export type AiTurnResult = {
   reply: string | null;
@@ -142,7 +137,8 @@ function textOf(response: Anthropic.Message): string {
  * atau model menolak; pemanggil yang menangani fallback.
  */
 export async function runAiTurn(params: { conversationId: string; messageId: string }): Promise<AiTurnResult> {
-  const env = getWhatsAppEnv();
+  const config = await getAiConfig();
+  const client = getAnthropicClient(config.baseUrl);
   const current = await prisma.waMessage.findUniqueOrThrow({
     where: { id: params.messageId },
     select: { createdAt: true },
@@ -163,26 +159,25 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
 
   const { messages, pendingImageIds } = await buildMessages(rows);
   const studio = await getStudioSettings();
+  // Aturan statis (di-cache) lalu STATE dinamis. Keduanya di system prompt: kanal
+  // operator yang terpisah dari teks klien dan didukung semua model Claude.
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: buildSystemPrompt(studio.name), cache_control: { type: "ephemeral" } },
+    { type: "text", text: await buildState(params.conversationId, pendingImageIds) },
   ];
-
-  const stateBlock = await buildState(params.conversationId, pendingImageIds);
-  // STATE dikirim sebagai pesan system di akhir: kanal operator, terpisah dari teks klien.
-  messages.push({ role: "system", content: stateBlock });
 
   const toolsCalled: string[] = [];
   const ctx = { conversationId: params.conversationId };
 
   for (let round = 0; ; round++) {
     const toolsAllowed = round < MAX_TOOL_ROUNDS;
-    const response = await getClient().messages.create({
-      model: env.WA_AI_MODEL,
-      max_tokens: env.WA_AI_MAX_TOKENS,
+    const response = await client.messages.create({
+      model: config.model,
+      max_tokens: config.maxTokens,
       system,
       tools: INTAKE_TOOLS,
       tool_choice: toolsAllowed ? { type: "auto" } : { type: "none" },
-      output_config: { effort: "low" },
+      ...modelRequestOptions(config.model),
       messages,
     });
 

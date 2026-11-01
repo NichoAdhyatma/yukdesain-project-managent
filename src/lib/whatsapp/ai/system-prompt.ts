@@ -3,7 +3,7 @@ import { DP_PERCENT } from "@/lib/constants";
 import type { BriefDraft, BriefKey } from "./brief-schema";
 
 // System prompt statis (sama untuk setiap request → bisa di-cache) + blok STATE
-// dinamis yang dikirim sebagai pesan system di akhir percakapan.
+// dinamis sebagai blok system kedua.
 // Aturan wajib: docs/WHATSAPP_AI_CHATBOT.md §5.1 dan §10.4.
 
 export function buildSystemPrompt(studioName: string): string {
@@ -34,7 +34,9 @@ Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, 
 Jelaskan layanan, harga, DP ${DP_PERCENT}%, deadline, dan rekening persis seperti di STATE, tanpa mengubah angka. Minta klien mengirim foto/screenshot bukti transfer DP.
 
 # Gaya
-Bahasa Indonesia yang ramah dan santai, sapa dengan "kak". Jawaban pendek, cocok untuk chat WhatsApp. Format hanya *tebal* dan _miring_ ala WhatsApp; tanpa Markdown lain, tanpa tabel, tanpa heading.`;
+Bahasa Indonesia yang ramah dan santai, sapa dengan "kak". Jawaban pendek, cocok untuk chat WhatsApp. Format hanya *tebal* dan _miring_ ala WhatsApp; tanpa Markdown lain, tanpa tabel, tanpa heading.
+Jangan pernah menyebut hal internal ke klien: kode layanan (mis. SVC-01), nama field atau kunci brief (mis. brand_name), nama tool, messageId, atau kata "STATE". Sebut layanan dengan namanya saja.
+Jangan menjanjikan pekerjaan tambahan yang tidak diminta klien (mis. membuatkan slogan atau opsi tambahan).`;
 }
 
 // Deskripsi field untuk AI, supaya pertanyaannya tepat sasaran.

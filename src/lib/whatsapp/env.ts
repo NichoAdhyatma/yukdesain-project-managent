@@ -21,6 +21,9 @@ const whatsAppEnvSchema = z.object({
   WHATSAPP_GRAPH_BASE_URL: z.url().default("https://graph.facebook.com"),
 
   ANTHROPIC_API_KEY: nonEmpty,
+  // Dinyatakan eksplisit supaya ANTHROPIC_BASE_URL yang tidak sengaja ter-set tidak
+  // diam-diam mengalihkan data klien ke server lain. Default: API resmi.
+  ANTHROPIC_BASE_URL: z.url({ protocol: /^https$/ }).default("https://api.anthropic.com"),
   WA_AI_MODEL: nonEmpty.default("claude-haiku-5-5"),
   WA_AI_EXTRACTION_MODEL: nonEmpty.default("claude-sonnet-5-5"),
   WA_AI_MAX_TOKENS: z.coerce.number().int().min(100).max(8000).default(800),
@@ -59,6 +62,26 @@ let cached: WhatsAppEnv | null = null;
 export function getWhatsAppEnv(): WhatsAppEnv {
   cached ??= parseWhatsAppEnv(process.env);
   return cached;
+}
+
+const aiDefaultsSchema = whatsAppEnvSchema.pick({
+  WA_AI_MODEL: true,
+  WA_AI_EXTRACTION_MODEL: true,
+  ANTHROPIC_BASE_URL: true,
+});
+
+/**
+ * Default AI dari env, terpisah dari validasi token WhatsApp, supaya Settings tetap
+ * bisa menampilkan default walau env WhatsApp belum lengkap. null jika nilainya tidak valid.
+ */
+export function getAiEnvDefaults(): { model: string; extractionModel: string; baseUrl: string } | null {
+  const result = aiDefaultsSchema.safeParse(normalize(process.env));
+  if (!result.success) return null;
+  return {
+    model: result.data.WA_AI_MODEL,
+    extractionModel: result.data.WA_AI_EXTRACTION_MODEL,
+    baseUrl: result.data.ANTHROPIC_BASE_URL,
+  };
 }
 
 export function isWhatsAppConfigured(): boolean {

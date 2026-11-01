@@ -10,15 +10,17 @@ const db = vi.hoisted(() => ({
 const tools = vi.hoisted(() => ({ executeTool: vi.fn(), findActiveIntake: vi.fn() }));
 const media = vi.hoisted(() => ({ readPrivateMedia: vi.fn(), mimeFromStorageKey: vi.fn(() => "image/jpeg") }));
 
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: class {
-    messages = { create };
-  },
-}));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/studio", () => ({ getStudioSettings: async () => ({ name: "YukDesain Studio" }) }));
-vi.mock("../env", () => ({
-  getWhatsAppEnv: () => ({ ANTHROPIC_API_KEY: "k", WA_AI_MODEL: "claude-haiku-5-5", WA_AI_MAX_TOKENS: 800 }),
+const aiConfig = vi.hoisted(() => ({
+  model: "claude-haiku-5-5",
+  extractionModel: "claude-sonnet-5-5",
+  baseUrl: "https://api.anthropic.com",
+  maxTokens: 800,
+}));
+vi.mock("./ai-config", () => ({
+  getAiConfig: async () => aiConfig,
+  getAnthropicClient: () => ({ messages: { create } }),
 }));
 vi.mock("../media", () => media);
 vi.mock("./tools", async (orig) => ({ ...(await orig<typeof import("./tools")>()), ...tools }));
@@ -47,6 +49,7 @@ const toolResponse = (name: string, input: unknown, id = "tu_1") => ({
 
 const params = { conversationId: "conv_1", messageId: "m_last" };
 const sentMessages = (call = 0) => create.mock.calls[call][0].messages as Anthropic.MessageParam[];
+const stateOf = (call = 0) => (create.mock.calls[call][0].system as Anthropic.TextBlockParam[])[1].text;
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -58,7 +61,7 @@ beforeEach(() => {
 });
 
 describe("runAiTurn", () => {
-  it("history → pesan user/assistant, STATE sebagai pesan system terakhir", async () => {
+  it("history → pesan user/assistant, STATE sebagai blok system kedua", async () => {
     givenHistory([outbound("o0", "pesan bot lama"), inbound("m1", "halo"), outbound("o1", "Halo kak!"), inbound("m_last", "mau logo")]);
     create.mockResolvedValue(textResponse("Siap kak"));
 
@@ -67,13 +70,13 @@ describe("runAiTurn", () => {
     expect(result.reply).toBe("Siap kak");
     const messages = sentMessages();
     // pesan pertama wajib user: balasan bot di awal jendela dibuang
-    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user", "system"]);
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
     expect(messages[2].content).toBe("mau logo");
-    expect(String(messages[3].content)).toContain("STATE");
-    expect(String(messages[3].content)).toContain("Belum ada order aktif");
+    expect(stateOf()).toContain("STATE");
+    expect(stateOf()).toContain("Belum ada order aktif");
   });
 
-  it("system prompt di-cache, model & batas dari env, effort low, tools tersedia", async () => {
+  it("system prompt di-cache, model & batas dari config, effort sesuai model, tools tersedia", async () => {
     givenHistory([inbound("m_last", "halo")]);
     create.mockResolvedValue(textResponse("ok"));
     await runAiTurn(params);
@@ -83,6 +86,7 @@ describe("runAiTurn", () => {
     expect(req.output_config).toEqual({ effort: "low" });
     expect(req.system[0].cache_control).toEqual({ type: "ephemeral" });
     expect(req.system[0].text).toContain("YukDesain Studio");
+    expect(req.system[1].cache_control).toBeUndefined();
     expect(req.tools.length).toBeGreaterThan(0);
     expect(req.tool_choice).toEqual({ type: "auto" });
   });
@@ -106,7 +110,7 @@ describe("runAiTurn", () => {
     const imgTurn = messages[2].content as Anthropic.ContentBlockParam[];
     expect(imgTurn[0]).toMatchObject({ type: "image", source: { type: "base64", data: Buffer.from("IMG").toString("base64") } });
     expect(imgTurn[1]).toMatchObject({ type: "text", text: "[Gambar dari klien, messageId=img_new] Keterangan klien: ini referensi" });
-    expect(String(messages.at(-1)!.content)).toContain("messageId: img_new");
+    expect(stateOf()).toContain("messageId: img_new");
   });
 
   it("menjalankan tool dengan konteks percakapan dari server lalu melanjutkan", async () => {
@@ -153,6 +157,19 @@ describe("runAiTurn", () => {
     expect(result.reply).toBe("selesai");
   });
 
+  it("model tanpa dukungan effort → parameter effort tidak dikirim", async () => {
+    givenHistory([inbound("m_last", "halo")]);
+    create.mockResolvedValue(textResponse("ok"));
+    aiConfig.model = "claude-haiku-4-5";
+    try {
+      await runAiTurn(params);
+    } finally {
+      aiConfig.model = "claude-haiku-5-5";
+    }
+    expect(create.mock.calls[0][0].model).toBe("claude-haiku-4-5");
+    expect(create.mock.calls[0][0]).not.toHaveProperty("output_config");
+  });
+
   it("refusal → error (pemanggil yang fallback)", async () => {
     givenHistory([inbound("m_last", "x")]);
     create.mockResolvedValue({ stop_reason: "refusal", content: [] });
@@ -180,7 +197,7 @@ describe("runAiTurn", () => {
     db.paymentAccount.findMany.mockResolvedValue([{ name: "BCA", accountNumber: "123", accountHolder: "YukDesain" }]);
     create.mockResolvedValue(textResponse("ok"));
     await runAiTurn(params);
-    const state = String(sentMessages().at(-1)!.content);
+    const state = stateOf();
     expect(state).toContain("Rp2.500.000");
     expect(state).toContain("Rp1.250.000");
     expect(state).toContain("1 Desember 2026");
@@ -201,7 +218,7 @@ describe("runAiTurn", () => {
     });
     create.mockResolvedValue(textResponse("ok"));
     await runAiTurn(params);
-    const state = String(sentMessages().at(-1)!.content);
+    const state = stateOf();
     expect(state).not.toContain("999");
     expect(state).toContain("business_desc");
     expect(db.paymentAccount.findMany).not.toHaveBeenCalled();

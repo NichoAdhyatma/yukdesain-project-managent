@@ -183,6 +183,21 @@ describe("handleInboundMessage", () => {
     expect(sentBodies()).toEqual([reply]);
   });
 
+  it("balasan berisi markup tool-call → tidak dikirim, fallback sibuk + HUMAN", async () => {
+    givenMessage("text");
+    aiReply("]<]minimax[>[<tool_call>\n<invoke name=\"get_brief\">");
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
+    expect(humanModeSet()).toBe(true);
+  });
+
+  it("kode layanan internal dibuang dari balasan", async () => {
+    givenMessage("text");
+    aiReply("Siap kak, order *Logo Minimalis* (SVC-01) sudah dimulai. Nama brandnya apa?");
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()).toEqual(["Siap kak, order *Logo Minimalis* sudah dimulai. Nama brandnya apa?"]);
+  });
+
   it("gagal kirim → OUTBOUND failed dengan errorCode", async () => {
     givenMessage("text");
     api.sendText.mockRejectedValue(new WhatsAppApiError(400, "131047"));

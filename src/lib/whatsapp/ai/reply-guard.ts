@@ -42,3 +42,38 @@ export function clampReply(text: string): string {
   const t = text.trim();
   return t.length > WA_TEXT_LIMIT ? `${t.slice(0, WA_TEXT_LIMIT - 1)}…` : t;
 }
+
+// Sisa sintaks tool-call yang ditulis model sebagai teks (mis. model/gateway non-standar).
+const TOOL_MARKUP = /<\/?(tool_call|tool_use|invoke|function_calls|parameter)\b|\]<\]|\[>\[/i;
+// Unit 1–4 karakter yang berulang ≥ 20 kali: output model yang rusak. Ambang cukup
+// tinggi supaya garis pemisah atau titik-titik biasa tidak ikut terpotong.
+const DEGENERATE_RUN = /([\s\S]{1,4}?)\1{19,}/;
+// Huruf Han/Kana/Hangul: tidak pernah dipakai dalam balasan berbahasa Indonesia.
+const CJK = /[぀-ヿ㐀-鿿가-힯]+/g;
+// Kode layanan internal (SVC-01) tidak untuk klien; nama layanan sudah cukup.
+const SERVICE_CODE = /\s*\(?\bSVC-\d{2}\b\)?/g;
+
+export type SanitizedReply = { text: string; rejected: boolean; changed: boolean };
+
+/**
+ * Bersihkan balasan model sebelum dikirim ke klien. `rejected` = balasan tidak layak
+ * dikirim sama sekali (pemanggil memakai fallback).
+ */
+export function sanitizeReply(text: string): SanitizedReply {
+  if (TOOL_MARKUP.test(text)) return { text: "", rejected: true, changed: true };
+
+  let out = text;
+  const run = out.match(DEGENERATE_RUN);
+  if (run?.index !== undefined) out = out.slice(0, run.index);
+  out = out
+    .replace(CJK, "")
+    .replace(SERVICE_CODE, "")
+    .replace(/[ \t]+—[ \t]+/g, ", ")
+    .replace(/,(\s*,)+/g, ",")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
+
+  // Sisa terlalu pendek untuk jadi balasan yang bermakna.
+  if (out.length < 15) return { text: "", rejected: true, changed: true };
+  return { text: out, rejected: false, changed: out !== text.trim() };
+}

@@ -529,6 +529,10 @@ model StudioSettings {
   address   String   @default("Jakarta, Indonesia")
   logoUrl   String   @default("")
   waBotEnabled Boolean  @default(false)
+  // Override konfigurasi AI bot WA dari Settings; null = pakai default env
+  waAiModel           String?
+  waAiExtractionModel String?
+  waAiBaseUrl         String?
   updatedAt DateTime @updatedAt
 
   @@map("studio_settings")

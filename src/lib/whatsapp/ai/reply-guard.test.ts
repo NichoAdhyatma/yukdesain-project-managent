@@ -59,3 +59,47 @@ describe("clampReply", () => {
     expect(out.endsWith("…")).toBe(true);
   });
 });
+
+import { sanitizeReply } from "./reply-guard";
+
+describe("sanitizeReply", () => {
+  it("balasan normal tidak berubah", () => {
+    const text = "Siap kak, nama brandnya Kopi Senja sudah dicatat. Warnanya mau apa?";
+    expect(sanitizeReply(text)).toEqual({ text, rejected: false, changed: false });
+  });
+
+  it.each([
+    "]<]minimax[>[<tool_call>\n]<]minimax[>[<invoke name=\"get_brief\">",
+    "Oke kak <invoke name=\"update_brief_draft\"><parameter name=\"fields\">{}</parameter></invoke>",
+    "<function_calls>...</function_calls>",
+  ])("markup tool-call → ditolak: %j", (text) => {
+    expect(sanitizeReply(text).rejected).toBe(true);
+  });
+
+  it("pengulangan liar dipotong", () => {
+    const r = sanitizeReply(`Kalau sudah sesuai, bilang ya kak, nanti aku teruskan ke tim kami untuk${"*}{".repeat(400)}`);
+    expect(r).toMatchObject({ rejected: false, changed: true });
+    expect(r.text).toBe("Kalau sudah sesuai, bilang ya kak, nanti aku teruskan ke tim kami untuk");
+  });
+
+  it("kode layanan dan huruf CJK dibuang, em dash diganti koma", () => {
+    const r = sanitizeReply("Pilihan: *Logo Minimalis* (SVC-01) — clean dan modern. Target pasar定位高端 apa kak?");
+    expect(r.text).toBe("Pilihan: *Logo Minimalis*, clean dan modern. Target pasar apa kak?");
+    expect(r.changed).toBe(true);
+  });
+
+  it("koma ganda setelah penggantian em dash dirapikan", () => {
+    expect(sanitizeReply("Layanan kami: logo, banner, — dan konten media sosial ya kak.").text).toBe(
+      "Layanan kami: logo, banner, dan konten media sosial ya kak.",
+    );
+  });
+
+  it("titik-titik atau garis pendek tidak dipotong", () => {
+    const text = "Tunggu sebentar ya kak............ tim kami sedang cek. ------------";
+    expect(sanitizeReply(text)).toMatchObject({ rejected: false, changed: false });
+  });
+
+  it("sisa terlalu pendek → ditolak", () => {
+    expect(sanitizeReply("经营者业务的 ok").rejected).toBe(true);
+  });
+});
