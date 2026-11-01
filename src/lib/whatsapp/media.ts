@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getClient } from "@/lib/storage";
 import { getWhatsAppEnv } from "./env";
 import { MediaTooLargeError, downloadMediaContent, getMediaInfo } from "./client-api";
@@ -112,4 +113,15 @@ export async function movePrivateMedia(fromKey: string, toKey: string): Promise<
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: fromKey })).catch((error: Error) => {
     console.error("[whatsapp] gagal menghapus media lama:", error.name);
   });
+}
+
+// Media privat (termasuk bukti transfer) hanya lewat presigned URL berumur pendek (§16).
+export const PRIVATE_MEDIA_URL_TTL_SECONDS = 600;
+
+export function getPrivateMediaUrl(storageKey: string): Promise<string> {
+  return getSignedUrl(
+    getClient(),
+    new GetObjectCommand({ Bucket: getWhatsAppEnv().STORAGE_PRIVATE_BUCKET, Key: storageKey }),
+    { expiresIn: PRIVATE_MEDIA_URL_TTL_SECONDS },
+  );
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getCurrentUser } from "@/lib/auth/session";
+import { requireOwner } from "@/lib/auth/require-owner";
 import { getAiEnvDefaults, isWhatsAppConfigured } from "@/lib/whatsapp/env";
 import { aiBaseUrlSchema, aiModelSchema } from "@/lib/whatsapp/ai/ai-config";
 import { getModelProfile } from "@/lib/whatsapp/ai/model-profile";
@@ -32,13 +32,6 @@ function toDto(row: Overrides | null) {
 }
 
 const select = { waBotEnabled: true, waAiModel: true, waAiExtractionModel: true, waAiBaseUrl: true } as const;
-
-async function requireOwner() {
-  const user = await getCurrentUser();
-  if (!user) return { error: NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 }) };
-  if (!user.roles.includes("OWNER")) return { error: NextResponse.json({ error: "FORBIDDEN" }, { status: 403 }) };
-  return { user };
-}
 
 export async function GET() {
   const auth = await requireOwner();

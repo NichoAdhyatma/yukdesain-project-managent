@@ -179,3 +179,12 @@ export const DP_PERCENT = 50;
 
 // Batas bukti transfer per order WA; lewat dari ini percakapan dialihkan ke admin (§17).
 export const WA_MAX_PAYMENT_PROOFS_PER_INTAKE = 5;
+
+// Message template WhatsApp (kategori Utility, bahasa id) untuk pesan di luar
+// jendela 24 jam. Isi template: docs/WHATSAPP_TEMPLATES.md. Urutan parameter wajib sama.
+export const WA_TEMPLATES = {
+  OFFER: "yd_penawaran_order", // nama, layanan, harga, DP, deadline
+  DP_VERIFIED: "yd_dp_terverifikasi", // nama, kode project, link tracking
+  DP_REJECTED: "yd_dp_ditolak", // nama, alasan
+  CANCELLED: "yd_order_dibatalkan", // nama, alasan
+} as const;

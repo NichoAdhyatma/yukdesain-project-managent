@@ -1,5 +1,6 @@
 import type { WaIntakeStatus } from "@prisma/client";
 import { DP_PERCENT } from "@/lib/constants";
+import { formatRupiah, formatTanggal } from "../format";
 import type { BriefDraft, BriefKey } from "./brief-schema";
 
 // System prompt statis (sama untuk setiap request → bisa di-cache) + blok STATE
@@ -99,9 +100,8 @@ export type StateInput = {
   pendingImageMessageIds: string[];
 };
 
-const rupiah = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
-const tanggal = (d: Date) =>
-  d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Jakarta" });
+const rupiah = formatRupiah;
+const tanggal = formatTanggal;
 
 /** Blok STATE: sumber kebenaran untuk AI, dibangun dari DB setiap pesan (§10.3). */
 export function buildStateBlock(input: StateInput): string {
