@@ -7,6 +7,7 @@ import { IntakeError, type IntakeErrorCode } from "./intake";
 import { isWithinServiceWindow } from "./outbound";
 import { getPrivateMediaUrl } from "./media";
 import { maskPhone } from "./phone";
+import { getAppPublicUrl } from "./env";
 
 // Bagian bersama route /api/wa-intakes/* (owner). DTO dibangun eksplisit (AGENTS.md §36).
 
@@ -204,4 +205,10 @@ export async function toDetail(row: DetailRow) {
 
 export async function findIntakeForDetail(id: string) {
   return prisma.waIntake.findUnique({ where: { id }, include: detailInclude });
+}
+
+/** URL publik link tracking klien: APP_PUBLIC_URL, atau Origin request owner. */
+export function trackingUrl(request: Request, token: string): string {
+  const base = getAppPublicUrl() ?? request.headers.get("origin") ?? new URL(request.url).origin;
+  return `${base.replace(/\/+$/, "")}/client/${token}`;
 }

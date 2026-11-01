@@ -116,6 +116,26 @@ describe("createProject", () => {
     expect(project).toMatchObject({ status: "BELUM_DIKERJAKAN" });
   });
 
+  it("alur WA: status pembayaran & detail payment opsional", async () => {
+    const db = makeDb();
+    const { project, invoice, payment } = await createProject(asDb(db), {
+      ...base,
+      paidAmount: 2500000,
+      status: "BELUM_DIKERJAKAN",
+      paymentStatus: "PAID",
+      payment: { method: "Transfer BCA", reference: "TRX1", notes: "via WA" },
+    });
+    expect(project).toMatchObject({ status: "BELUM_DIKERJAKAN", paymentStatus: "PAID" });
+    expect(invoice).toMatchObject({ status: "PAID" });
+    expect(payment).toMatchObject({ amount: 2500000, method: "Transfer BCA", reference: "TRX1", notes: "via WA" });
+  });
+
+  it("tanpa parameter WA, payment tidak membawa method/reference (sama seperti route lama)", async () => {
+    const db = makeDb();
+    await createProject(asDb(db), { ...base, paidAmount: 1000000 });
+    expect(db.payment.create.mock.calls[0][0].data).not.toHaveProperty("method");
+  });
+
   it("generate ulang kode project jika bentrok", async () => {
     const db = makeDb({ clash: true });
     await createProject(asDb(db), base);

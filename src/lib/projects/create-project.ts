@@ -1,4 +1,4 @@
-import type { Prisma, ProjectStatus } from "@prisma/client";
+import type { PaymentStatus, Prisma, ProjectStatus } from "@prisma/client";
 import { generateProjectCode } from "@/lib/project-code";
 
 // Diekstrak dari POST /api/projects supaya alur WhatsApp (approve-intake) memakai
@@ -43,6 +43,9 @@ export type CreateProjectInput = {
   deadline: string | number | Date;
   notes?: string | null;
   status?: ProjectStatus; // alur lama: DRAFT (brief belum masuk); alur WA: BELUM_DIKERJAKAN
+  // Opsional, hanya dipakai alur WA. Alur lama tidak mengirimnya → perilaku tetap.
+  paymentStatus?: PaymentStatus;
+  payment?: { method?: string | null; reference?: string | null; notes?: string | null };
 };
 
 /**
@@ -66,7 +69,7 @@ export async function createProject(db: Db, input: CreateProjectInput) {
       deadline: new Date(deadline),
       notes,
       status: input.status ?? "DRAFT",
-      paymentStatus: (paidAmount ?? 0) > 0 ? "PARTIALLY_PAID" : "UNPAID",
+      paymentStatus: input.paymentStatus ?? ((paidAmount ?? 0) > 0 ? "PARTIALLY_PAID" : "UNPAID"),
     },
     include: {
       client: true,
@@ -115,6 +118,11 @@ export async function createProject(db: Db, input: CreateProjectInput) {
             amount: project.paidAmount,
             date: now,
             recordedBy: ownerId,
+            ...(input.payment && {
+              method: input.payment.method ?? null,
+              reference: input.payment.reference ?? null,
+              notes: input.payment.notes ?? null,
+            }),
           },
         })
       : null;

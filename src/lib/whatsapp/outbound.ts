@@ -73,6 +73,17 @@ export function offerMessage(p: {
   };
 }
 
+export function dpVerifiedMessage(p: { clientName: string | null; projectNumber: string; trackingUrl: string }): OutboundMessage {
+  return {
+    kind: "dp_verified",
+    text: `${greet(p.clientName)}, pembayaran DP sudah kami verifikasi. Order kamu sudah jadi project dengan kode *${p.projectNumber}*.\n\nPantau progres project di:\n${p.trackingUrl}`,
+    template: {
+      name: WA_TEMPLATES.DP_VERIFIED,
+      params: [templateParam(p.clientName ?? "Kak"), p.projectNumber, p.trackingUrl],
+    },
+  };
+}
+
 export function dpRejectedMessage(p: { clientName: string | null; serviceName: string; reason: string }): OutboundMessage {
   return {
     kind: "dp_rejected",

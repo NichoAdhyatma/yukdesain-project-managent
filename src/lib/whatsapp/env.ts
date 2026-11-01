@@ -84,6 +84,17 @@ export function getAiEnvDefaults(): { model: string; extractionModel: string; ba
   };
 }
 
+// URL publik portal untuk link tracking yang dikirim ke klien. Opsional; jika kosong,
+// diambil dari Origin request owner (approve selalu dipicu dari portal).
+const appUrlSchema = z.url({ protocol: /^https?$/ }).transform((u) => u.replace(/\/+$/, ""));
+
+export function getAppPublicUrl(): string | null {
+  const raw = process.env.APP_PUBLIC_URL?.trim();
+  if (!raw) return null;
+  const parsed = appUrlSchema.safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
 export function isWhatsAppConfigured(): boolean {
   return whatsAppEnvSchema.safeParse(normalize(process.env)).success;
 }
