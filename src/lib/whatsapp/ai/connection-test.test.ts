@@ -5,7 +5,7 @@ vi.mock("./ai-config", () => ({ getAnthropicClient: () => ({ messages: { create 
 
 import { testAiConnection } from "./connection-test";
 
-const config = { model: "claude-sonnet-4-6", extractionModel: "x", baseUrl: "https://gw.example", maxTokens: 800 };
+const config = { model: "claude-sonnet-4-6", extractionModel: "claude-sonnet-4-6", baseUrl: "https://gw.example", maxTokens: 800 };
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -40,5 +40,22 @@ describe("testAiConnection", () => {
     const checks = await testAiConnection(config);
     expect(checks.every((c) => !c.ok)).toBe(true);
     expect(checks[0].detail).toBe("HTTP 401: invalid x-api-key sk-***");
+  });
+});
+
+describe("model ekstraksi berbeda", () => {
+  it("diuji terpisah dan gagalnya terlihat", async () => {
+    create
+      .mockResolvedValueOnce({ stop_reason: "tool_use", content: [{ type: "tool_use", name: "save_color", input: {} }] })
+      .mockResolvedValueOnce({ stop_reason: "end_turn", content: [{ type: "text", text: "coklat" }] })
+      .mockRejectedValueOnce(Object.assign(new Error("model not found"), { status: 404 }));
+    const checks = await testAiConnection({ ...config, extractionModel: "claude-sonnet-5-5" });
+    expect(checks.map((c) => [c.name, c.ok])).toEqual([
+      ["Tool use", true],
+      ["Gambar", true],
+      ["Model ekstraksi", false],
+    ]);
+    expect(create.mock.calls[2][0].model).toBe("claude-sonnet-5-5");
+    expect(checks[2].detail).toBe("HTTP 404: model not found");
   });
 });

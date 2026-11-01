@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
 import { getClient } from "@/lib/storage";
 import { getWhatsAppEnv } from "./env";
@@ -95,4 +95,21 @@ export async function readPrivateMedia(storageKey: string): Promise<Buffer> {
 export function mimeFromStorageKey(storageKey: string): AllowedMime {
   const ext = storageKey.split(".").pop();
   return ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+}
+
+/** Pindahkan objek di dalam bucket privat (salin lalu hapus sumber, hapus bersifat best-effort). */
+export async function movePrivateMedia(fromKey: string, toKey: string): Promise<void> {
+  const bucket = getWhatsAppEnv().STORAGE_PRIVATE_BUCKET;
+  const client = getClient();
+  await client.send(
+    new CopyObjectCommand({
+      Bucket: bucket,
+      Key: toKey,
+      CopySource: `${bucket}/${encodeURIComponent(fromKey).replace(/%2F/g, "/")}`,
+    }),
+  );
+  // Salinan baru sudah ada; sisa di prefix lama tetap privat, jadi gagal hapus cukup dicatat.
+  await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: fromKey })).catch((error: Error) => {
+    console.error("[whatsapp] gagal menghapus media lama:", error.name);
+  });
 }

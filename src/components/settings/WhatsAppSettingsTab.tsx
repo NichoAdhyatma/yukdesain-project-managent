@@ -328,8 +328,8 @@ export function WhatsAppSettingsTab() {
         <CardHeader>
           <CardTitle>Uji koneksi</CardTitle>
           <CardDescription>
-            Mengirim dua request kecil (tool use dan gambar) memakai pengaturan yang sudah disimpan. Tidak memakai data
-            klien.
+            Mengirim beberapa request kecil (tool use, gambar, dan model ekstraksi jika berbeda) memakai pengaturan yang
+            sudah disimpan. Tidak memakai data klien.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

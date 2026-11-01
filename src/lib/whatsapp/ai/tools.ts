@@ -1,10 +1,14 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { Prisma } from "@prisma/client";
+import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { copyToPublicBucket } from "@/lib/storage";
 import { getWhatsAppEnv } from "../env";
-import { mimeFromStorageKey } from "../media";
+import { mimeFromStorageKey, movePrivateMedia, readPrivateMedia } from "../media";
+import { WA_MAX_PAYMENT_PROOFS_PER_INTAKE } from "@/lib/constants";
+import { getAiConfig } from "./ai-config";
+import { computeProofFlags, extractPaymentProof, type PaymentExtraction } from "./extract-payment-proof";
 import {
   ACTIVE_INTAKE_STATUSES,
   IntakeError,
@@ -100,6 +104,17 @@ export const INTAKE_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "submit_payment_proof",
+    description:
+      "Kirim gambar bukti transfer DP dari klien untuk dicek tim. Hanya saat status QUOTED dan gambar terlihat seperti bukti transfer. message_id dari STATE.",
+    input_schema: {
+      type: "object",
+      properties: { message_id: { type: "string" } },
+      required: ["message_id"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "cancel_intake",
     description: "Batalkan order aktif atas permintaan klien (hanya sebelum bukti transfer dikirim).",
     input_schema: {
@@ -136,6 +151,7 @@ const inputs = {
     email: z.email().max(200).optional().or(z.literal("").transform(() => undefined)),
   }),
   confirm_brief: z.object({ summary: z.string().trim().min(1).max(3000) }),
+  submit_payment_proof: z.object({ message_id: z.string().min(1) }),
   cancel_intake: z.object({ reason: z.string().trim().min(1).max(500) }),
   request_human_handoff: z.object({ reason: z.string().trim().min(1).max(500) }),
 } satisfies Record<string, z.ZodType>;
@@ -286,6 +302,102 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     const intake = await requireActiveIntake(ctx);
     const status = await confirmBrief(prisma, { intakeId: intake.id, summary: input.summary });
     return ok({ status, message: "Brief tersimpan. Beri tahu klien bahwa tim akan mengirim harga dan estimasi." });
+  },
+
+  async submit_payment_proof(ctx, input) {
+    const intake = await requireActiveIntake(ctx);
+    if (intake.status !== "QUOTED") {
+      return fail("Bukti transfer hanya bisa dikirim setelah tim memberi harga dan sebelum dicek", {
+        status: intake.status,
+      });
+    }
+
+    const message = await prisma.waMessage.findFirst({
+      where: { id: input.message_id, conversationId: ctx.conversationId, direction: "INBOUND", type: "image" },
+      select: { id: true, mediaStorageKey: true },
+    });
+    if (!message?.mediaStorageKey) return fail("Gambar tidak ditemukan di percakapan ini");
+
+    const quote = await prisma.waIntake.findUniqueOrThrow({
+      where: { id: intake.id },
+      select: { agreedPrice: true, dpAmount: true, quotedAt: true, _count: { select: { paymentProofs: true } } },
+    });
+    if (quote.agreedPrice === null || quote.dpAmount === null) return fail("Harga order belum lengkap");
+
+    if (quote._count.paymentProofs >= WA_MAX_PAYMENT_PROOFS_PER_INTAKE) {
+      await prisma.waConversation.update({ where: { id: ctx.conversationId }, data: { mode: "HUMAN" } });
+      return ok({
+        handedOff: true,
+        message: "Batas pengiriman bukti tercapai. Beri tahu klien bahwa admin akan membantu langsung.",
+      });
+    }
+
+    const data = await readPrivateMedia(message.mediaStorageKey);
+    const mimeType = mimeFromStorageKey(message.mediaStorageKey);
+    const imageSha256 = createHash("sha256").update(data).digest("hex");
+
+    const resent = await prisma.paymentProof.findFirst({
+      where: { intakeId: intake.id, imageSha256 },
+      select: { id: true },
+    });
+    if (resent) return fail("Gambar ini sudah pernah dikirim untuk order ini. Minta klien mengirim bukti transfer yang baru.");
+
+    // Bukti transfer tetap di bucket privat, dipindah ke prefix khusus (§16).
+    const ext = message.mediaStorageKey.split(".").pop() ?? "jpg";
+    const storageKey = `payment-proofs/${intake.id}/${randomBytes(16).toString("hex")}.${ext}`;
+    await movePrivateMedia(message.mediaStorageKey, storageKey);
+    await prisma.waMessage.update({ where: { id: message.id }, data: { mediaStorageKey: storageKey } });
+
+    // Gagal membaca bukan alasan menolak bukti: admin tetap bisa mengecek manual.
+    let extraction: PaymentExtraction | null = null;
+    try {
+      extraction = await extractPaymentProof({ data, mimeType }, await getAiConfig());
+    } catch (error) {
+      const status = (error as { status?: number }).status;
+      console.error(`[whatsapp] ekstraksi bukti transfer gagal: ${status ? `api_${status}` : (error as Error).name}`);
+    }
+
+    const [duplicateImage, duplicateReference, paymentAccounts] = await Promise.all([
+      prisma.paymentProof.count({ where: { imageSha256 } }).then((n) => n > 0),
+      extraction?.referenceNo
+        ? prisma.paymentProof
+            .count({ where: { aiExtraction: { path: ["referenceNo"], equals: extraction.referenceNo } } })
+            .then((n) => n > 0)
+        : Promise.resolve(false),
+      prisma.paymentAccount.findMany({
+        where: { isActive: true },
+        select: { accountNumber: true, accountHolder: true },
+      }),
+    ]);
+
+    const aiFlags = computeProofFlags(extraction, {
+      dpAmount: quote.dpAmount,
+      agreedPrice: quote.agreedPrice,
+      quotedAt: quote.quotedAt,
+      paymentAccounts,
+      duplicateImage,
+      duplicateReference,
+    });
+
+    await prisma.$transaction(async (tx) => {
+      await tx.paymentProof.create({
+        data: {
+          intakeId: intake.id,
+          storageKey,
+          mimeType,
+          imageSha256,
+          aiExtraction: extraction ?? Prisma.JsonNull,
+          aiFlags,
+        },
+      });
+      await transitionIntake(tx, { intakeId: intake.id, from: "QUOTED", action: "submit_proof", actor: "AI" });
+    });
+
+    // Flag hanya untuk admin; tidak dikirim ke model maupun klien.
+    return ok({
+      status: "DP_REVIEW",
+      message: 'Bukti diterima. Beri tahu klien: "Bukti sudah kami terima, sedang dicek tim kami." Jangan bilang DP valid.',
+    });
   },
 
   async cancel_intake(ctx, input) {

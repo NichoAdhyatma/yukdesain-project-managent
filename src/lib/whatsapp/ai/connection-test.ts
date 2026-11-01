@@ -3,7 +3,7 @@ import { getAnthropicClient, type AiConfig } from "./ai-config";
 import { modelRequestOptions } from "./model-profile";
 
 // Uji koneksi dari Settings: pastikan base URL + key + model mendukung yang dipakai bot
-// (system prompt, tool use, gambar). Request kecil, tanpa data klien.
+// (system prompt, tool use, gambar) dan model ekstraksi tersedia. Request kecil, tanpa data klien.
 
 export type ConnectionCheck = { name: string; ok: boolean; detail: string };
 
@@ -70,6 +70,27 @@ export async function testAiConnection(config: AiConfig): Promise<ConnectionChec
     },
     (r) => (r.content.some((b) => b.type === "text" && b.text.trim()) ? null : "Tidak ada jawaban teks"),
   );
+
+  // Bukti transfer dibaca model ekstraksi; pastikan model itu juga tersedia di endpoint ini.
+  if (config.extractionModel !== config.model) {
+    await run(
+      "Model ekstraksi",
+      {
+        model: config.extractionModel,
+        max_tokens: 300,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: "image/png", data: TINY_PNG } },
+              { type: "text", text: "Sebutkan warna gambar ini dalam satu kata." },
+            ],
+          },
+        ],
+      },
+      (r) => (r.content.some((b) => b.type === "text" && b.text.trim()) ? null : "Tidak ada jawaban teks"),
+    );
+  }
 
   return checks;
 }

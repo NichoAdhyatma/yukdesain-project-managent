@@ -3,8 +3,17 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => {
   const d = {
     service: { findMany: vi.fn(), findFirst: vi.fn() },
-    waIntake: { findFirst: vi.fn(), findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
-    waMessage: { findFirst: vi.fn() },
+    waIntake: {
+      findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    waMessage: { findFirst: vi.fn(), update: vi.fn() },
+    paymentProof: { findFirst: vi.fn(), count: vi.fn(), create: vi.fn() },
+    paymentAccount: { findMany: vi.fn() },
     waConversation: { update: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
@@ -17,6 +26,18 @@ const storage = vi.hoisted(() => ({ copyToPublicBucket: vi.fn() }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/storage", () => storage);
 vi.mock("../env", () => ({ getWhatsAppEnv: () => ({ STORAGE_PRIVATE_BUCKET: "private-bucket" }) }));
+const media = vi.hoisted(() => ({
+  movePrivateMedia: vi.fn(),
+  readPrivateMedia: vi.fn(),
+  mimeFromStorageKey: (k: string) => (k.endsWith(".png") ? "image/png" : "image/jpeg"),
+}));
+vi.mock("../media", () => media);
+vi.mock("./ai-config", () => ({ getAiConfig: async () => ({ extractionModel: "x", baseUrl: "https://x" }) }));
+const extraction = vi.hoisted(() => ({ extractPaymentProof: vi.fn() }));
+vi.mock("./extract-payment-proof", async (orig) => ({
+  ...(await orig<typeof import("./extract-payment-proof")>()),
+  extractPaymentProof: extraction.extractPaymentProof,
+}));
 
 import { INTAKE_TOOLS, executeTool } from "./tools";
 
@@ -51,6 +72,7 @@ describe("definisi tool", () => {
       "attach_image_to_brief",
       "set_client_profile",
       "confirm_brief",
+      "submit_payment_proof",
       "cancel_intake",
       "request_human_handoff",
     ]);
@@ -243,5 +265,104 @@ describe("tool lain", () => {
   it("request_human_handoff → mode HUMAN", async () => {
     await run("request_human_handoff", { reason: "minta diskon" });
     expect(db.waConversation.update).toHaveBeenCalledWith({ where: { id: "conv_1" }, data: { mode: "HUMAN" } });
+  });
+});
+
+describe("submit_payment_proof", () => {
+  const receipt = {
+    isTransferReceipt: true,
+    amount: 750000,
+    transferDate: "2026-11-02",
+    senderName: "SARI",
+    recipientName: "YUKDESAIN STUDIO",
+    recipientAccount: "1234567890",
+    bankOrWallet: "BCA",
+    referenceNo: "TRX1",
+    readability: "clear",
+  };
+
+  beforeEach(() => {
+    db.waIntake.findFirst.mockResolvedValue(activeIntake({ status: "QUOTED" }));
+    db.waMessage.findFirst.mockResolvedValue({ id: "msg_bukti", mediaStorageKey: "wa-media/conv_1/abc.jpg" });
+    db.waIntake.findUniqueOrThrow.mockResolvedValue({
+      agreedPrice: 1500000,
+      dpAmount: 750000,
+      quotedAt: new Date("2026-11-01T03:00:00Z"),
+      _count: { paymentProofs: 0 },
+    });
+    db.paymentProof.findFirst.mockResolvedValue(null);
+    db.paymentProof.count.mockResolvedValue(0);
+    db.paymentAccount.findMany.mockResolvedValue([{ accountNumber: "1234567890", accountHolder: "YukDesain Studio" }]);
+    media.readPrivateMedia.mockResolvedValue(Buffer.from("BUKTI"));
+    extraction.extractPaymentProof.mockResolvedValue(receipt);
+  });
+
+  it("pindah ke payment-proofs/, simpan ekstraksi + flag, status → DP_REVIEW", async () => {
+    const r = await run("submit_payment_proof", { message_id: "msg_bukti" });
+
+    expect(r).toMatchObject({ isError: false, data: { status: "DP_REVIEW" } });
+    const [from, to] = media.movePrivateMedia.mock.calls[0];
+    expect(from).toBe("wa-media/conv_1/abc.jpg");
+    expect(to).toMatch(/^payment-proofs\/in_1\/[0-9a-f]{32}\.jpg$/);
+    expect(db.waMessage.update).toHaveBeenCalledWith({ where: { id: "msg_bukti" }, data: { mediaStorageKey: to } });
+
+    const created = db.paymentProof.create.mock.calls[0][0].data;
+    expect(created).toMatchObject({ intakeId: "in_1", storageKey: to, mimeType: "image/jpeg", aiExtraction: receipt, aiFlags: [] });
+    expect(created.imageSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(db.waIntake.updateMany).toHaveBeenCalledWith({
+      where: { id: "in_1", status: "QUOTED" },
+      data: { status: "DP_REVIEW" },
+    });
+  });
+
+  it("flag tidak pernah dikirim balik ke model", async () => {
+    extraction.extractPaymentProof.mockResolvedValue({ ...receipt, amount: 100000 });
+    const r = await run("submit_payment_proof", { message_id: "msg_bukti" });
+    expect(db.paymentProof.create.mock.calls[0][0].data.aiFlags).toEqual(["AMOUNT_BELOW_DP", "AMOUNT_MISMATCH"]);
+    expect(r.content).not.toMatch(/AMOUNT|flag/i);
+  });
+
+  it("ekstraksi gagal → bukti tetap tersimpan dengan UNREADABLE", async () => {
+    extraction.extractPaymentProof.mockRejectedValue(new Error("timeout"));
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const r = await run("submit_payment_proof", { message_id: "msg_bukti" });
+    expect(r.isError).toBe(false);
+    expect(db.paymentProof.create.mock.calls[0][0].data.aiFlags).toEqual(["UNREADABLE"]);
+  });
+
+  it("gambar yang sama dipakai di order lain → DUPLICATE_IMAGE", async () => {
+    db.paymentProof.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+    await run("submit_payment_proof", { message_id: "msg_bukti" });
+    expect(db.paymentProof.create.mock.calls[0][0].data.aiFlags).toContain("DUPLICATE_IMAGE");
+  });
+
+  it.each(["COLLECTING", "AWAITING_QUOTE"])("status %s → ditolak", async (status) => {
+    db.waIntake.findFirst.mockResolvedValue(activeIntake({ status }));
+    expect((await run("submit_payment_proof", { message_id: "msg_bukti" })).isError).toBe(true);
+    expect(media.movePrivateMedia).not.toHaveBeenCalled();
+  });
+
+  it("gambar bukan milik percakapan ini → ditolak", async () => {
+    db.waMessage.findFirst.mockResolvedValue(null);
+    expect((await run("submit_payment_proof", { message_id: "msg_lain" })).isError).toBe(true);
+  });
+
+  it("gambar yang sama dikirim ulang untuk order ini → ditolak", async () => {
+    db.paymentProof.findFirst.mockResolvedValue({ id: "proof_lama" });
+    expect((await run("submit_payment_proof", { message_id: "msg_bukti" })).isError).toBe(true);
+    expect(media.movePrivateMedia).not.toHaveBeenCalled();
+  });
+
+  it("sudah 5 bukti → dialihkan ke admin tanpa membuat bukti baru", async () => {
+    db.waIntake.findUniqueOrThrow.mockResolvedValue({
+      agreedPrice: 1500000,
+      dpAmount: 750000,
+      quotedAt: new Date(),
+      _count: { paymentProofs: 5 },
+    });
+    const r = await run("submit_payment_proof", { message_id: "msg_bukti" });
+    expect(r.data.handedOff).toBe(true);
+    expect(db.waConversation.update).toHaveBeenCalledWith({ where: { id: "conv_1" }, data: { mode: "HUMAN" } });
+    expect(db.paymentProof.create).not.toHaveBeenCalled();
   });
 });

@@ -100,3 +100,23 @@ describe("storeInboundMedia", () => {
     await expect(storeInboundMedia("msg_1")).rejects.toThrow("bukan gambar");
   });
 });
+
+describe("movePrivateMedia", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("salin lalu hapus di bucket privat", async () => {
+    s3Send.mockResolvedValue({});
+    const { movePrivateMedia } = await import("./media");
+    await movePrivateMedia("wa-media/c/a.jpg", "payment-proofs/i/b.jpg");
+    const [copy, del] = s3Send.mock.calls.map(([cmd]) => cmd.input);
+    expect(copy).toMatchObject({ Bucket: "private-bucket", Key: "payment-proofs/i/b.jpg", CopySource: "private-bucket/wa-media/c/a.jpg" });
+    expect(del).toEqual({ Bucket: "private-bucket", Key: "wa-media/c/a.jpg" });
+  });
+
+  it("gagal hapus sumber tidak menggagalkan pemindahan", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    s3Send.mockResolvedValueOnce({}).mockRejectedValueOnce(Object.assign(new Error("x"), { name: "NoSuchKey" }));
+    const { movePrivateMedia } = await import("./media");
+    await expect(movePrivateMedia("wa-media/c/a.jpg", "payment-proofs/i/b.jpg")).resolves.toBeUndefined();
+  });
+});

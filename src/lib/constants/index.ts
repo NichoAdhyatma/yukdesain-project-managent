@@ -176,3 +176,6 @@ export const CURRENCY_LOCALE = "id-ID";
 
 // DP untuk order via WhatsApp: persentase dari harga yang diisi admin.
 export const DP_PERCENT = 50;
+
+// Batas bukti transfer per order WA; lewat dari ini percakapan dialihkan ke admin (§17).
+export const WA_MAX_PAYMENT_PROOFS_PER_INTAKE = 5;
