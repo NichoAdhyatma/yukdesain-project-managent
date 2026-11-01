@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { briefResponsesToEntries } from "@/lib/brief/responses";
 
 export async function POST(
   request: Request,
@@ -43,13 +44,7 @@ export async function POST(
     } else if (Array.isArray(responses)) {
       formattedResponses = responses;
     } else {
-      formattedResponses = Object.entries(responses || body)
-        .filter(([, value]) => value !== undefined && value !== null && value !== "")
-        .map(([key, value]) => ({
-          questionId: key,
-          question: key.replace(/_/g, " "),
-          answer: typeof value === "object" ? JSON.stringify(value) : String(value),
-        }));
+      formattedResponses = briefResponsesToEntries(responses || body);
     }
 
     if (!formattedResponses || formattedResponses.length === 0) {

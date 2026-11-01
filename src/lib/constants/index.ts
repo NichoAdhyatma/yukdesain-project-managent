@@ -171,3 +171,8 @@ export const STUDIO_DEFAULTS = {
 
 export const CURRENCY_SYMBOL = "Rp";
 export const CURRENCY_LOCALE = "id-ID";
+
+// ===== WHATSAPP ORDER INTAKE (docs/WHATSAPP_AI_CHATBOT.md §2) =====
+
+// DP untuk order via WhatsApp: persentase dari harga yang diisi admin.
+export const DP_PERCENT = 50;
