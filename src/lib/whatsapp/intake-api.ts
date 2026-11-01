@@ -108,6 +108,7 @@ export const detailInclude = {
     },
   },
   service: { select: { id: true, code: true, name: true } },
+  project: { select: { id: true, projectNumber: true } },
   paymentProofs: {
     orderBy: { createdAt: "desc" },
     select: {
@@ -187,6 +188,7 @@ export async function toDetail(row: DetailRow) {
     },
     cancelReason: row.cancelReason,
     projectId: row.projectId,
+    project: row.project,
     conversation: {
       id: conversation.id,
       // Nomor lengkap untuk owner (menghubungi klien manual saat pesan gagal)

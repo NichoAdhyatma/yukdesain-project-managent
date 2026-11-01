@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { STUDIO_DEFAULTS } from "@/lib/constants";
@@ -15,10 +16,13 @@ import {
   AlertTriangle,
   RefreshCw,
   GitPullRequest,
+  MessageCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type DashboardMetrics = {
+  // Order WhatsApp yang menunggu tindakan admin
+  waOrders: { awaitingQuote: number; dpReview: number };
   newOrders: number;
   unassignedProjects: number;
   activeProjects: number;
@@ -126,6 +130,35 @@ export function DashboardView({ initialMetrics }: Props) {
           );
         })}
       </div>
+
+      {/* Order WhatsApp yang menunggu tindakan */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <MessageCircle className="h-4 w-4" aria-hidden="true" />
+            Order WhatsApp
+          </CardTitle>
+          <Link href="/wa-orders" className="text-sm text-primary underline-offset-2 hover:underline">
+            Buka Order WA
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {metrics.waOrders.dpReview + metrics.waOrders.awaitingQuote === 0 ? (
+            <p className="text-sm text-muted-foreground">Tidak ada order WhatsApp yang menunggu tindakan.</p>
+          ) : (
+            <dl className="flex flex-wrap gap-x-8 gap-y-2">
+              <div>
+                <dt className="text-sm text-muted-foreground">Verifikasi DP</dt>
+                <dd className="text-2xl font-bold tabular-nums">{metrics.waOrders.dpReview}</dd>
+              </div>
+              <div>
+                <dt className="text-sm text-muted-foreground">Perlu harga</dt>
+                <dd className="text-2xl font-bold tabular-nums">{metrics.waOrders.awaitingQuote}</dd>
+              </div>
+            </dl>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Financial Summary */}
       <Card className="border-primary/50">

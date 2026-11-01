@@ -235,6 +235,9 @@ function getLabel(questionId: string): string {
   return FIELD_LABELS[questionId] || questionId.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Dipakai juga oleh editor brief Order WA, supaya label field konsisten.
+export const getBriefFieldLabel = getLabel;
+
 function isImageUrl(value: string): boolean {
   if (!value) return false;
   try {
