@@ -588,6 +588,7 @@ model WaMessage {
   direction       WaMessageDirection
   type            String             @default("text") // text | image | template | unsupported
   body            String // teks, atau caption/deskripsi AI untuk gambar
+  mediaId         String? // media id Meta, untuk unduh di after()
   mediaStorageKey String? // key R2 jika gambar
   mediaSha256     String? // dari payload Meta; deteksi duplikat
   sentByBot       Boolean            @default(false)
