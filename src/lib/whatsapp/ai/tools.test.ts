@@ -14,7 +14,8 @@ const db = vi.hoisted(() => {
     waMessage: { findFirst: vi.fn(), update: vi.fn() },
     paymentProof: { findFirst: vi.fn(), count: vi.fn(), create: vi.fn() },
     paymentAccount: { findMany: vi.fn() },
-    waConversation: { update: vi.fn() },
+    waLookupAttempt: { count: vi.fn(), create: vi.fn() },
+    waConversation: { update: vi.fn(), findUniqueOrThrow: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
@@ -34,6 +35,13 @@ const media = vi.hoisted(() => ({
 vi.mock("../media", () => media);
 vi.mock("./ai-config", () => ({ getAiConfig: async () => ({ extractionModel: "x", baseUrl: "https://x" }) }));
 const extraction = vi.hoisted(() => ({ extractPaymentProof: vi.fn() }));
+const dto = vi.hoisted(() => ({ getClientProjectSummaries: vi.fn(), getProjectDetailByCode: vi.fn() }));
+vi.mock("./client-safe-dto", () => dto);
+const phoneLookup = vi.hoisted(() => ({ findClientsByPhone: vi.fn() }));
+vi.mock("@/lib/clients/find-by-phone", () => phoneLookup);
+vi.mock("@/lib/studio", () => ({
+  getStudioSettings: async () => ({ name: "YukDesain Studio", email: "hello@x", phone: "0812", address: "Jakarta", logoUrl: "l", tagline: "t" }),
+}));
 vi.mock("./extract-payment-proof", async (orig) => ({
   ...(await orig<typeof import("./extract-payment-proof")>()),
   extractPaymentProof: extraction.extractPaymentProof,
@@ -63,7 +71,7 @@ beforeEach(() => {
 });
 
 describe("definisi tool", () => {
-  it("tidak ada tool yang bisa mengubah harga, status DP, atau project", () => {
+  it("tidak ada tool penulis yang bisa mengubah harga, status DP, atau project", () => {
     const names = INTAKE_TOOLS.map((t) => t.name);
     expect(names).toEqual([
       "list_services",
@@ -74,9 +82,14 @@ describe("definisi tool", () => {
       "confirm_brief",
       "submit_payment_proof",
       "cancel_intake",
+      "get_my_projects",
+      "get_project_by_code",
+      "get_studio_info",
       "request_human_handoff",
     ]);
-    for (const t of INTAKE_TOOLS) {
+    // Tool penulis tidak punya input untuk harga/deadline/project/nominal.
+    // Tool get_* hanya membaca (diuji di "status project (read-only)").
+    for (const t of INTAKE_TOOLS.filter((tool) => !tool.name.startsWith("get_"))) {
       expect(JSON.stringify(t.input_schema)).not.toMatch(/price|harga|deadline|project|amount/i);
     }
   });
@@ -364,5 +377,75 @@ describe("submit_payment_proof", () => {
     expect(r.data.handedOff).toBe(true);
     expect(db.waConversation.update).toHaveBeenCalledWith({ where: { id: "conv_1" }, data: { mode: "HUMAN" } });
     expect(db.paymentProof.create).not.toHaveBeenCalled();
+  });
+});
+
+describe("status project (read-only)", () => {
+  beforeEach(() => {
+    db.waConversation.findUniqueOrThrow.mockResolvedValue({ waId: "6281234567890", clientId: null });
+    dto.getClientProjectSummaries.mockResolvedValue([{ projectNumber: "PRJ-1" }]);
+  });
+
+  it("nomor cocok dengan tepat satu client → ditautkan & daftar project", async () => {
+    phoneLookup.findClientsByPhone.mockResolvedValue([{ id: "cli_1", name: "Sari" }]);
+    const r = await run("get_my_projects", {});
+    expect(r.data).toEqual({ identified: true, projects: [{ projectNumber: "PRJ-1" }] });
+    expect(db.waConversation.update).toHaveBeenCalledWith({ where: { id: "conv_1" }, data: { clientId: "cli_1" } });
+    expect(dto.getClientProjectSummaries).toHaveBeenCalledWith("cli_1");
+  });
+
+  it("nomor cocok dengan lebih dari satu client → tidak dipilih", async () => {
+    phoneLookup.findClientsByPhone.mockResolvedValue([{ id: "a" }, { id: "b" }]);
+    const r = await run("get_my_projects", {});
+    expect(r.data.identified).toBe(false);
+    expect(dto.getClientProjectSummaries).not.toHaveBeenCalled();
+  });
+
+  it("percakapan sudah tertaut → langsung pakai clientId", async () => {
+    db.waConversation.findUniqueOrThrow.mockResolvedValue({ waId: "628", clientId: "cli_9" });
+    await run("get_my_projects", {});
+    expect(phoneLookup.findClientsByPhone).not.toHaveBeenCalled();
+    expect(dto.getClientProjectSummaries).toHaveBeenCalledWith("cli_9");
+  });
+
+  it("kode benar → detail, percobaan dicatat berhasil", async () => {
+    db.waLookupAttempt.count.mockResolvedValue(0);
+    dto.getProjectDetailByCode.mockResolvedValue({ projectNumber: "PRJ-1", statusLabel: "Selesai" });
+    const r = await run("get_project_by_code", { project_code: "PRJ-1" });
+    expect(r.data.project.projectNumber).toBe("PRJ-1");
+    expect(db.waLookupAttempt.create).toHaveBeenCalledWith({ data: { conversationId: "conv_1", success: true } });
+  });
+
+  it("kode salah → error, percobaan dicatat gagal", async () => {
+    db.waLookupAttempt.count.mockResolvedValue(0);
+    dto.getProjectDetailByCode.mockResolvedValue(null);
+    expect((await run("get_project_by_code", { project_code: "PRJ-X" })).isError).toBe(true);
+    expect(db.waLookupAttempt.create).toHaveBeenCalledWith({ data: { conversationId: "conv_1", success: false } });
+  });
+
+  it("5 kode salah dalam sejam → ditolak tanpa lookup", async () => {
+    db.waLookupAttempt.count.mockResolvedValue(5);
+    const r = await run("get_project_by_code", { project_code: "PRJ-1" });
+    expect(r.isError).toBe(true);
+    expect(dto.getProjectDetailByCode).not.toHaveBeenCalled();
+    expect(db.waLookupAttempt.count.mock.calls[0][0].where).toMatchObject({ conversationId: "conv_1", success: false });
+  });
+
+  it("tool get_* tidak menulis apa pun selain catatan percobaan lookup", async () => {
+    phoneLookup.findClientsByPhone.mockResolvedValue([]);
+    db.waLookupAttempt.count.mockResolvedValue(0);
+    dto.getProjectDetailByCode.mockResolvedValue(null);
+    await run("get_my_projects", {});
+    await run("get_project_by_code", { project_code: "X" });
+    await run("get_studio_info", {});
+    expect(db.waIntake.updateMany).not.toHaveBeenCalled();
+    expect(db.waIntake.update).not.toHaveBeenCalled();
+    expect(db.paymentProof.create).not.toHaveBeenCalled();
+    expect(db.waConversation.update).not.toHaveBeenCalled();
+  });
+
+  it("info studio hanya nama, email, telepon, alamat", async () => {
+    const r = await run("get_studio_info", {});
+    expect(r.data).toEqual({ name: "YukDesain Studio", email: "hello@x", phone: "0812", address: "Jakarta" });
   });
 });

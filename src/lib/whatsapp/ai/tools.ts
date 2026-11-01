@@ -6,8 +6,11 @@ import { prisma } from "@/lib/db";
 import { copyToPublicBucket } from "@/lib/storage";
 import { getWhatsAppEnv } from "../env";
 import { mimeFromStorageKey, movePrivateMedia, readPrivateMedia } from "../media";
-import { WA_MAX_PAYMENT_PROOFS_PER_INTAKE } from "@/lib/constants";
+import { WA_MAX_FAILED_LOOKUPS_PER_HOUR, WA_MAX_PAYMENT_PROOFS_PER_INTAKE } from "@/lib/constants";
 import { getAiConfig } from "./ai-config";
+import { getClientProjectSummaries, getProjectDetailByCode } from "./client-safe-dto";
+import { findClientsByPhone } from "@/lib/clients/find-by-phone";
+import { getStudioSettings } from "@/lib/studio";
 import { computeProofFlags, extractPaymentProof, type PaymentExtraction } from "./extract-payment-proof";
 import {
   ACTIVE_INTAKE_STATUSES,
@@ -125,6 +128,28 @@ export const INTAKE_TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "get_my_projects",
+    description:
+      "Daftar project milik klien yang nomornya terdaftar (maks. 5 terbaru): kode, layanan, status, deadline. Untuk pertanyaan status project.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "get_project_by_code",
+    description:
+      "Status detail satu project berdasarkan kode project yang disebut klien (mis. PRJ-20261101-ABC123). Kode salah dibatasi beberapa kali per jam.",
+    input_schema: {
+      type: "object",
+      properties: { project_code: { type: "string" } },
+      required: ["project_code"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_studio_info",
+    description: "Nama, email, telepon, dan alamat studio.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
     name: "request_human_handoff",
     description:
       "Alihkan percakapan ke admin manusia: klien minta admin, menawar/keberatan harga, atau kamu tidak bisa membantu. Setelah ini bot berhenti membalas.",
@@ -154,6 +179,9 @@ const inputs = {
   submit_payment_proof: z.object({ message_id: z.string().min(1) }),
   cancel_intake: z.object({ reason: z.string().trim().min(1).max(500) }),
   request_human_handoff: z.object({ reason: z.string().trim().min(1).max(500) }),
+  get_my_projects: z.object({}),
+  get_project_by_code: z.object({ project_code: z.string().trim().min(1).max(40) }),
+  get_studio_info: z.object({}),
 } satisfies Record<string, z.ZodType>;
 
 type ToolName = keyof typeof inputs;
@@ -410,6 +438,46 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
       data: { cancelReason: input.reason },
     });
     return ok({ status });
+  },
+
+  // ---- Read-only status project (§10.5, §14) ----
+
+  async get_my_projects(ctx) {
+    const conversation = await prisma.waConversation.findUniqueOrThrow({
+      where: { id: ctx.conversationId },
+      select: { waId: true, clientId: true },
+    });
+    let clientId = conversation.clientId;
+    if (!clientId) {
+      // Identifikasi lewat nomor; lebih dari satu Client yang cocok → tidak dipilih (§15).
+      const matches = await findClientsByPhone(prisma, conversation.waId);
+      if (matches.length !== 1) {
+        return ok({ identified: false, message: "Nomor ini belum terhubung ke project. Minta kode project dari klien." });
+      }
+      clientId = matches[0].id;
+      await prisma.waConversation.update({ where: { id: ctx.conversationId }, data: { clientId } });
+    }
+    return ok({ identified: true, projects: await getClientProjectSummaries(clientId) });
+  },
+
+  async get_project_by_code(ctx, input) {
+    const since = new Date(Date.now() - 60 * 60 * 1000);
+    const failed = await prisma.waLookupAttempt.count({
+      where: { conversationId: ctx.conversationId, success: false, createdAt: { gte: since } },
+    });
+    if (failed >= WA_MAX_FAILED_LOOKUPS_PER_HOUR) {
+      return fail("Terlalu banyak kode yang salah. Minta klien mencoba lagi nanti atau menghubungi admin.");
+    }
+
+    const project = await getProjectDetailByCode(input.project_code);
+    await prisma.waLookupAttempt.create({ data: { conversationId: ctx.conversationId, success: !!project } });
+    if (!project) return fail("Kode project tidak ditemukan. Minta klien memeriksa kodenya.");
+    return ok({ project });
+  },
+
+  async get_studio_info() {
+    const studio = await getStudioSettings();
+    return ok({ name: studio.name, email: studio.email, phone: studio.phone, address: studio.address });
   },
 
   async request_human_handoff(ctx) {

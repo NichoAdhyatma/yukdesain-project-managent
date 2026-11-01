@@ -5,9 +5,9 @@ import { getPublicUrl } from "@/lib/storage";
 import { briefResponsesToEntries } from "@/lib/brief/responses";
 import { generateClientLinkToken } from "@/lib/client-link-token";
 import { createProject } from "@/lib/projects/create-project";
+import { findClientsByPhone } from "@/lib/clients/find-by-phone";
 import { computePaymentStatus } from "@/lib/payments/record-payment";
 import { IntakeError, transitionIntake } from "./intake";
-import { normalizePhone } from "./phone";
 import type { BriefDraft } from "./ai/brief-schema";
 
 // Approve DP order WhatsApp → project lengkap dalam satu transaksi
@@ -89,13 +89,8 @@ async function resolveClient(
     const linked = await tx.client.findUnique({ where: { id: p.linkedClientId }, select: { id: true, name: true } });
     if (linked) return linked;
   }
-  // Nomor tersimpan dalam berbagai format ("0812-9999-0007", "+62 812…"): bandingkan
-  // digitnya saja di DB, lalu pastikan dengan normalizePhone.
-  const candidates = await tx.$queryRaw<{ id: string; name: string; phone: string | null }[]>`
-    SELECT id, name, phone FROM clients
-    WHERE regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') LIKE ${`%${p.waId.slice(-8)}`}`;
-  const matches = candidates.filter((c) => normalizePhone(c.phone) === p.waId);
-  if (matches.length === 1) return { id: matches[0].id, name: matches[0].name };
+  const matches = await findClientsByPhone(tx, p.waId);
+  if (matches.length === 1) return matches[0];
 
   // Simpan dengan phone = waId supaya order berikutnya langsung dikenali.
   return tx.client.create({

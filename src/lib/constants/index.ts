@@ -188,3 +188,6 @@ export const WA_TEMPLATES = {
   DP_REJECTED: "yd_dp_ditolak", // nama, alasan
   CANCELLED: "yd_order_dibatalkan", // nama, alasan
 } as const;
+
+// Percobaan kode project yang salah lewat bot WA, per nomor per jam (§17).
+export const WA_MAX_FAILED_LOOKUPS_PER_HOUR = 5;
