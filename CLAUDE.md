@@ -45,3 +45,7 @@ Never invent:
 - service behavior
 
 When requirements conflict, use the latest approved requirement and document the change.
+
+## Feature guides
+
+- **WhatsApp AI Chatbot & Order Intake** (approved 2026-11-01, v2): read `docs/WHATSAPP_AI_CHATBOT.md` before touching anything under `src/lib/whatsapp/`, `src/app/api/whatsapp/`, `src/app/api/wa-intakes/`, `/wa-orders`, or WhatsApp settings. The AI only writes drafts (brief draft, payment-proof extraction). Price, deadline, DP validity, and project creation are always admin actions in the portal.
