@@ -37,6 +37,7 @@ import { saveAs } from "file-saver";
 import { ReceiptPDF } from "@/components/invoice/ReceiptPDF";
 import { ImageViewer } from "@/components/ui/image-viewer";
 import { SubmitProgressOverlay } from "@/components/ui/submit-progress-overlay";
+import type { ClientLinkDto, ClientPaymentAccountDto } from "@/lib/client-portal/link-dto";
 
 type BriefResponseItem = {
   questionId: string;
@@ -44,72 +45,9 @@ type BriefResponseItem = {
   answer: string;
 };
 
-type ClientLink = {
-  id: string;
-  token: string;
-  status: string;
-  project: {
-    id: string;
-    projectNumber: string;
-    clientName: string;
-    deadline: string;
-    status: string;
-    agreedPrice: number;
-    paidAmount: number;
-    paymentStatus: string;
-    finalSubmittedAt?: string;
-    finalApprovedAt?: string;
-    service: { code: string; name: string };
-    brief: { id: string; responses: BriefResponses } | null;
-    invoices: Array<{
-      id: string;
-      invoiceNumber: string;
-      items: Array<{ description: string; quantity: number; unitPrice: number; total: number }>;
-      subtotal: number;
-      total: number;
-      status: string;
-      issuedAt: string;
-    }>;
-    updates: Array<{
-      id: string;
-      progress: number | null;
-      description: string;
-      author: { name: string };
-      createdAt: string;
-      attachment?: {
-        id: string;
-        filename: string;
-        storageKey: string;
-      } | null;
-    }>;
-    revisions: Array<{
-      id: string;
-      number: number;
-      status: string;
-      description: string;
-      requestedAt: string;
-      attachments: Array<{
-        id: string;
-        filename: string;
-        storageKey: string;
-        mimeType: string;
-      }>;
-    }>;
-    assignments: Array<{
-      designer: { id: string; name: string };
-    }>;
-  } | null;
-};
+type ClientLink = ClientLinkDto;
 
-type PaymentAccount = {
-  id: string;
-  type: string;
-  name: string;
-  accountNumber: string;
-  accountHolder: string;
-  logoUrl?: string;
-  qrisImageUrl?: string;
-};
+type PaymentAccount = ClientPaymentAccountDto;
 
 type TimelineEvent = {
   id: string;
@@ -305,13 +243,13 @@ function HeroBanner({ project, paymentPct, deadlineStr, statusCfg, paymentCfg }:
       </div>
 
       {/* Designer */}
-      {project.assignments?.[0] && (
+      {project.assignedDesigner && (
         <div className="flex items-center gap-2 text-sm">
           <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
             <UserCheck className="h-3.5 w-3.5 text-primary" />
           </div>
           <span className="text-muted-foreground">Designer:</span>
-          <span className="font-medium text-foreground">{project.assignments[0].designer.name}</span>
+          <span className="font-medium text-foreground">{project.assignedDesigner.name}</span>
         </div>
       )}
     </div>
@@ -2023,23 +1961,23 @@ function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEve
 
   if (project.brief) {
     events.push({
-      id: `brief-${project.brief.id}`,
+      id: "brief-submitted",
       type: "brief_submitted",
       title: "Brief Submitted",
       titleShort: shortTitles.brief_submitted,
       description: "Brief berhasil disubmit. Project siap diproses.",
-      date: (project.brief as { submittedAt?: string }).submittedAt || project.brief.id,
+      date: project.brief.submittedAt,
     });
   }
 
-  if (project.assignments?.[0]) {
+  if (project.assignedDesigner) {
     events.push({
-      id: `assigned-${project.assignments[0].designer.id}`,
+      id: "designer-assigned",
       type: "designer_assigned",
       title: "Designer Ditugaskan",
       titleShort: shortTitles.designer_assigned,
-      description: `${project.assignments[0].designer.name} telah ditugaskan untuk project ini.`,
-      date: (project.assignments[0] as unknown as { assignedAt?: string }).assignedAt || new Date().toISOString(),
+      description: `${project.assignedDesigner.name} telah ditugaskan untuk project ini.`,
+      date: project.assignedDesigner.assignedAt,
     });
   }
 
