@@ -98,6 +98,11 @@ export function aiWritableBriefFields(serviceCode: string): BriefKey[] {
   return allowedBriefFields(serviceCode).filter((k) => !(IMAGE_FIELDS as readonly string[]).includes(k));
 }
 
+/** Target gambar yang valid untuk layanan ini (attach_image_to_brief). */
+export function imageTargetFields(serviceCode: string): BriefKey[] {
+  return allowedBriefFields(serviceCode).filter((k) => (IMAGE_FIELDS as readonly string[]).includes(k));
+}
+
 function isEmpty(value: unknown): boolean {
   if (value === undefined || value === null) return true;
   if (typeof value === "string") return value.trim() === "";
@@ -119,10 +124,20 @@ export type BriefValidation =
  * Validasi patch brief. Kunci di luar config layanan ditolak; AI juga tidak boleh
  * menulis field gambar. Nilai null = hapus field.
  */
+// AI: teks/item tanpa gambar. AI_ATTACHMENT: hanya field gambar, dengan URL yang
+// dibuat server dari media WA (attach_image_to_brief). ADMIN: semua field layanan.
+export type BriefFieldSource = "AI" | "AI_ATTACHMENT" | "ADMIN";
+
+function writableFields(serviceCode: string, source: BriefFieldSource): BriefKey[] {
+  if (source === "AI") return aiWritableBriefFields(serviceCode);
+  if (source === "AI_ATTACHMENT") return imageTargetFields(serviceCode);
+  return allowedBriefFields(serviceCode);
+}
+
 export function validateBriefFields(
   serviceCode: string,
   input: unknown,
-  source: "AI" | "ADMIN",
+  source: BriefFieldSource,
 ): BriefValidation {
   if (!getBriefConfig(serviceCode)) {
     return { ok: false, error: `Layanan ${serviceCode} tidak dikenal`, invalidKeys: [] };
@@ -131,7 +146,7 @@ export function validateBriefFields(
     return { ok: false, error: "fields harus berupa objek", invalidKeys: [] };
   }
 
-  const allowed = new Set<string>(source === "AI" ? aiWritableBriefFields(serviceCode) : allowedBriefFields(serviceCode));
+  const allowed = new Set<string>(writableFields(serviceCode, source));
   const entries = Object.entries(input);
   const notAllowed = entries.map(([k]) => k).filter((k) => !allowed.has(k));
   if (notAllowed.length) {

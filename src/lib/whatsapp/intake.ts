@@ -1,6 +1,12 @@
 import type { Prisma, WaIntakeStatus } from "@prisma/client";
 import { DP_PERCENT } from "@/lib/constants";
-import { mergeBriefDraft, missingRequiredFields, validateBriefFields, type BriefDraft } from "./ai/brief-schema";
+import {
+  mergeBriefDraft,
+  missingRequiredFields,
+  validateBriefFields,
+  type BriefDraft,
+  type BriefFieldSource,
+} from "./ai/brief-schema";
 
 // State machine WaIntake (docs/WHATSAPP_AI_CHATBOT.md §3.2). Semua transisi dicek di
 // server; perubahan status selalu memakai status lama di `where` supaya klik ganda
@@ -105,7 +111,7 @@ async function loadIntake(db: Db, intakeId: string) {
   return intake;
 }
 
-export type BriefUpdateSource = "AI" | "ADMIN";
+export type BriefUpdateSource = BriefFieldSource;
 
 /**
  * Gabungkan field ke briefDraft. Dari AWAITING_QUOTE, brief yang berubah wajib
@@ -133,7 +139,7 @@ export async function updateBriefDraft(
   }
 
   const merged = mergeBriefDraft(intake.briefDraft as BriefDraft, validation.data);
-  const reopen = params.source === "AI" && intake.status === "AWAITING_QUOTE";
+  const reopen = params.source !== "ADMIN" && intake.status === "AWAITING_QUOTE";
   const data: Prisma.WaIntakeUpdateManyMutationInput = {
     briefDraft: merged as Prisma.InputJsonValue,
     ...(params.source === "ADMIN" ? { briefEditedByAdmin: true } : {}),

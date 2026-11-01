@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
 import { getClient } from "@/lib/storage";
 import { getWhatsAppEnv } from "./env";
@@ -81,4 +81,18 @@ export async function storeInboundMedia(messageId: string): Promise<StoreMediaRe
   });
 
   return { ok: true, media: { storageKey, mimeType, data } };
+}
+
+/** Baca media dari bucket privat (untuk dikirim ulang ke model). */
+export async function readPrivateMedia(storageKey: string): Promise<Buffer> {
+  const res = await getClient().send(
+    new GetObjectCommand({ Bucket: getWhatsAppEnv().STORAGE_PRIVATE_BUCKET, Key: storageKey }),
+  );
+  if (!res.Body) throw new Error("Media kosong");
+  return Buffer.from(await res.Body.transformToByteArray());
+}
+
+export function mimeFromStorageKey(storageKey: string): AllowedMime {
+  const ext = storageKey.split(".").pop();
+  return ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
 }
