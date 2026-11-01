@@ -52,7 +52,7 @@ export function GlobalRefreshButton() {
       onClick={handleRefresh}
       disabled={isGlobalFetching}
       aria-label="Refresh data"
-      className="shrink-0"
+      className="shrink-0 max-md:size-11"
     >
       <RefreshCw className={`h-4 w-4 ${isGlobalFetching ? "animate-spin" : ""}`} />
     </Button>
