@@ -1,9 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { getWhatsAppEnv, type WhatsAppEnv } from "@/lib/whatsapp/env";
 import { verifySignature } from "@/lib/whatsapp/signature";
 import { parseWebhook } from "@/lib/whatsapp/payload";
 import { applyStatusUpdate, storeInboundMessage } from "@/lib/whatsapp/inbound";
+import { handleInboundMessage } from "@/lib/whatsapp/bot";
+import { maskPhone } from "@/lib/whatsapp/phone";
 
 // Unduh media + panggilan Claude di after() bisa lebih dari 10 detik (§6).
 export const maxDuration = 60;
@@ -59,12 +61,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  const stored: { id: string; waId: string }[] = [];
   try {
     for (const status of parsed.statuses) {
       await applyStatusUpdate(status);
     }
     for (const message of parsed.messages) {
-      await storeInboundMessage(message);
+      const id = await storeInboundMessage(message);
+      if (id) stored.push({ id, waId: message.waId });
     }
   } catch (error) {
     // 500 → Meta mengirim ulang; pesan yang sudah tersimpan akan terlewati via wamid unik.
@@ -72,6 +76,20 @@ export async function POST(request: Request) {
     const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code : (error as Error).name;
     console.error("[whatsapp] gagal menyimpan webhook:", code);
     return new Response("Error", { status: 500 });
+  }
+
+  // Diproses setelah 200 terkirim: Meta mengharapkan balasan cepat.
+  // Pesan duplikat (wamid sudah ada) tidak diproses ulang.
+  if (stored.length) {
+    after(async () => {
+      for (const { id, waId } of stored) {
+        try {
+          await handleInboundMessage(id);
+        } catch (error) {
+          console.error(`[whatsapp] gagal memproses pesan dari ${maskPhone(waId)}:`, (error as Error).name);
+        }
+      }
+    });
   }
 
   return NextResponse.json({ ok: true });

@@ -15,6 +15,7 @@ describe("parseWhatsAppEnv", () => {
     const env = parseWhatsAppEnv(valid);
     expect(env.WHATSAPP_GRAPH_VERSION).toBe("v23.0");
     expect(env.WHATSAPP_TEMPLATE_LANG).toBe("id");
+    expect(env.WHATSAPP_GRAPH_BASE_URL).toBe("https://graph.facebook.com");
     expect(env.WA_AI_MODEL).toBe("claude-haiku-5-5");
     expect(env.WA_AI_EXTRACTION_MODEL).toBe("claude-sonnet-5-5");
     expect(env.WA_AI_MAX_TOKENS).toBe(800);

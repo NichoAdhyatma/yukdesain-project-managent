@@ -17,6 +17,8 @@ const whatsAppEnvSchema = z.object({
     .regex(/^v\d+\.\d+$/, 'format "vNN.N"')
     .default("v23.0"),
   WHATSAPP_TEMPLATE_LANG: nonEmpty.default("id"),
+  // Hanya untuk uji lokal dengan server Graph tiruan; production pakai default.
+  WHATSAPP_GRAPH_BASE_URL: z.url().default("https://graph.facebook.com"),
 
   ANTHROPIC_API_KEY: nonEmpty,
   WA_AI_MODEL: nonEmpty.default("claude-haiku-5-5"),
