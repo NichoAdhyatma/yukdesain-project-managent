@@ -170,6 +170,7 @@ model Client {
 
   // Relations
   projects Project[]
+  waConversations WaConversation[]
 
   @@map("clients")
 }
@@ -190,6 +191,7 @@ model Service {
 
   // Relations
   projects Project[]
+  waIntakes WaIntake[]
 
   @@map("services")
 }
@@ -246,6 +248,7 @@ model Project {
   revisions  Revision[]
   payments   Payment[]
   invoices   Invoice[]
+  waIntake    WaIntake?
 
   @@index([clientId])
   @@index([serviceId])
@@ -370,6 +373,7 @@ enum AttachmentCategory {
   FINAL
   REVISION
   INVOICE
+  PAYMENT_PROOF
 }
 
 // ============================================
@@ -524,7 +528,135 @@ model StudioSettings {
   phone     String   @default("")
   address   String   @default("Jakarta, Indonesia")
   logoUrl   String   @default("")
+  waBotEnabled Boolean  @default(false)
   updatedAt DateTime @updatedAt
 
   @@map("studio_settings")
+}
+
+// ============================================
+// WHATSAPP AI ORDER INTAKE (docs/WHATSAPP_AI_CHATBOT.md §8)
+// ============================================
+
+enum WaConversationMode {
+  BOT
+  HUMAN
+}
+
+enum WaMessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum WaIntakeStatus {
+  COLLECTING
+  AWAITING_QUOTE
+  QUOTED
+  DP_REVIEW
+  APPROVED
+  CANCELLED
+}
+
+enum PaymentProofStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model WaConversation {
+  id            String             @id @default(cuid())
+  waId          String             @unique // "6281234567890"
+  profileName   String?
+  clientId      String?
+  mode          WaConversationMode @default(BOT)
+  lastInboundAt DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  client   Client?     @relation(fields: [clientId], references: [id])
+  messages WaMessage[]
+  intakes  WaIntake[]
+
+  @@index([clientId])
+  @@map("wa_conversations")
+}
+
+model WaMessage {
+  id              String             @id @default(cuid())
+  conversationId  String
+  wamid           String?            @unique
+  direction       WaMessageDirection
+  type            String             @default("text") // text | image | template | unsupported
+  body            String // teks, atau caption/deskripsi AI untuk gambar
+  mediaStorageKey String? // key R2 jika gambar
+  mediaSha256     String? // dari payload Meta; deteksi duplikat
+  sentByBot       Boolean            @default(false)
+  deliveryStatus  String?
+  errorCode       String?
+  createdAt       DateTime           @default(now())
+
+  conversation WaConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([direction, createdAt])
+  @@index([mediaSha256])
+  @@map("wa_messages")
+}
+
+model WaIntake {
+  id                 String         @id @default(cuid())
+  conversationId     String
+  status             WaIntakeStatus @default(COLLECTING)
+  serviceId          String?
+  clientName         String?
+  clientEmail        String?
+  briefDraft         Json           @default("{}") // kunci = BriefResponses (src/components/forms/brief/types.ts)
+  briefSummary       String? // ringkasan yang dikonfirmasi klien
+  briefConfirmedAt   DateTime?
+  briefEditedByAdmin Boolean        @default(false)
+
+  // diisi admin
+  agreedPrice Int?
+  dpAmount    Int? // = ceil(agreedPrice * DP_PERCENT / 100), dihitung server
+  deadline    DateTime?
+  quotedById  String?
+  quotedAt    DateTime?
+
+  projectId    String?  @unique // terisi saat APPROVED
+  cancelReason String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  conversation  WaConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  service       Service?       @relation(fields: [serviceId], references: [id])
+  project       Project?       @relation(fields: [projectId], references: [id])
+  paymentProofs PaymentProof[]
+
+  @@index([status])
+  @@index([conversationId])
+  @@map("wa_intakes")
+}
+
+model PaymentProof {
+  id             String             @id @default(cuid())
+  intakeId       String
+  storageKey     String // di STORAGE_PRIVATE_BUCKET
+  mimeType       String
+  imageSha256    String
+  aiExtraction   Json? // docs/WHATSAPP_AI_CHATBOT.md §11
+  aiFlags        String[] // kode flag, §11.2
+  status         PaymentProofStatus @default(PENDING)
+  verifiedAmount Int? // nominal yang dikonfirmasi admin
+  rejectReason   String?
+  reviewedById   String?
+  reviewedAt     DateTime?
+  paymentId      String?            @unique // Payment yang dibuat saat APPROVED
+  createdAt      DateTime           @default(now())
+
+  intake WaIntake @relation(fields: [intakeId], references: [id], onDelete: Cascade)
+
+  @@index([intakeId])
+  @@index([imageSha256])
+  @@index([status])
+  @@map("payment_proofs")
 }

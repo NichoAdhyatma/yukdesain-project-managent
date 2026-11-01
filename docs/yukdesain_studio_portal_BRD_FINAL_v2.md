@@ -6,7 +6,8 @@
 **Purpose:** Single business-reference document for product, design, development, QA, and AI coding agents.  
 **Product:** YukDesain Studio Portal  
 **Business Type:** Graphic Design Agency / Creative Studio  
-**Target Operational Scale:** Approximately 50–60 clients/orders per month.
+**Target Operational Scale:** Approximately 50–60 clients/orders per month.  
+**Approved Change (2026-11-01):** WhatsApp AI Chatbot & Order Intake — see `docs/WHATSAPP_AI_CHATBOT.md` (§5.2, §7.4, §39 below).
 
 ---
 
@@ -87,12 +88,13 @@ The system must:
 - Responsive UI
 - Required UI states
 - Testing of critical workflow
+- WhatsApp AI Chatbot & Order Intake via WhatsApp Cloud API (approved 2026-11-01, `docs/WHATSAPP_AI_CHATBOT.md`)
 
 ## 3.2 Out of Scope for MVP
 
 Unless explicitly approved later:
 
-- automated WhatsApp messaging
+- ~~automated WhatsApp messaging~~ — moved to In Scope by the 2026-11-01 approval (WhatsApp AI Order Intake only; broadcast, marketing, and automatic reminders remain out of scope)
 - automated payment gateway
 - microservices
 - Redis
@@ -101,7 +103,7 @@ Unless explicitly approved later:
 - unnecessary external integrations
 - automatic financial reconciliation with a bank
 
-WhatsApp remains a communication channel; automation can be added later.
+WhatsApp remains a communication channel. The approved WhatsApp bot automates conversation and draft collection only; YukDesain remains the system of record.
 
 ---
 
@@ -331,6 +333,57 @@ PROJECT COMPLETED
         +--> Financial recap
 ```
 
+## 5.2 Alternative Flow — WhatsApp AI Order Intake (approved 2026-11-01)
+
+The flow in §5.1 remains available and unchanged. An alternative intake path runs through the studio WhatsApp number, served by an AI assistant. Full specification: `docs/WHATSAPP_AI_CHATBOT.md`.
+
+```text
+CLIENT CHATS STUDIO WHATSAPP
+        |
+        v
+AI CONSULTATION (service + brief draft + reference images)
+        |
+        v
+CLIENT CONFIRMS BRIEF SUMMARY
+        |
+        v
+ADMIN SETS PRICE + DEADLINE IN PORTAL (DP = 50%)
+        |
+        v
+BOT SENDS OFFER + DP + STUDIO ACCOUNTS
+        |
+        v
+CLIENT SENDS TRANSFER PROOF (AI reads, system flags anomalies)
+        |
+        v
+ADMIN VERIFIES DP VIA CHECKLIST
+        |
+        +--> Reject (reason required) -> client re-sends proof
+        |
+        v
+SYSTEM CREATES CLIENT + PROJECT + BRIEF + DP PAYMENT + STRUK + TRACKING LINK
+        |
+        v
+BOT SENDS PROJECT CODE + TRACKING LINK
+        |
+        v
+PROJECT READY FOR PRODUCTION (continues at "ADMIN ASSIGNS DESIGNER" in §5.1)
+```
+
+Owner decisions for this flow (must not be changed without new approval):
+
+| Topic | Decision |
+|---|---|
+| Provider | WhatsApp Cloud API (Meta), official |
+| Price | Set by admin after the client confirms the brief. The bot never states or estimates a price before admin sets it. |
+| DP | 50% of price |
+| Deadline | Set by admin, together with the price |
+| DP validation | Admin via checklist. AI reading is assistance only, never a decision. |
+| Old flow (form link) | Remains available as an alternative |
+| Price negotiation | Bot never negotiates; objections are handed off to admin |
+
+The AI never makes business decisions. It only fills drafts (brief draft, transfer-proof reading).
+
 ---
 
 # 6. Project and Order Model
@@ -420,6 +473,17 @@ A project can be:
 - paid in full after finalization
 
 The implementation must not assume production status and payment status are the same field.
+
+## 7.4 DP via WhatsApp AI Order Intake (approved 2026-11-01)
+
+For the §5.2 path:
+
+- DP amount = 50% of the admin-set price, rounded up, computed by the system.
+- The client sends a transfer-proof image over WhatsApp. The AI reads it; the system flags anomalies (amount below DP, recipient not a studio account, duplicate image/reference, date before offer, unreadable).
+- Flags are advisory. The admin is the final decision-maker and must confirm, via checklist, that funds actually arrived in the studio's bank/e-wallet mutation.
+- The DP payment is recorded only when the admin approves. The project is created in the same step, so §7.1's "DP recorded before brief" still holds: the brief is collected by chat instead of a link.
+- Transfer proofs are private files, visible to the owner only.
+- No payment gateway or bank-API reconciliation is introduced.
 
 ---
 
@@ -1616,7 +1680,7 @@ When extending the existing prototype, preserve compatible behavior unless a new
 The following are explicit business rules:
 
 1. Order and project are one entity in the current model.
-2. DP is recorded before the brief link is generated.
+2. DP is recorded before the brief link is generated (Path §5.1). In the WhatsApp AI path (§5.2), the DP is verified by admin and recorded at the moment the project is created.
 3. Client does not require a login in the current model.
 4. Client access is tokenized.
 5. One-time links cannot be reused after successful submission.
@@ -1628,7 +1692,7 @@ The following are explicit business rules:
 11. Freelancer payout is an internal financial value.
 12. Client must not see internal financial data.
 13. Payment status and production status are separate concerns.
-14. WhatsApp remains communication; YukDesain remains the system of record.
+14. WhatsApp remains communication; YukDesain remains the system of record. The WhatsApp AI bot never sets price, deadline, DP validity, or creates a project on its own.
 15. Do not silently replace the existing Sticker Label contract with the specialized Sticker Builder requirement.
 
 ---
@@ -1793,6 +1857,22 @@ The existing detailed Sticker Label contract remains the source of truth for the
 The specialized Sticker Builder must not silently replace it.
 
 If the business intends to introduce the specialized builder as a change, define and approve its final fields, UI behavior, storage schema, and migration impact first.
+
+## WhatsApp Automation
+
+### Previous requirement
+
+Automated WhatsApp messaging was out of scope for MVP (§3.2). DP was collected manually before an admin-generated brief link.
+
+### Approved change (owner, 2026-11-01, v2)
+
+WhatsApp AI Chatbot & Order Intake is in scope, specified in `docs/WHATSAPP_AI_CHATBOT.md`. It adds an alternative intake path (§5.2) and DP verification flow (§7.4).
+
+### Final decision
+
+- Both intake paths coexist. The one-time link flow must keep its current behavior.
+- The decisions table in §5.2 is binding.
+- Open questions listed in `docs/WHATSAPP_AI_CHATBOT.md` §21 must be answered by the owner, not assumed.
 
 ---
 

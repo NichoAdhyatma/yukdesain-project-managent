@@ -25,10 +25,13 @@ The system centralizes:
 - freelancer allocation
 - financial recap
 - audit/history
+- WhatsApp AI order intake (consultation, brief draft, DP proof) — approved 2026-11-01, see `docs/WHATSAPP_AI_CHATBOT.md`
 
 Core operational principle:
 
 > WhatsApp is for communication. YukDesain Studio Portal is the system of record for project and payment management.
+
+The WhatsApp AI bot does not change this principle. It only fills drafts (brief draft, payment-proof reading). Price, deadline, DP validity, and project creation are always admin actions in the portal.
 
 Expected operational scale is approximately 50–60 clients/orders per month. Prefer a maintainable modular monolith over premature distributed architecture.
 
@@ -74,7 +77,19 @@ Previously established YukDesain requirements also remain relevant where not con
 - dashboard
 - secure tracking
 - one-time order-form lifecycle
-- future WhatsApp/payment automation as non-MVP unless explicitly approved
+- payment gateway / bank-mutation automation as non-MVP unless explicitly approved
+
+Approved change (2026-11-01): WhatsApp automation is **no longer non-MVP**. The WhatsApp AI Chatbot & Order Intake is in scope and specified in `docs/WHATSAPP_AI_CHATBOT.md`. Treat that document as approved requirement at priority level 1 for everything WhatsApp-related. Its owner decisions (§2 of that document) must not be changed without new approval:
+
+| Topic | Decision |
+|---|---|
+| Provider | WhatsApp Cloud API (Meta), official |
+| Price | Set by **admin** after the client confirms the brief. The bot never states or estimates a price before admin sets it. |
+| DP | **50% of price** (`DP_PERCENT = 50` in `src/lib/constants/`) |
+| Deadline | Set by **admin**, together with the price |
+| DP validation | **Admin** via checklist. AI reading is assistance only, never a decision. |
+| Old flow (form link) | Remains available as an alternative; its behavior must not change |
+| Price negotiation | Bot never negotiates. Negotiation/price objections are handed off to admin. |
 
 ---
 
@@ -138,6 +153,10 @@ Client must never access internal-only information.
 
 **Order and Project are ONE entity** - no separate Order → Project transition.
 
+There are two approved intake paths. Both end in the same project structure (struk, DP payment, tracking link) and the same Kanban workflow.
+
+### Path A — Admin-created project + one-time link (original flow, unchanged)
+
 **Payment Flow:** DP (Down Payment) collected via WhatsApp BEFORE generating link. Pelunasan (full payment) when project is completed.
 
 ```text
@@ -185,6 +204,37 @@ SELESAI (completed - pelunasan required)
 **Payment Timeline:**
 - **DP:** Recorded BEFORE link generation (via WhatsApp)
 - **Pelunasan:** Recorded when project is completed
+
+## Path B — WhatsApp AI Order Intake (approved 2026-11-01)
+
+Full spec: `docs/WHATSAPP_AI_CHATBOT.md`.
+
+```text
+Client chats studio WhatsApp number
+        ↓
+AI consultation: choose service, collect brief draft (text + reference images)
+        ↓
+AI sends brief summary → client explicitly confirms        [WaIntake: COLLECTING → AWAITING_QUOTE]
+        ↓
+Admin sets price + deadline in portal (DP = 50%, server-computed)   [→ QUOTED]
+        ↓
+Bot sends offer + DP amount + studio bank accounts
+        ↓
+Client sends transfer proof → AI reads it, server computes flags    [→ DP_REVIEW]
+        ↓
+Admin verifies via mandatory checklist (checks real bank mutation)
+        ├── Reject (reason required) → back to QUOTED, client notified
+        └── Valid → one transaction: Client + Project + Brief + DP Payment + Struk + ClientLink   [→ APPROVED]
+        ↓
+Bot sends project code + tracking link
+        ↓
+Project starts at BELUM_DIKERJAKAN (brief already present) → same Kanban workflow as Path A
+```
+
+Rules:
+- `WaIntake` status transitions are enforced on the server exactly as in §3.2 of the WhatsApp spec; anything else returns `CONFLICT`.
+- The AI never decides business values. It can only write to the intake draft of its own conversation.
+- Project/payment creation reuses the logic extracted from `POST /api/projects` and `POST /api/payments`; Path A behavior must stay identical.
 
 ---
 
@@ -595,6 +645,13 @@ PAID
 ```
 
 Do not implement a payment gateway unless explicitly requested.
+
+WhatsApp intake DP (Path B, `docs/WHATSAPP_AI_CHATBOT.md` §11–§12):
+- DP = `ceil(agreedPrice * DP_PERCENT / 100)`, computed on the server, `DP_PERCENT = 50`.
+- Transfer proof is a `PaymentProof` stored in a **private** bucket, shown to owner only via short-lived presigned URL.
+- AI only reads the proof; server computes flags (e.g. `AMOUNT_BELOW_DP`, `RECIPIENT_NOT_STUDIO`, `DUPLICATE_IMAGE`). Flags do not block the admin.
+- A DP payment is recorded **only** when the admin approves with the full checklist (funds received in real mutation, amount matches, brief reviewed), re-validated on the server.
+- Still manual verification: no payment gateway, no bank API reconciliation.
 
 ---
 
