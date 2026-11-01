@@ -194,6 +194,7 @@ export function findActiveIntake(conversationId: string, db: Prisma.TransactionC
       id: true,
       status: true,
       briefDraft: true,
+      createdAt: true,
       service: { select: { id: true, code: true } },
     },
   });

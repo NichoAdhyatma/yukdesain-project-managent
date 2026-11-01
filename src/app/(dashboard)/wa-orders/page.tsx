@@ -10,6 +10,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { STATUS_BADGE, STATUS_TABS, formatRelative, formatRupiah } from "@/components/wa-orders/labels";
 import type { WaIntakeListResponse, WaIntakeStatus } from "@/components/wa-orders/types";
+import { UsageWarning, type WhatsAppUsage } from "@/components/settings/WhatsAppSettingsTab";
 import { cn } from "@/lib/utils";
 
 const EMPTY_TEXT: Record<WaIntakeStatus, string> = {
@@ -35,6 +36,17 @@ export default function WaOrdersPage() {
     refetchInterval: 60_000,
   });
 
+  // Banner kuota pesan (data dari Settings WhatsApp; gagal dimuat → banner tidak tampil)
+  const { data: settings } = useQuery<{ usage: WhatsAppUsage }>({
+    queryKey: ["settings", "whatsapp"],
+    queryFn: async () => {
+      const res = await fetch("/api/settings/whatsapp");
+      if (!res.ok) throw new Error("Gagal memuat pemakaian");
+      return res.json();
+    },
+    staleTime: 5 * 60_000,
+  });
+
   return (
     <div className="flex h-full flex-col">
       <div className="border-b p-6">
@@ -45,6 +57,8 @@ export default function WaOrdersPage() {
       </div>
 
       <div className="flex-1 space-y-4 overflow-auto p-6">
+        {settings?.usage && <UsageWarning usage={settings.usage} />}
+
         <div role="group" aria-label="Filter status order" className="flex flex-wrap gap-2">
           {STATUS_TABS.map((tab) => {
             const count = data?.counts[tab.status] ?? 0;

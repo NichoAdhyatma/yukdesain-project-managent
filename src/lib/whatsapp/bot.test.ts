@@ -8,6 +8,12 @@ const db = vi.hoisted(() => ({
 const api = vi.hoisted(() => ({ sendText: vi.fn(), markAsRead: vi.fn() }));
 const media = vi.hoisted(() => ({ storeInboundMedia: vi.fn() }));
 const ai = vi.hoisted(() => ({ runAiTurn: vi.fn() }));
+const limits = vi.hoisted(() => ({
+  checkInboundRate: vi.fn(),
+  botReplyLimitReached: vi.fn(),
+  imageLimitExceeded: vi.fn(),
+}));
+const tools = vi.hoisted(() => ({ findActiveIntake: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("./client-api", async (orig) => ({
@@ -17,6 +23,8 @@ vi.mock("./client-api", async (orig) => ({
 }));
 vi.mock("./media", () => media);
 vi.mock("./ai/conversation", () => ai);
+vi.mock("./rate-limit", () => limits);
+vi.mock("./ai/tools", () => tools);
 
 import { WhatsAppApiError } from "./client-api";
 import { BOT_REPLIES, handleInboundMessage } from "./bot";
@@ -49,6 +57,44 @@ describe("handleInboundMessage", () => {
     api.sendText.mockResolvedValue("wamid.OUT");
     api.markAsRead.mockResolvedValue(undefined);
     aiReply("Halo kak, mau desain apa?");
+    limits.checkInboundRate.mockResolvedValue("ok");
+    limits.botReplyLimitReached.mockResolvedValue(false);
+    limits.imageLimitExceeded.mockResolvedValue(false);
+    tools.findActiveIntake.mockResolvedValue({ createdAt: new Date("2026-11-01T00:00:00Z") });
+  });
+
+  it("banjir pesan: pesan pertama yang lewat batas mendapat peringatan, tanpa AI", async () => {
+    givenMessage("text");
+    limits.checkInboundRate.mockResolvedValue("warn");
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()).toEqual([BOT_REPLIES.tooManyMessages]);
+    expect(ai.runAiTurn).not.toHaveBeenCalled();
+  });
+
+  it("banjir pesan: berikutnya diabaikan tanpa balasan", async () => {
+    givenMessage("text");
+    limits.checkInboundRate.mockResolvedValue("ignore");
+    await handleInboundMessage("msg_1");
+    expect(api.sendText).not.toHaveBeenCalled();
+    expect(ai.runAiTurn).not.toHaveBeenCalled();
+  });
+
+  it("gambar lebih dari batas per order → ditolak, tidak disimpan", async () => {
+    givenMessage("image", "");
+    limits.imageLimitExceeded.mockResolvedValue(true);
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()).toEqual([BOT_REPLIES.tooManyImages]);
+    expect(media.storeInboundMedia).not.toHaveBeenCalled();
+    expect(limits.imageLimitExceeded).toHaveBeenCalledWith("conv_1", new Date("2026-11-01T00:00:00Z"));
+  });
+
+  it("80 balasan bot dalam sehari → mode HUMAN, tanpa AI", async () => {
+    givenMessage("text");
+    limits.botReplyLimitReached.mockResolvedValue(true);
+    await handleInboundMessage("msg_1");
+    expect(humanModeSet()).toBe(true);
+    expect(sentBodies()).toEqual([BOT_REPLIES.dailyLimit]);
+    expect(ai.runAiTurn).not.toHaveBeenCalled();
   });
 
   it("bot nonaktif → tidak membalas, AI tidak dipanggil", async () => {

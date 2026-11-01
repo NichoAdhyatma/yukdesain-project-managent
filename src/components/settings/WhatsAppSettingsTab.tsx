@@ -23,7 +23,91 @@ type WhatsAppSettings = {
     effective: { model: string | null; extractionModel: string | null; baseUrl: string | null };
     modelRecognized: boolean;
   };
+  usage: WhatsAppUsage;
 };
+
+export type WhatsAppUsage = {
+  month: string;
+  outboundSent: number;
+  outboundFailed: number;
+  templatesSent: number;
+  botReplies: number;
+  inbound: number;
+  warningThreshold: number;
+  freeTier: number;
+  nearLimit: boolean;
+};
+
+const formatMonth = (month: string) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleDateString("id-ID", { month: "long", year: "numeric", timeZone: "UTC" });
+
+/** Banner saat pesan keluar mendekati kuota gratis Meta (§5.3, §17). Dipakai juga di Order WA. */
+export function UsageWarning({ usage }: { usage: WhatsAppUsage }) {
+  if (!usage.nearLimit) return null;
+  return (
+    <div role="status" className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <p>
+        Pesan keluar {formatMonth(usage.month)} sudah {usage.outboundSent.toLocaleString("id-ID")} dari kuota gratis{" "}
+        {usage.freeTier.toLocaleString("id-ID")}. Pastikan metode pembayaran di akun Meta aktif; tanpa itu, pesan di atas
+        kuota tidak terkirim.
+      </p>
+    </div>
+  );
+}
+
+function UsageCard({ usage }: { usage: WhatsAppUsage }) {
+  const pct = Math.min(100, Math.round((usage.outboundSent / usage.freeTier) * 100));
+  const rows: [string, number][] = [
+    ["Balasan bot", usage.botReplies],
+    ["Lewat template", usage.templatesSent],
+    ["Gagal terkirim", usage.outboundFailed],
+    ["Pesan masuk", usage.inbound],
+  ];
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Pemakaian {formatMonth(usage.month)}</CardTitle>
+        <CardDescription>
+          Meta memberi {usage.freeTier.toLocaleString("id-ID")} pesan layanan gratis per bulan; pesan template selalu
+          berbayar.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="space-y-1.5">
+          <div className="flex items-baseline justify-between text-sm">
+            <span id="wa-usage-label">Pesan keluar terkirim</span>
+            <span className="tabular-nums">
+              <span className="font-semibold">{usage.outboundSent.toLocaleString("id-ID")}</span>
+              <span className="text-muted-foreground"> / {usage.freeTier.toLocaleString("id-ID")}</span>
+            </span>
+          </div>
+          <div
+            role="meter"
+            aria-labelledby="wa-usage-label"
+            aria-valuemin={0}
+            aria-valuemax={usage.freeTier}
+            aria-valuenow={usage.outboundSent}
+            className="h-2 overflow-hidden rounded-full bg-muted"
+          >
+            <div
+              className={usage.nearLimit ? "h-full bg-amber-500" : "h-full bg-primary"}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+        </div>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-4">
+          {rows.map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-muted-foreground">{label}</dt>
+              <dd className="font-medium tabular-nums">{value.toLocaleString("id-ID")}</dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
 
 type ConnectionResult = {
   model: string;
@@ -183,6 +267,8 @@ export function WhatsAppSettingsTab() {
         </div>
       )}
 
+      <UsageWarning usage={data.usage} />
+
       <Card>
         <CardHeader>
           <CardTitle>Bot WhatsApp</CardTitle>
@@ -323,6 +409,8 @@ export function WhatsAppSettingsTab() {
           </form>
         </CardContent>
       </Card>
+
+      <UsageCard usage={data.usage} />
 
       <Card>
         <CardHeader>

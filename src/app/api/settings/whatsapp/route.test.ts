@@ -17,6 +17,10 @@ vi.mock("@/lib/whatsapp/env", () => ({
   }),
 }));
 
+vi.mock("@/lib/whatsapp/rate-limit", () => ({
+  getMonthlyUsage: async () => ({ month: "2026-11", outboundSent: 820, outboundFailed: 1, templatesSent: 2, botReplies: 800, inbound: 900, warningThreshold: 800, freeTier: 1000, nearLimit: true }),
+}));
+
 import { GET, PUT } from "./route";
 
 const owner = { id: "u_owner", roles: ["OWNER"] };
@@ -53,6 +57,7 @@ describe("GET /api/settings/whatsapp", () => {
       },
     });
     expect(JSON.stringify(body)).not.toContain("sk-ant");
+    expect(body.usage).toMatchObject({ month: "2026-11", outboundSent: 820, nearLimit: true });
   });
 });
 

@@ -5,6 +5,8 @@ import { maskPhone } from "./phone";
 import { storeInboundMedia, type MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
 import { clampReply, sanitizeReply, stripPriceMentions } from "./ai/reply-guard";
+import { findActiveIntake } from "./ai/tools";
+import { botReplyLimitReached, checkInboundRate, imageLimitExceeded } from "./rate-limit";
 
 // Orkestrasi pesan masuk (docs/WHATSAPP_AI_CHATBOT.md §10.3).
 
@@ -15,6 +17,9 @@ export const BOT_REPLIES = {
   MEDIA_TYPE_NOT_ALLOWED: "Maaf kak, gambarnya tidak bisa kami proses. Kirim gambar JPG, PNG, atau WEBP ya.",
   handoff: "Baik kak, percakapan ini kami teruskan ke admin. Admin kami akan membalas secepatnya ya.",
   busy: "Maaf kak, sistem kami sedang sibuk. Admin kami akan membalas secepatnya ya.",
+  tooManyMessages: "Kak, pesannya banyak sekali dalam waktu singkat. Kami balas lagi beberapa menit lagi ya.",
+  tooManyImages: "Maaf kak, gambar untuk order ini sudah banyak sekali, jadi gambar ini tidak kami simpan. Kalau masih ada gambar penting, ketik *admin* untuk dibantu tim kami.",
+  dailyLimit: "Kak, percakapan hari ini sudah panjang sekali. Kami teruskan ke admin supaya bisa dibantu langsung ya.",
 } satisfies Record<string, string> & Record<MediaRejection, string>;
 
 // Kata kunci untuk langsung bicara dengan admin (§10.3 langkah 3).
@@ -84,6 +89,14 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
     await markAsRead(message.wamid).catch(() => undefined);
   }
 
+  // Banjir pesan: peringatan sekali, sisanya diabaikan (§17).
+  const rate = await checkInboundRate(conversation.id, message.createdAt);
+  if (rate === "warn") {
+    await sendBotText(conversation, BOT_REPLIES.tooManyMessages);
+    return;
+  }
+  if (rate === "ignore") return;
+
   if (message.type === "text" && HANDOFF_KEYWORDS.has(message.body.trim().toLowerCase())) {
     await setHumanMode(conversation.id);
     await sendBotText(conversation, BOT_REPLIES.handoff);
@@ -96,6 +109,11 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   }
 
   if (message.type === "image") {
+    const intake = await findActiveIntake(conversation.id);
+    if (await imageLimitExceeded(conversation.id, intake?.createdAt ?? null)) {
+      await sendBotText(conversation, BOT_REPLIES.tooManyImages);
+      return;
+    }
     // Disimpan dulu walau nanti dilewati: giliran pesan berikutnya membutuhkan gambarnya.
     const result = await storeInboundMedia(message.id);
     if (!result.ok) {
@@ -105,6 +123,13 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   }
 
   if (await isSuperseded(conversation.id, message.createdAt)) return;
+
+  // Batas biaya: percakapan yang sangat panjang dialihkan ke admin (§17).
+  if (await botReplyLimitReached(conversation.id)) {
+    await setHumanMode(conversation.id);
+    await sendBotText(conversation, BOT_REPLIES.dailyLimit);
+    return;
+  }
 
   let turn: Awaited<ReturnType<typeof runAiTurn>>;
   try {

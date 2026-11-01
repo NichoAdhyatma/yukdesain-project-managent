@@ -191,3 +191,13 @@ export const WA_TEMPLATES = {
 
 // Percobaan kode project yang salah lewat bot WA, per nomor per jam (§17).
 export const WA_MAX_FAILED_LOOKUPS_PER_HOUR = 5;
+
+// Batas bot WhatsApp (docs/WHATSAPP_AI_CHATBOT.md §17)
+export const WA_RATE_LIMITS = {
+  inboundPerWindow: 10, // pesan masuk per nomor…
+  inboundWindowMinutes: 5, // …per 5 menit → peringatan sekali, sisanya diabaikan
+  imagesPerIntake: 20, // gambar per order → tolak, arahkan ke admin
+  botRepliesPerDay: 80, // balasan bot per nomor per hari → mode HUMAN
+  outboundMonthlyWarning: 800, // pesan keluar per bulan → banner peringatan
+  outboundMonthlyFreeTier: 1000, // kuota gratis Meta per nomor per bulan (§5.3)
+} as const;

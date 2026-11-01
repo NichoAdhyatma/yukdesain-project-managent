@@ -5,12 +5,13 @@ import { requireOwner } from "@/lib/auth/require-owner";
 import { getAiEnvDefaults, isWhatsAppConfigured } from "@/lib/whatsapp/env";
 import { aiBaseUrlSchema, aiModelSchema } from "@/lib/whatsapp/ai/ai-config";
 import { getModelProfile } from "@/lib/whatsapp/ai/model-profile";
+import { getMonthlyUsage } from "@/lib/whatsapp/rate-limit";
 
 // Pengaturan bot WhatsApp (owner). API key tidak pernah dikirim ke browser.
 
 type Overrides = { waBotEnabled: boolean; waAiModel: string | null; waAiExtractionModel: string | null; waAiBaseUrl: string | null };
 
-function toDto(row: Overrides | null) {
+async function toDto(row: Overrides | null) {
   const defaults = getAiEnvDefaults();
   const model = row?.waAiModel || defaults?.model || null;
   return {
@@ -28,6 +29,8 @@ function toDto(row: Overrides | null) {
       },
       modelRecognized: model ? getModelProfile(model).family !== null : false,
     },
+    // Pemakaian bulan berjalan (WIB): kuota gratis Meta & peringatan §17
+    usage: await getMonthlyUsage(),
   };
 }
 
@@ -37,7 +40,7 @@ export async function GET() {
   const auth = await requireOwner();
   if (auth.error) return auth.error;
   const row = await prisma.studioSettings.findUnique({ where: { id: "default" }, select });
-  return NextResponse.json(toDto(row));
+  return NextResponse.json(await toDto(row));
 }
 
 // "" atau null = kembali ke default env.
@@ -94,5 +97,5 @@ export async function PUT(request: Request) {
     },
   });
 
-  return NextResponse.json(toDto(row));
+  return NextResponse.json(await toDto(row));
 }
