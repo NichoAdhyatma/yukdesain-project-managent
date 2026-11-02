@@ -597,6 +597,7 @@ model WaMessage {
   mediaStorageKey String? // key R2 jika gambar
   mediaSha256     String? // dari payload Meta; deteksi duplikat
   sentByBot       Boolean            @default(false)
+  sentById        String? // User.id admin yang membalas manual dari portal; null = bot/pesan sistem
   deliveryStatus  String?
   errorCode       String?
   createdAt       DateTime           @default(now())

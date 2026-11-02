@@ -19,6 +19,8 @@ type Options = {
   // Untuk aksi yang tujuannya memang mengirim pesan (kirim ulang): kalimat hasil langsung.
   deliveryMessages?: { ok: string; fail: string };
   onSuccess?: (data: ActionResponse) => void;
+  // Error ditampilkan sendiri di dekat field (mis. kolom balas chat), bukan lewat toast.
+  inlineError?: boolean;
 };
 
 /** POST/PATCH ke /api/wa-intakes/[id]/..., perbarui cache detail, daftar, dan badge. */
@@ -56,7 +58,7 @@ export function useIntakeAction<TBody>(intakeId: string, path: string, method: "
     onError: (error) => {
       // Status sudah berubah di tempat lain (409): muat ulang supaya admin melihat keadaan terbaru.
       queryClient.invalidateQueries({ queryKey: ["wa-intake", intakeId] });
-      toast(error.message, "error");
+      if (!options.inlineError) toast(error.message, "error");
     },
   });
 }

@@ -74,6 +74,7 @@ export type WaIntakeDetail = {
     body: string;
     imageUrl: string | null;
     sentByBot: boolean;
+    sentByAdmin: boolean;
     deliveryStatus: string | null;
     errorCode: string | null;
     createdAt: string;
