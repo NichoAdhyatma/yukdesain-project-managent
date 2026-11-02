@@ -37,6 +37,7 @@ import { saveAs } from "file-saver";
 import { ReceiptPDF } from "@/components/invoice/ReceiptPDF";
 import { ImageViewer } from "@/components/ui/image-viewer";
 import { SubmitProgressOverlay } from "@/components/ui/submit-progress-overlay";
+import { revisionQuotaRemaining } from "@/lib/revisions/quota";
 
 type BriefResponseItem = {
   questionId: string;
@@ -1815,7 +1816,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
 
   // Tracking view
   const revisions = project?.revisions || [];
-  const remainingQuota = Math.max(0, MAX_REVISION_QUOTA - revisions.length);
+  const remainingQuota = revisionQuotaRemaining(revisions.length);
   const isQuotaExhausted = remainingQuota === 0;
   const latestInvoice = project?.invoices?.[0];
   const statusCfg = projectStatusConfig[project.status] || projectStatusConfig.DRAFT;

@@ -29,6 +29,7 @@ export default async function DashboardPage() {
     projectsByStatus,
     assignedDesigners,
     pendingRevisions,
+    waIntakesByStatus,
   ] = await Promise.all([
     prisma.project.count(),
     prisma.project.count({ where: { status: "SEDANG_DIKERJAKAN" } }),
@@ -38,6 +39,11 @@ export default async function DashboardPage() {
     prisma.project.groupBy({ by: ["status"], _count: { id: true } }),
     fetchAssignedDesigners(),
     fetchPendingRevisions(),
+    prisma.waIntake.groupBy({
+      by: ["status"],
+      where: { status: { in: ["AWAITING_QUOTE", "DP_REVIEW"] } },
+      _count: { _all: true },
+    }),
   ]);
 
   const { grossIncome, freelancerExpenses, netRevenue } = await fetchFinancial();
@@ -61,6 +67,10 @@ export default async function DashboardPage() {
     projectsByStatus,
     assignedDesigners,
     pendingRevisions: pendingRevisions.map((r) => ({ ...r, requestedAt: r.requestedAt.toISOString() })),
+    waOrders: {
+      awaitingQuote: waIntakesByStatus.find((g) => g.status === "AWAITING_QUOTE")?._count._all ?? 0,
+      dpReview: waIntakesByStatus.find((g) => g.status === "DP_REVIEW")?._count._all ?? 0,
+    },
   };
 
   // Lazy import client component to keep server component clean

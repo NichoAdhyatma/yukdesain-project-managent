@@ -25,6 +25,7 @@ import {
   Wrench,
   ImageIcon,
   LayoutGrid,
+  MessageCircle,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useState, useEffect } from "react";
+import { useWaOrderBadge } from "@/components/wa-orders/use-wa-order-badge";
 import { STUDIO_DEFAULTS } from "@/lib/constants";
 
 const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
@@ -70,6 +72,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   History,
   ImageIcon,
   LayoutGrid,
+  MessageCircle,
 };
 
 interface MenuItem {
@@ -141,6 +144,9 @@ function groupMenus(menus: MenuItem[]): NavGroup[] {
 
 export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarProps) {
   const pathname = usePathname();
+  const waBadge = useWaOrderBadge(
+    user?.activeRole === "OWNER" && menus.some((m) => m.href === "/wa-orders"),
+  );
   const router = useRouter();
   const navigationGroups = groupMenus(menus);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
@@ -306,7 +312,15 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
                       >
                         <Icon className={cn("w-4 h-4 shrink-0", collapsed && "mx-auto")} />
                         {!collapsed && <span>{item.name}</span>}
-                        {!collapsed && active && (
+                        {!collapsed && item.href === "/wa-orders" && waBadge > 0 && (
+                          <span
+                            className="ml-auto min-w-5 rounded-full bg-sidebar-primary px-1.5 text-center text-[11px] font-semibold leading-5 text-sidebar-primary-foreground"
+                            aria-label={`${waBadge} order WA perlu tindakan`}
+                          >
+                            {waBadge}
+                          </span>
+                        )}
+                        {!collapsed && active && !(item.href === "/wa-orders" && waBadge > 0) && (
                           <div className="ml-auto w-1.5 h-1.5 rounded-full bg-sidebar-primary" />
                         )}
                       </Link>

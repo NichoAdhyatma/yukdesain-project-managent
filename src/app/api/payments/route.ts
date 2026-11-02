@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { recordPayment } from "@/lib/payments/record-payment";
 
 export async function GET(request: Request) {
   try {
@@ -55,75 +56,17 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
-    const paymentAmount = Math.round(amount);
-    const newPaidAmount = project.paidAmount + paymentAmount;
-
-    // Determine payment status
-    let paymentStatus: "UNPAID" | "PARTIALLY_PAID" | "PAID";
-    if (newPaidAmount >= project.agreedPrice) {
-      paymentStatus = "PAID";
-    } else if (newPaidAmount > 0) {
-      paymentStatus = "PARTIALLY_PAID";
-    } else {
-      paymentStatus = "UNPAID";
-    }
-
-    // Create payment record
-    const payment = await prisma.payment.create({
-      data: {
-        projectId,
-        amount: paymentAmount,
-        date: date ? new Date(date) : new Date(),
-        method: method || null,
-        reference: reference || null,
-        notes: notes || null,
-        recordedBy: user.id,
-      },
+    const { payment, summary } = await recordPayment(prisma, {
+      project,
+      amount,
+      date,
+      method,
+      reference,
+      notes,
+      recordedBy: user.id,
     });
 
-    // Update project paidAmount and paymentStatus
-    await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        paidAmount: Math.min(newPaidAmount, project.agreedPrice),
-        paymentStatus,
-      },
-    });
-
-    // Auto-update invoice status to match payment
-    await prisma.invoice.updateMany({
-      where: { projectId },
-      data: { status: paymentStatus },
-    });
-
-    // Log activity
-    await prisma.activityLog.create({
-      data: {
-        entityType: "Payment",
-        entityId: payment.id,
-        action: "PAYMENT_RECORDED",
-        actorId: user.id,
-        newValue: {
-          amount: paymentAmount,
-          method,
-          reference,
-          totalPaid: newPaidAmount,
-          agreedPrice: project.agreedPrice,
-          status: paymentStatus,
-        },
-        metadata: { projectId, projectNumber: project.projectNumber },
-      },
-    });
-
-    return NextResponse.json({
-      payment,
-      summary: {
-        agreedPrice: project.agreedPrice,
-        paidAmount: Math.min(newPaidAmount, project.agreedPrice),
-        remainingBalance: Math.max(0, project.agreedPrice - newPaidAmount),
-        paymentStatus,
-      },
-    }, { status: 201 });
+    return NextResponse.json({ payment, summary }, { status: 201 });
   } catch (error) {
     console.error("Error recording payment:", error);
     return NextResponse.json({ error: "Failed to record payment" }, { status: 500 });

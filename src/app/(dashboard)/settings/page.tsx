@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { STUDIO_DEFAULTS } from "@/lib/constants";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { WhatsAppSettingsTab } from "@/components/settings/WhatsAppSettingsTab";
 import {
   User,
   Bell,
@@ -33,6 +34,7 @@ import {
   Copy,
   Check,
   Loader2,
+  MessageCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -378,30 +380,34 @@ export default function SettingsPage() {
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         <Tabs defaultValue="general" className="w-full max-w-3xl">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="general" className="gap-2">
+          <TabsList className="h-auto! w-full flex-wrap justify-start gap-1">
+            <TabsTrigger value="general" className="h-7 flex-none gap-2">
               <User className="h-4 w-4" />
               General
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-2">
+            <TabsTrigger value="notifications" className="h-7 flex-none gap-2">
               <Bell className="h-4 w-4" />
               Notifications
             </TabsTrigger>
-            <TabsTrigger value="appearance" className="gap-2">
+            <TabsTrigger value="appearance" className="h-7 flex-none gap-2">
               <Palette className="h-4 w-4" />
               Appearance
             </TabsTrigger>
-            <TabsTrigger value="system" className="gap-2">
+            <TabsTrigger value="system" className="h-7 flex-none gap-2">
               <Shield className="h-4 w-4" />
               System
             </TabsTrigger>
-            <TabsTrigger value="menus" className="gap-2">
+            <TabsTrigger value="menus" className="h-7 flex-none gap-2">
               <Menu className="h-4 w-4" />
               Menus
             </TabsTrigger>
-            <TabsTrigger value="payment" className="gap-2">
+            <TabsTrigger value="payment" className="h-7 flex-none gap-2">
               <CreditCard className="h-4 w-4" />
               Payment
+            </TabsTrigger>
+            <TabsTrigger value="whatsapp" className="h-7 flex-none gap-2">
+              <MessageCircle className="h-4 w-4" />
+              WhatsApp
             </TabsTrigger>
           </TabsList>
 
@@ -825,6 +831,11 @@ export default function SettingsPage() {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* WhatsApp Bot */}
+          <TabsContent value="whatsapp">
+            <WhatsAppSettingsTab />
           </TabsContent>
         </Tabs>
       </div>

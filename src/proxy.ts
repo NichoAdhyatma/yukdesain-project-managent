@@ -13,6 +13,8 @@ const PUBLIC_PATHS = [
   "/api/client-links/",
   // Lookup by project code — the code itself is the secret
   "/api/portal/lookup",
+  // Meta Cloud API webhook — authenticated by X-Hub-Signature-256, not session
+  "/api/whatsapp/webhook",
 ];
 
 // API endpoints that expose owner-scoped data. Derived from the owner-only
@@ -31,6 +33,8 @@ const OWNER_ONLY_API = [
   "/api/client-links",
   "/api/projects",
   "/api/settings/payment-accounts",
+  "/api/wa-intakes",
+  "/api/settings/whatsapp",
 ];
 
 // /api/client-links/[token]/* is the public client portal.

@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
-import { randomBytes } from "crypto";
-
-function generateToken(length = 16): string {
-  return randomBytes(length).toString("hex").slice(0, length);
-}
+import { generateClientLinkToken } from "@/lib/client-link-token";
 
 export async function POST(request: Request) {
   try {
@@ -42,7 +38,7 @@ export async function POST(request: Request) {
     });
 
     // Create new link with ACTIVE status
-    const token = generateToken();
+    const token = generateClientLinkToken();
     const link = await prisma.clientLink.create({
       data: {
         token,

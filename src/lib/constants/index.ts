@@ -171,3 +171,33 @@ export const STUDIO_DEFAULTS = {
 
 export const CURRENCY_SYMBOL = "Rp";
 export const CURRENCY_LOCALE = "id-ID";
+
+// ===== WHATSAPP ORDER INTAKE (docs/WHATSAPP_AI_CHATBOT.md §2) =====
+
+// DP untuk order via WhatsApp: persentase dari harga yang diisi admin.
+export const DP_PERCENT = 50;
+
+// Batas bukti transfer per order WA; lewat dari ini percakapan dialihkan ke admin (§17).
+export const WA_MAX_PAYMENT_PROOFS_PER_INTAKE = 5;
+
+// Message template WhatsApp (kategori Utility, bahasa id) untuk pesan di luar
+// jendela 24 jam. Isi template: docs/WHATSAPP_TEMPLATES.md. Urutan parameter wajib sama.
+export const WA_TEMPLATES = {
+  OFFER: "yd_penawaran_order", // nama, layanan, harga, DP, deadline
+  DP_VERIFIED: "yd_dp_terverifikasi", // nama, kode project, link tracking
+  DP_REJECTED: "yd_dp_ditolak", // nama, alasan
+  CANCELLED: "yd_order_dibatalkan", // nama, alasan
+} as const;
+
+// Percobaan kode project yang salah lewat bot WA, per nomor per jam (§17).
+export const WA_MAX_FAILED_LOOKUPS_PER_HOUR = 5;
+
+// Batas bot WhatsApp (docs/WHATSAPP_AI_CHATBOT.md §17)
+export const WA_RATE_LIMITS = {
+  inboundPerWindow: 10, // pesan masuk per nomor…
+  inboundWindowMinutes: 5, // …per 5 menit → peringatan sekali, sisanya diabaikan
+  imagesPerIntake: 20, // gambar per order → tolak, arahkan ke admin
+  botRepliesPerDay: 80, // balasan bot per nomor per hari → mode HUMAN
+  outboundMonthlyWarning: 800, // pesan keluar per bulan → banner peringatan
+  outboundMonthlyFreeTier: 1000, // kuota gratis Meta per nomor per bulan (§5.3)
+} as const;

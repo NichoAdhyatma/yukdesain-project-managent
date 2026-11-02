@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, CopyObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const BUCKET = process.env.STORAGE_BUCKET!;
@@ -115,6 +115,25 @@ export async function fileExists(storageKey: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+/** Salin objek dari bucket lain (mis. bucket privat) ke bucket publik. Return URL publik. */
+export async function copyToPublicBucket(
+  sourceBucket: string,
+  sourceKey: string,
+  destKey: string,
+  contentType: string,
+): Promise<string> {
+  await getClient().send(
+    new CopyObjectCommand({
+      Bucket: BUCKET,
+      Key: destKey,
+      CopySource: `${sourceBucket}/${encodeURIComponent(sourceKey).replace(/%2F/g, "/")}`,
+      ContentType: contentType,
+      MetadataDirective: "REPLACE",
+    }),
+  );
+  return getPublicUrl(destKey);
 }
 
 export function getPublicUrl(storageKey: string): string {
