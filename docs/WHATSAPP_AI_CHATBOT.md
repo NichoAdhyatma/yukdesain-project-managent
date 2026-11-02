@@ -739,8 +739,36 @@ Satu langkah = satu perubahan kecil yang bisa divalidasi (`AGENTS.md` §40). Bua
 
 ## 21. Pertanyaan Terbuka (tanya owner, jangan menebak)
 
-1. Klien dari nomor tidak terdaftar boleh cek status pakai kode project saja (perilaku portal sekarang), atau hanya nomor yang cocok?
-2. Bukti transfer berupa PDF (beberapa m-banking ekspor PDF): perlu didukung, atau minta screenshot saja?
-3. Jika klien langsung bayar lunas (nominal = harga penuh), dicatat sebagai satu payment lunas atau tetap dianggap DP + pelunasan 0?
-4. Intake yang diam lama (mis. >14 hari di `COLLECTING`/`QUOTED`): dibiarkan, atau otomatis `CANCELLED`?
-5. Jam operasional admin perlu disebut bot saat handoff / saat menunggu harga? Jika ya, simpan di `StudioSettings`.
+1. ~~Klien dari nomor tidak terdaftar boleh cek status pakai kode project saja, atau hanya nomor yang cocok?~~ **Diputuskan owner 2026-11-01:** boleh, sama seperti portal (kode = rahasia, maks. 5 kode salah per jam per nomor). Nomor yang cocok dengan Client bisa melihat daftar project tanpa kode.
+2. Bukti transfer berupa PDF: perlu didukung, atau minta screenshot saja? **Belum diputuskan.** Sementara: hanya gambar; bot meminta screenshot.
+3. ~~Jika klien langsung bayar lunas, dicatat bagaimana?~~ **Diputuskan owner 2026-11-01:** satu payment sebesar "nominal diterima" yang diisi admin; jika sama dengan harga, project dan struk langsung `PAID`.
+4. Intake yang diam lama (mis. >14 hari di `COLLECTING`/`QUOTED`): dibiarkan, atau otomatis `CANCELLED`? **Belum diputuskan** (sementara dibiarkan; admin bisa membatalkan dari portal).
+5. Jam operasional admin perlu disebut bot saat handoff / saat menunggu harga? **Belum diputuskan.**
+
+---
+
+## 22. Catatan Implementasi (2026-11-01)
+
+Perbedaan dari rencana di atas, beserta alasannya. Dokumen di atas tetap acuan perilaku bisnis.
+
+**Schema (semua aditif)**
+- `WaMessage.mediaId`: media id Meta, dibutuhkan §10.1 untuk mengunduh gambar di `after()`.
+- `StudioSettings.waAiModel`, `waAiExtractionModel`, `waAiBaseUrl`: model & endpoint AI bisa diatur owner dari Settings (null = default env). API key tetap hanya di env.
+- `WaLookupAttempt`: catatan percobaan cek kode project (rate limit §17). Kode tidak disimpan.
+
+**AI**
+- Blok STATE dikirim sebagai blok system prompt kedua (bukan pesan di tengah percakapan) supaya berjalan di semua model Claude.
+- `model-profile.ts`: parameter opsional (mis. `effort`) hanya dikirim ke model yang mendukung; model tak dikenal memakai profil aman. Hanya model `claude-*` yang diterima (keputusan owner: AI = Claude).
+- Ekstraksi bukti memakai tool berskema dengan `tool_choice: auto` (bukan forced tool use, yang ditolak Claude Sonnet/Opus 5.5).
+- AI tidak bisa menulis field gambar/URL brief (`reference_items_json`, logo, dll.); hanya server lewat `attach_image_to_brief` atau admin. Akibatnya link referensi yang diketik klien belum masuk brief otomatis.
+- Pengaman di server: `stripPriceMentions` (harga/durasi sebelum ada harga) dan `sanitizeReply` (markup tool-call → tidak dikirim, pengulangan rusak, huruf CJK, kode `SVC-xx`, em dash).
+
+**Env tambahan (opsional)**
+- `WHATSAPP_GRAPH_BASE_URL` (uji lokal), `ANTHROPIC_BASE_URL` (eksplisit, wajib https; default API resmi), `APP_PUBLIC_URL` (URL link tracking yang dikirim bot).
+
+**Lain-lain**
+- Satuan harga di seluruh sistem adalah **rupiah utuh**; komentar "in cents" di `schema.prisma` keliru.
+- Teks template untuk WhatsApp Manager: `docs/WHATSAPP_TEMPLATES.md`.
+- Menu "Order WA" berada di grup `Work` (grup yang dipakai seed), bukan "Work Management".
+- Alasan handoff belum disimpan (belum ada kolom); portal hanya menampilkan mode "Ditangani admin".
+- Uji live dilakukan lewat gateway pihak ketiga yang ternyata tidak menjalankan Claude asli. Alur dan aturan bisnis lolos; kualitas bahasa perlu diuji ulang dengan API resmi sebelum go-live.
