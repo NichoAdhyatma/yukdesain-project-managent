@@ -801,3 +801,12 @@ Perbedaan dari rencana di atas, beserta alasannya. Dokumen di atas tetap acuan p
 Owner bisa menambah aturan dan FAQ untuk bot, mencobanya di simulator, lalu menerbitkannya dari Settings ›
 WhatsApp. Desain, batas, dan catatan implementasi: `docs/WHATSAPP_BOT_GUIDE.md`. Aturan §2 dan §10.4 tetap
 berlaku di atas panduan owner.
+
+---
+
+## 24. Instruksi Owner lewat WhatsApp (2026-11-02)
+
+Owner bisa mengubah panduan bot lewat chat WA dari nomornya sendiri (berlaku setelah owner membalas YA), dan bot
+bertanya ke owner untuk permintaan di luar katalog. **Perubahan keputusan §2:** bot kini boleh menyebut aturan harga
+yang diterbitkan owner (potongan/biaya tambahan dengan nilai pasti) sebelum penawaran; harga layanan, kisaran, dan total
+tetap hanya dari admin. Detail: `docs/WHATSAPP_OWNER_COMMANDS.md`.

@@ -153,7 +153,13 @@ model User {
   activityLogs ActivityLog[]
   sessions     Session[]
   waBotGuideVersions WaBotGuideVersion[]
+  // Nomor WhatsApp owner (62…): pesan dari nomor ini ke bot = instruksi owner
+  // (docs/WHATSAPP_OWNER_COMMANDS.md §3)
+  // Unik dicek di API (bukan @unique): db push di deploy tidak memakai --accept-data-loss.
+  waNumber           String?
+  waOwnerProposals   WaOwnerProposal[]
 
+  @@index([waNumber])
   @@map("users")
 }
 
@@ -584,6 +590,7 @@ model WaConversation {
   updatedAt     DateTime           @updatedAt
 
   client         Client?           @relation(fields: [clientId], references: [id])
+  ownerQueries   WaOwnerQuery[]
   messages       WaMessage[]
   intakes        WaIntake[]
   lookupAttempts WaLookupAttempt[]
@@ -604,6 +611,8 @@ model WaMessage {
   mediaSha256     String? // dari payload Meta; deteksi duplikat
   sentByBot       Boolean            @default(false)
   sentById        String? // User.id admin yang membalas manual dari portal; null = bot/pesan sistem
+  contextWamid    String? // wamid pesan yang dibalas (reply) oleh pengirim
+  ownerQueryId    String? // pertanyaan ke owner yang dikirim lewat pesan ini (§5)
   deliveryStatus  String?
   errorCode       String?
   createdAt       DateTime           @default(now())
@@ -637,6 +646,9 @@ model WaIntake {
 
   projectId    String?  @unique // terisi saat APPROVED
   cancelReason String?
+  // Aturan harga owner yang dijanjikan bot ke klien, untuk diterapkan admin saat isi harga
+  // (docs/WHATSAPP_OWNER_COMMANDS.md §6). Snapshot: [{ ruleId, kind, name, condition, amountType, amount, note }]
+  pricingRulesApplied Json @default("[]")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -694,10 +706,55 @@ model WaBotGuideVersion {
   version       Int      @unique
   instructions  String   @db.Text
   faqs          Json // [{ question, answer }]
+  pricingRules  Json     @default("[]") // docs/WHATSAPP_OWNER_COMMANDS.md §6
+  source        String   @default("PORTAL") // PORTAL | WHATSAPP
   publishedById String?
   publishedAt   DateTime @default(now())
 
   publishedBy User? @relation(fields: [publishedById], references: [id], onDelete: SetNull)
 
   @@map("wa_bot_guide_versions")
+}
+
+// Usulan perubahan panduan dari chat owner; berlaku setelah owner membalas YA
+// (docs/WHATSAPP_OWNER_COMMANDS.md §4).
+model WaOwnerProposal {
+  id             String   @id @default(cuid())
+  ownerId        String
+  conversationId String // percakapan owner (WA atau Uji bot)
+  guide          Json // panduan lengkap setelah perubahan
+  summary        String   @db.Text
+  baseVersion    Int? // versi aktif saat usulan dibuat; null = belum ada
+  target         String   @default("PUBLISH") // PUBLISH | DRAFT (Uji bot)
+  status         String   @default("PENDING") // PENDING | APPLIED | CANCELLED | EXPIRED
+  appliedVersion Int?
+  createdAt      DateTime @default(now())
+  expiresAt      DateTime
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, status])
+  @@map("wa_owner_proposals")
+}
+
+// Permintaan klien di luar katalog yang ditanyakan ke owner (docs/WHATSAPP_OWNER_COMMANDS.md §5).
+model WaOwnerQuery {
+  id             String    @id @default(cuid())
+  conversationId String // percakapan klien
+  intakeId       String?
+  question       String    @db.Text
+  status         String    @default("PENDING") // PENDING | ANSWERED | EXPIRED
+  approved       Boolean?
+  note           String?   @db.Text
+  answeredById   String?
+  answeredAt     DateTime?
+  relayedAt      DateTime? // jawaban sudah disampaikan bot ke klien
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime
+
+  conversation WaConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([status, expiresAt])
+  @@index([conversationId, status])
+  @@map("wa_owner_queries")
 }

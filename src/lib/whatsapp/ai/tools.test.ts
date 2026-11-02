@@ -16,6 +16,7 @@ const db = vi.hoisted(() => {
     paymentAccount: { findMany: vi.fn() },
     waLookupAttempt: { count: vi.fn(), create: vi.fn() },
     waConversation: { update: vi.fn(), findUniqueOrThrow: vi.fn() },
+    waOwnerQuery: { update: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
   };
@@ -42,6 +43,12 @@ vi.mock("@/lib/clients/find-by-phone", () => phoneLookup);
 vi.mock("@/lib/studio", () => ({
   getStudioSettings: async () => ({ name: "YukDesain Studio", email: "hello@x", phone: "0812", address: "Jakarta", logoUrl: "l", tagline: "t" }),
 }));
+const owners = vi.hoisted(() => ({ listOwnerNumbers: vi.fn() }));
+vi.mock("../owner/identity", () => owners);
+const queryStore = vi.hoisted(() => ({ findPendingQuery: vi.fn(), createOwnerQuery: vi.fn(), notifyOwners: vi.fn() }));
+vi.mock("../owner/query-store", () => queryStore);
+const guides = vi.hoisted(() => ({ getDraftGuide: vi.fn(), getPublishedGuide: vi.fn() }));
+vi.mock("./bot-guide", () => guides);
 vi.mock("./extract-payment-proof", async (orig) => ({
   ...(await orig<typeof import("./extract-payment-proof")>()),
   extractPaymentProof: extraction.extractPaymentProof,
@@ -85,6 +92,9 @@ describe("definisi tool", () => {
       "get_my_projects",
       "get_project_by_code",
       "get_studio_info",
+      // Menulis catatan untuk tim (pertanyaan ke owner, aturan harga yang dijanjikan), bukan harga/status.
+      "ask_owner",
+      "apply_pricing_rule",
       "request_human_handoff",
     ]);
     // Tool penulis tidak punya input untuk harga/deadline/project/nominal.
@@ -447,5 +457,97 @@ describe("status project (read-only)", () => {
   it("info studio hanya nama, email, telepon, alamat", async () => {
     const r = await run("get_studio_info", {});
     expect(r.data).toEqual({ name: "YukDesain Studio", email: "hello@x", phone: "0812", address: "Jakarta" });
+  });
+});
+
+describe("ask_owner (docs/WHATSAPP_OWNER_COMMANDS.md §5)", () => {
+  beforeEach(() => {
+    queryStore.findPendingQuery.mockResolvedValue(null);
+    queryStore.createOwnerQuery.mockResolvedValue({ id: "q_1" });
+    queryStore.notifyOwners.mockResolvedValue(1);
+    owners.listOwnerNumbers.mockResolvedValue([{ id: "u_owner", name: "Rizal", waNumber: "6281111111111" }]);
+    db.waIntake.findFirst.mockResolvedValue(activeIntake());
+  });
+
+  it("membuat pertanyaan untuk order aktif lalu mengirimnya ke owner", async () => {
+    const r = await run("ask_owner", { request: "Desain kemasan sachet kopi, 3 varian" });
+    expect(r.isError).toBe(false);
+    expect(queryStore.createOwnerQuery).toHaveBeenCalledWith({ conversationId: "conv_1", intakeId: "in_1", question: "Desain kemasan sachet kopi, 3 varian" });
+    expect(queryStore.notifyOwners).toHaveBeenCalledWith("q_1");
+  });
+
+  it("masih ada pertanyaan menunggu → tidak membuat pertanyaan baru", async () => {
+    queryStore.findPendingQuery.mockResolvedValue({ id: "q_0", question: "x" });
+    const r = await run("ask_owner", { request: "lagi" });
+    expect(r.data.alreadyWaiting).toBe(true);
+    expect(queryStore.createOwnerQuery).not.toHaveBeenCalled();
+  });
+
+  it("belum ada nomor owner → error, arahkan ke handoff", async () => {
+    owners.listOwnerNumbers.mockResolvedValue([]);
+    const r = await run("ask_owner", { request: "kemasan" });
+    expect(r.isError).toBe(true);
+    expect(r.data.error).toContain("request_human_handoff");
+  });
+
+  it("gagal terkirim ke semua owner → pertanyaan kedaluwarsa, error", async () => {
+    queryStore.notifyOwners.mockResolvedValue(0);
+    const r = await run("ask_owner", { request: "kemasan" });
+    expect(r.isError).toBe(true);
+    expect(db.waOwnerQuery.update).toHaveBeenCalledWith({ where: { id: "q_1" }, data: { status: "EXPIRED" } });
+  });
+
+  it("Uji bot: pertanyaan dibuat tanpa dikirim ke WhatsApp, walau nomor owner belum ada", async () => {
+    owners.listOwnerNumbers.mockResolvedValue([]);
+    const r = await executeTool("ask_owner", { request: "kemasan" }, { conversationId: "conv_s", isSandbox: true });
+    expect(r.isError).toBe(false);
+    expect(queryStore.notifyOwners).not.toHaveBeenCalled();
+  });
+});
+
+describe("apply_pricing_rule (docs/WHATSAPP_OWNER_COMMANDS.md §6)", () => {
+  const rule = { id: "diskon-5pcs", kind: "DISCOUNT", name: "Diskon >5 pcs", condition: "lebih dari 5 pcs", amountType: "FIXED", amount: 50000, note: "" };
+
+  beforeEach(() => {
+    guides.getPublishedGuide.mockResolvedValue({ version: 2, guide: { instructions: "", faqs: [], pricingRules: [rule] } });
+    db.waIntake.findFirst.mockResolvedValue(activeIntake({ pricingRulesApplied: [] }));
+  });
+
+  it("mencatat snapshot aturan di order", async () => {
+    const r = await run("apply_pricing_rule", { rule_id: "diskon-5pcs", note: "klien pesan 8 desain" });
+    expect(r.isError).toBe(false);
+    expect(db.waIntake.update).toHaveBeenCalledWith({
+      where: { id: "in_1" },
+      data: {
+        pricingRulesApplied: [
+          { ruleId: "diskon-5pcs", kind: "DISCOUNT", name: "Diskon >5 pcs", condition: "lebih dari 5 pcs", amountType: "FIXED", amount: 50000, note: "klien pesan 8 desain" },
+        ],
+      },
+    });
+  });
+
+  it("remove=true menghapus aturan dari order", async () => {
+    db.waIntake.findFirst.mockResolvedValue(activeIntake({ pricingRulesApplied: [{ ruleId: "diskon-5pcs", name: "Diskon >5 pcs" }] }));
+    await run("apply_pricing_rule", { rule_id: "diskon-5pcs", remove: true });
+    expect(db.waIntake.update.mock.calls[0][0].data.pricingRulesApplied).toEqual([]);
+  });
+
+  it("aturan tidak ada di panduan terbit → error", async () => {
+    const r = await run("apply_pricing_rule", { rule_id: "express" });
+    expect(r.isError).toBe(true);
+    expect(db.waIntake.update).not.toHaveBeenCalled();
+  });
+
+  it("setelah penawaran dikirim → ditolak", async () => {
+    db.waIntake.findFirst.mockResolvedValue(activeIntake({ status: "QUOTED", pricingRulesApplied: [] }));
+    const r = await run("apply_pricing_rule", { rule_id: "diskon-5pcs" });
+    expect(r.isError).toBe(true);
+  });
+
+  it("Uji bot memakai aturan dari draft", async () => {
+    guides.getDraftGuide.mockResolvedValue({ instructions: "", faqs: [], pricingRules: [{ ...rule, id: "express" }] });
+    const r = await executeTool("apply_pricing_rule", { rule_id: "express" }, { conversationId: "conv_s", isSandbox: true });
+    expect(r.isError).toBe(false);
+    expect(guides.getPublishedGuide).not.toHaveBeenCalled();
   });
 });

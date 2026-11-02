@@ -43,10 +43,24 @@ describe("parseWebhook", () => {
         waId: "6281234567890",
         profileName: "Budi",
         sentAt: new Date(1793500000 * 1000),
+        contextWamid: null,
         type: "text",
         body: "Halo",
       },
     ]);
+  });
+
+  it("balasan (reply) membawa wamid pesan yang dibalas", () => {
+    const parsed = parseWebhook(
+      webhook({
+        contacts,
+        messages: [
+          { from: "6281234567890", id: "wamid.9", timestamp: "1793500000", type: "text", text: { body: "BISA" }, context: { id: "wamid.Q1" } },
+        ],
+      }),
+      PHONE_ID,
+    );
+    expect(parsed?.messages[0]).toMatchObject({ contextWamid: "wamid.Q1", body: "BISA" });
   });
 
   it("pesan gambar dengan caption", () => {

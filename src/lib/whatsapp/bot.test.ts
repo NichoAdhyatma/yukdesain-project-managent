@@ -4,7 +4,9 @@ const db = vi.hoisted(() => ({
   waMessage: { findUniqueOrThrow: vi.fn(), create: vi.fn(), count: vi.fn() },
   waConversation: { update: vi.fn() },
   studioSettings: { findUnique: vi.fn() },
+  waOwnerQuery: { updateMany: vi.fn() },
 }));
+const owner = vi.hoisted(() => ({ resolveOwner: vi.fn(), handleOwnerMessage: vi.fn() }));
 const api = vi.hoisted(() => ({ sendText: vi.fn(), markAsRead: vi.fn() }));
 const media = vi.hoisted(() => ({ storeInboundMedia: vi.fn() }));
 const ai = vi.hoisted(() => ({ runAiTurn: vi.fn() }));
@@ -25,6 +27,8 @@ vi.mock("./media", () => media);
 vi.mock("./ai/conversation", () => ai);
 vi.mock("./rate-limit", () => limits);
 vi.mock("./ai/tools", () => tools);
+vi.mock("./owner/identity", () => ({ resolveOwner: owner.resolveOwner }));
+vi.mock("./owner/handle", () => ({ handleOwnerMessage: owner.handleOwnerMessage }));
 
 import { WhatsAppApiError } from "./client-api";
 import { BOT_REPLIES, handleInboundMessage } from "./bot";
@@ -41,8 +45,8 @@ function givenMessage(type: string, body = "halo", mode = "BOT") {
   });
 }
 
-const aiReply = (reply: string | null, intakeStatus: string | null = "COLLECTING", briefText = "{}") =>
-  ai.runAiTurn.mockResolvedValue({ reply, intakeStatus, briefText, toolsCalled: [] });
+const aiReply = (reply: string | null, intakeStatus: string | null = "COLLECTING", briefText = "{}", allowedPriceNumbers: string[] = []) =>
+  ai.runAiTurn.mockResolvedValue({ reply, intakeStatus, briefText, allowedPriceNumbers, toolsCalled: [] });
 
 const sentBodies = () => api.sendText.mock.calls.map(([, body]) => body);
 const humanModeSet = () =>
@@ -61,6 +65,7 @@ describe("handleInboundMessage", () => {
     limits.botReplyLimitReached.mockResolvedValue(false);
     limits.imageLimitExceeded.mockResolvedValue(false);
     tools.findActiveIntake.mockResolvedValue({ createdAt: new Date("2026-11-01T00:00:00Z") });
+    owner.resolveOwner.mockResolvedValue(null);
   });
 
   it("banjir pesan: pesan pertama yang lewat batas mendapat peringatan, tanpa AI", async () => {
@@ -268,6 +273,7 @@ describe("handleInboundMessage — Uji bot (sandbox)", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    owner.resolveOwner.mockResolvedValue(null);
     db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
     db.waMessage.count.mockResolvedValue(0);
     aiReply("Halo kak, mau desain apa?");
@@ -306,5 +312,22 @@ describe("handleInboundMessage — Uji bot (sandbox)", () => {
     expect(humanModeSet()).toBe(true);
     expect(db.waMessage.create.mock.calls[0][0].data.body).toBe(BOT_REPLIES.handoff);
     expect(api.sendText).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleInboundMessage — nomor owner (docs/WHATSAPP_OWNER_COMMANDS.md §3)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
+    owner.resolveOwner.mockResolvedValue({ user: { id: "u_owner", name: "Rizal" }, target: "PUBLISH" });
+  });
+
+  it("pesan owner → alur owner, walau bot nonaktif; alur klien tidak jalan", async () => {
+    givenMessage("text", "kasih diskon 50rb");
+    await handleInboundMessage("msg_1");
+    expect(owner.handleOwnerMessage).toHaveBeenCalled();
+    expect(ai.runAiTurn).not.toHaveBeenCalled();
+    expect(limits.checkInboundRate).not.toHaveBeenCalled();
+    expect(api.markAsRead).toHaveBeenCalledWith("wamid.IN");
   });
 });

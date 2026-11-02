@@ -103,3 +103,20 @@ describe("sanitizeReply", () => {
     expect(sanitizeReply("经营者业务的 ok").rejected).toBe(true);
   });
 });
+
+describe("stripPriceMentions — aturan harga owner (docs/WHATSAPP_OWNER_COMMANDS.md §6)", () => {
+  it("nilai aturan harga terbit boleh disebut, angka lain tetap dibuang", () => {
+    const r = stripPriceMentions(
+      "Order lebih dari 5 desain dapat potongan Rp50.000 lho kak! Paket express ada tambahan 50% dari total. Harga logo Rp750.000 ya.",
+      "",
+      ["50000", "5", "50"],
+    );
+    expect(r.text).toContain("Rp50.000");
+    expect(r.text).toContain("50% dari total");
+    expect(r.text).not.toContain("750.000");
+  });
+
+  it("tanpa aturan harga: potongan pun dibuang", () => {
+    expect(stripPriceMentions("Ada potongan Rp50.000 kak.").text).not.toContain("50.000");
+  });
+});

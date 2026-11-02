@@ -61,7 +61,15 @@ export const REAL_INTAKE = { conversation: { isSandbox: false } } satisfies Pris
 // ---- List ----
 
 export const listInclude = {
-  conversation: { select: { waId: true, profileName: true, lastInboundAt: true, mode: true } },
+  conversation: {
+    select: {
+      waId: true,
+      profileName: true,
+      lastInboundAt: true,
+      mode: true,
+      _count: { select: { ownerQueries: { where: { status: "PENDING" } } } },
+    },
+  },
   service: { select: { code: true, name: true } },
   _count: { select: { paymentProofs: { where: { status: "PENDING" } } } },
 } satisfies Prisma.WaIntakeInclude;
@@ -80,6 +88,8 @@ export function toListItem(row: ListRow) {
     deadline: row.deadline,
     pendingProofs: row._count.paymentProofs,
     conversationMode: row.conversation.mode,
+    // Pertanyaan luar katalog sedang menunggu jawaban owner (docs/WHATSAPP_OWNER_COMMANDS.md §5)
+    waitingForOwner: row.conversation._count.ownerQueries > 0,
     // Pesan berikutnya ke klien akan memakai template (§12.1)
     outsideServiceWindow: !isWithinServiceWindow(row.conversation.lastInboundAt),
     updatedAt: row.updatedAt,
@@ -96,6 +106,11 @@ export const detailInclude = {
       profileName: true,
       mode: true,
       lastInboundAt: true,
+      ownerQueries: {
+        orderBy: { createdAt: "desc" },
+        take: 10,
+        select: { id: true, question: true, status: true, approved: true, note: true, createdAt: true, answeredAt: true, relayedAt: true },
+      },
       messages: {
         orderBy: { createdAt: "desc" },
         take: 200,
@@ -195,6 +210,19 @@ export async function toDetail(row: DetailRow) {
       deadline: row.deadline,
       quotedAt: row.quotedAt,
     },
+    // Aturan harga owner yang dijanjikan bot: diterapkan admin saat mengisi harga (§6)
+    pricingRulesApplied: Array.isArray(row.pricingRulesApplied)
+      ? (row.pricingRulesApplied as {
+          ruleId: string;
+          kind: "DISCOUNT" | "SURCHARGE";
+          name: string;
+          condition: string;
+          amountType: "FIXED" | "PERCENT";
+          amount: number;
+          note: string | null;
+        }[])
+      : [],
+    ownerQueries: conversation.ownerQueries,
     cancelReason: row.cancelReason,
     projectId: row.projectId,
     project: row.project,

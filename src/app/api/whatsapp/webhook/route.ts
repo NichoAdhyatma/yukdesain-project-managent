@@ -6,6 +6,7 @@ import { parseWebhook } from "@/lib/whatsapp/payload";
 import { applyStatusUpdate, storeInboundMessage } from "@/lib/whatsapp/inbound";
 import { handleInboundMessage } from "@/lib/whatsapp/bot";
 import { maskPhone } from "@/lib/whatsapp/phone";
+import { expireOwnerQueries } from "@/lib/whatsapp/owner/queries";
 
 // Unduh media + panggilan Claude di after() bisa lebih dari 10 detik (§6).
 export const maxDuration = 60;
@@ -82,6 +83,8 @@ export async function POST(request: Request) {
   // Pesan duplikat (wamid sudah ada) tidak diproses ulang.
   if (stored.length) {
     after(async () => {
+      // Pertanyaan ke owner yang lewat batas waktu → chat klien ke admin (tanpa cron).
+      await expireOwnerQueries().catch((error) => console.error("[whatsapp] expire pertanyaan owner gagal:", (error as Error).name));
       for (const { id, waId } of stored) {
         try {
           await handleInboundMessage(id);

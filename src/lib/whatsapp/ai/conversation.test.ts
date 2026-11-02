@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   waMessage: { findUniqueOrThrow: vi.fn(), findMany: vi.fn() },
   waIntake: { findFirst: vi.fn() },
   waConversation: { findUniqueOrThrow: vi.fn() },
+  waOwnerQuery: { findMany: vi.fn(async () => []) },
   paymentAccount: { findMany: vi.fn() },
 }));
 const guides = vi.hoisted(() => ({ getDraftGuide: vi.fn(), getPublishedGuide: vi.fn() }));
@@ -62,7 +63,7 @@ beforeEach(() => {
   db.paymentAccount.findMany.mockResolvedValue([]);
   db.waConversation.findUniqueOrThrow.mockResolvedValue({ isSandbox: false });
   guides.getPublishedGuide.mockResolvedValue(null);
-  guides.getDraftGuide.mockResolvedValue({ instructions: "", faqs: [] });
+  guides.getDraftGuide.mockResolvedValue({ instructions: "", faqs: [], pricingRules: [] });
   tools.findActiveIntake.mockResolvedValue(null);
   tools.executeTool.mockResolvedValue({ content: '{"ok":true}', isError: false });
 });
@@ -129,7 +130,7 @@ describe("runAiTurn", () => {
 
     const result = await runAiTurn(params);
 
-    expect(tools.executeTool).toHaveBeenCalledWith("start_intake", { service_code: "SVC-01" }, { conversationId: "conv_1" });
+    expect(tools.executeTool).toHaveBeenCalledWith("start_intake", { service_code: "SVC-01" }, { conversationId: "conv_1", isSandbox: false });
     expect(result).toMatchObject({
       reply: "Siap kak, nama brandnya apa?",
       intakeStatus: "COLLECTING",
@@ -233,8 +234,8 @@ describe("runAiTurn", () => {
 });
 
 describe("runAiTurn — panduan owner", () => {
-  const published = { instructions: "Admin membalas jam 09.00-17.00 WIB.", faqs: [] };
-  const draft = { instructions: "", faqs: [{ question: "Bisa minta file mentah?", answer: "Bisa, file AI dan PDF ikut dikirim." }] };
+  const published = { instructions: "Admin membalas jam 09.00-17.00 WIB.", faqs: [], pricingRules: [] };
+  const draft = { instructions: "", faqs: [{ question: "Bisa minta file mentah?", answer: "Bisa, file AI dan PDF ikut dikirim." }], pricingRules: [] };
 
   beforeEach(() => {
     givenHistory([inbound("m_last", "halo")]);

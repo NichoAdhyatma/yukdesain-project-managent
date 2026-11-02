@@ -10,6 +10,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
 import { DP_PERCENT } from "@/lib/constants";
 import { formatRupiah } from "./labels";
+import { PricingRulesNotice } from "./OwnerNotes";
 import type { WaIntakeDetail } from "./types";
 import { useIntakeAction } from "./use-intake-action";
 
@@ -46,6 +47,7 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
             quote.mutate({ agreedPrice: price, deadline: format(deadline, "yyyy-MM-dd") });
           }}
         >
+          <PricingRulesNotice rules={intake.pricingRulesApplied} />
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="quote-price">Harga</Label>

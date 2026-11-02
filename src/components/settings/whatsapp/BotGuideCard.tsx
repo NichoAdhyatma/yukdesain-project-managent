@@ -13,21 +13,45 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { PricingRulesEditor, type FormRule } from "./PricingRulesEditor";
 
 // Panduan bot dari owner (docs/WHATSAPP_BOT_GUIDE.md): draft → Uji bot → terbitkan.
 
-type Guide = { instructions: string; faqs: { question: string; answer: string }[] };
+type GuideRule = {
+  id: string;
+  kind: "DISCOUNT" | "SURCHARGE";
+  name: string;
+  condition: string;
+  amountType: "FIXED" | "PERCENT";
+  amount: number;
+  note: string;
+};
+type Guide = { instructions: string; faqs: { question: string; answer: string }[]; pricingRules: GuideRule[] };
 type GuideResponse = {
   draft: Guide;
   published: { version: number; publishedAt: string } | null;
   hasUnpublishedChanges: boolean;
-  versions: { version: number; publishedAt: string; publishedBy: string | null; instructionsLength: number; faqCount: number }[];
-  limits: { instructionsMaxChars: number; faqMaxItems: number; faqQuestionMaxChars: number; faqAnswerMaxChars: number };
+  versions: {
+    version: number;
+    publishedAt: string;
+    publishedBy: string | null;
+    source: "PORTAL" | "WHATSAPP";
+    instructionsLength: number;
+    faqCount: number;
+    pricingRuleCount: number;
+  }[];
+  limits: {
+    instructionsMaxChars: number;
+    faqMaxItems: number;
+    faqQuestionMaxChars: number;
+    faqAnswerMaxChars: number;
+    pricingRulesMaxItems: number;
+  };
 };
 
 // FAQ di form butuh key stabil (urutan bisa berubah saat dihapus).
 type FormFaq = { key: number; question: string; answer: string };
-type FormState = { instructions: string; faqs: FormFaq[] };
+type FormState = { instructions: string; faqs: FormFaq[]; pricingRules: FormRule[] };
 
 export const GUIDE_QUERY_KEY = ["settings", "whatsapp", "guide"];
 
@@ -69,13 +93,24 @@ export function BotGuideCard() {
   const toForm = (g: Guide): FormState => ({
     instructions: g.instructions,
     faqs: g.faqs.map((f) => ({ key: nextKey.current++, ...f })),
+    pricingRules: (g.pricingRules ?? []).map((r) => ({ key: nextKey.current++, ...r })),
   });
-  const toGuide = (f: FormState): Guide => ({
+  // Urutan kunci sama dengan respons server, supaya perbandingan JSON (dirty) akurat.
+  const toGuide = (f: FormState) => ({
     instructions: f.instructions.trim(),
     faqs: f.faqs.map(({ question, answer }) => ({ question: question.trim(), answer: answer.trim() })),
+    pricingRules: f.pricingRules.map((r) => ({
+      ...(r.id ? { id: r.id } : {}),
+      kind: r.kind,
+      name: r.name.trim(),
+      condition: r.condition.trim(),
+      amountType: r.amountType,
+      amount: r.amount,
+      note: r.note.trim(),
+    })),
   });
 
-  const [form, setForm] = useState<FormState>({ instructions: "", faqs: [] });
+  const [form, setForm] = useState<FormState>({ instructions: "", faqs: [], pricingRules: [] });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -209,8 +244,9 @@ export function BotGuideCard() {
           }}
         >
           <p className="text-sm text-muted-foreground">
-            Panduan tidak bisa membuat bot menyebut harga atau lama pengerjaan sebelum admin mengisinya, menawar harga,
-            menyatakan DP valid, atau membahas topik di luar YukDesain. Aturan itu dijaga sistem.
+            Selain aturan harga di bawah, panduan tidak bisa membuat bot menyebut harga atau lama pengerjaan sebelum
+            admin mengisinya, menawar harga, menyatakan DP valid, atau membahas topik di luar YukDesain. Aturan itu
+            dijaga sistem. Panduan juga bisa diubah lewat chat WhatsApp dari nomor owner.
           </p>
 
           <div className="space-y-2">
@@ -342,6 +378,31 @@ export function BotGuideCard() {
 
           <Separator />
 
+          <PricingRulesEditor
+            rules={form.pricingRules}
+            max={limits.pricingRulesMaxItems}
+            errors={errors}
+            onChange={(key, patch, index) => {
+              setForm((f) => ({ ...f, pricingRules: f.pricingRules.map((r) => (r.key === key ? { ...r, ...patch } : r)) }));
+              for (const field of Object.keys(patch)) clearError(`pricingRules.${index}.${field}`);
+            }}
+            onRemove={(key) => {
+              setForm((f) => ({ ...f, pricingRules: f.pricingRules.filter((r) => r.key !== key) }));
+              setErrors({});
+            }}
+            onAdd={() =>
+              setForm((f) => ({
+                ...f,
+                pricingRules: [
+                  ...f.pricingRules,
+                  { key: nextKey.current++, kind: "DISCOUNT", name: "", condition: "", amountType: "FIXED", amount: 0, note: "" },
+                ],
+              }))
+            }
+          />
+
+          <Separator />
+
           <div className="space-y-3">
             <div aria-live="polite" className="min-h-5 text-sm">
               {dirty ? (
@@ -409,8 +470,9 @@ export function BotGuideCard() {
                         </p>
                         <p className="text-muted-foreground">
                           {formatDateTime(v.publishedAt)}
-                          {v.publishedBy && ` oleh ${v.publishedBy}`} · {v.instructionsLength.toLocaleString("id-ID")} karakter
-                          aturan, {v.faqCount} FAQ
+                          {v.publishedBy && ` oleh ${v.publishedBy}`}
+                          {v.source === "WHATSAPP" && " lewat WhatsApp"} · {v.instructionsLength.toLocaleString("id-ID")} karakter
+                          aturan, {v.faqCount} FAQ, {v.pricingRuleCount} aturan harga
                         </p>
                       </div>
                       {!active && (

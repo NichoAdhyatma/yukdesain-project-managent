@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Clock, Loader2, RotateCcw, UserRound } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { WaitingForOwnerBadge } from "@/components/wa-orders/OwnerNotes";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -142,6 +143,7 @@ export default function WaOrdersPage() {
                         <TableCell>
                           <div className="flex flex-wrap items-center gap-1.5">
                             <Badge variant={STATUS_BADGE[item.status].variant}>{STATUS_BADGE[item.status].label}</Badge>
+                            {item.waitingForOwner && <WaitingForOwnerBadge />}
                             {item.conversationMode === "HUMAN" && (
                               <Badge variant="outline" className="gap-1">
                                 <UserRound className="h-3 w-3" aria-hidden="true" />

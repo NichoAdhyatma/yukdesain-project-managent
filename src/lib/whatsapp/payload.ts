@@ -13,6 +13,8 @@ const messageSchema = z.object({
   id: z.string(),
   timestamp: z.string(),
   type: z.string(),
+  // Pesan yang dibalas (reply) pengirim
+  context: z.object({ id: z.string().optional() }).optional(),
   text: z.object({ body: z.string() }).optional(),
   image: z
     .object({
@@ -52,6 +54,7 @@ export type InboundMessage = {
   waId: string;
   profileName: string | null;
   sentAt: Date;
+  contextWamid: string | null;
 } & (
   | { type: "text"; body: string }
   | { type: "image"; mediaId: string; mimeType: string | null; sha256: string | null; caption: string | null }
@@ -102,6 +105,7 @@ export function parseWebhook(json: unknown, phoneNumberId: string): ParsedWebhoo
           waId: msg.from,
           profileName: names.get(msg.from) ?? null,
           sentAt: fromUnixSeconds(msg.timestamp),
+          contextWamid: msg.context?.id ?? null,
         };
         if (msg.type === "text" && msg.text) {
           result.messages.push({ ...base, type: "text", body: msg.text.body });
