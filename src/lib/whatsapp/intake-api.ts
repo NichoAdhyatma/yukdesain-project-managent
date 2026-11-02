@@ -106,6 +106,7 @@ export const detailInclude = {
           body: true,
           mediaStorageKey: true,
           sentByBot: true,
+          sentById: true,
           deliveryStatus: true,
           errorCode: true,
           createdAt: true,
@@ -152,6 +153,8 @@ export async function toDetail(row: DetailRow) {
       body: m.body,
       imageUrl: m.type === "image" ? await signedUrl(m.mediaStorageKey) : null,
       sentByBot: m.sentByBot,
+      // Balasan manual admin dari portal; id admin tidak ikut di DTO
+      sentByAdmin: m.sentById !== null,
       deliveryStatus: m.deliveryStatus,
       errorCode: m.errorCode,
       createdAt: m.createdAt,

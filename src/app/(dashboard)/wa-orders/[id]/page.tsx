@@ -34,8 +34,9 @@ export default function WaOrderDetailPage({ params }: { params: Promise<{ id: st
       if (!res.ok) throw new Error("Gagal memuat order");
       return res.json();
     },
-    // Presigned URL gambar berlaku 10 menit; muat ulang sebelum kedaluwarsa.
-    refetchInterval: 5 * 60_000,
+    // Saat admin yang membalas (HUMAN), pesan klien perlu cepat terlihat. Selain itu cukup
+    // muat ulang sebelum presigned URL gambar (10 menit) kedaluwarsa.
+    refetchInterval: (query) => (query.state.data?.conversation.mode === "HUMAN" ? 15_000 : 5 * 60_000),
   });
 
   const back = (

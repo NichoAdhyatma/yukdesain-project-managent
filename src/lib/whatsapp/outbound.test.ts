@@ -17,6 +17,7 @@ import {
   dpRejectedMessage,
   isWithinServiceWindow,
   offerMessage,
+  sendManualReply,
   sendToClient,
   templateParam,
 } from "./outbound";
@@ -149,6 +150,43 @@ describe("sendToClient", () => {
       throw new Error("x");
     });
     await expect(sendToClient("conv_1", offer)).resolves.toMatchObject({ ok: false, errorCode: "NOT_CONFIGURED" });
+    expect(api.sendText).not.toHaveBeenCalled();
+  });
+});
+
+describe("sendManualReply", () => {
+  const conv = { id: "conv_1", waId: "6281234567890" };
+
+  it("teks bebas terkirim, disimpan dengan sentById admin (bukan bot)", async () => {
+    const res = await sendManualReply(conv, "Halo kak, bisa kami bantu", "u_owner");
+    expect(res).toEqual({ ok: true, via: "text", messageId: "out_1" });
+    expect(api.sendText).toHaveBeenCalledWith("6281234567890", "Halo kak, bisa kami bantu");
+    expect(api.sendTemplate).not.toHaveBeenCalled();
+    expect(db.waMessage.create.mock.calls[0][0].data).toMatchObject({
+      conversationId: "conv_1",
+      direction: "OUTBOUND",
+      type: "text",
+      body: "Halo kak, bisa kami bantu",
+      sentByBot: false,
+      sentById: "u_owner",
+      wamid: "wamid.T",
+      deliveryStatus: "sent",
+    });
+  });
+
+  it("gagal dari Meta → tetap disimpan sebagai failed dengan kode error", async () => {
+    api.sendText.mockRejectedValue(new WhatsAppApiError(400, "131047"));
+    const res = await sendManualReply(conv, "Halo", "u_owner");
+    expect(res).toEqual({ ok: false, via: "text", errorCode: "131047", messageId: "out_1" });
+    expect(db.waMessage.create.mock.calls[0][0].data).toMatchObject({ deliveryStatus: "failed", errorCode: "131047", sentById: "u_owner" });
+  });
+
+  it("env belum lengkap → NOT_CONFIGURED tanpa memanggil Meta", async () => {
+    env.getWhatsAppEnv.mockImplementation(() => {
+      throw new Error("Konfigurasi WhatsApp tidak valid");
+    });
+    const res = await sendManualReply(conv, "Halo", "u_owner");
+    expect(res).toMatchObject({ ok: false, errorCode: "NOT_CONFIGURED" });
     expect(api.sendText).not.toHaveBeenCalled();
   });
 });

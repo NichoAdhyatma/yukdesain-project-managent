@@ -111,6 +111,7 @@ Satu percakapan hanya boleh punya **satu intake aktif** (status selain `APPROVED
 - Pesan keluar ke klien (penawaran, DP valid/ditolak) dengan fallback **message template** jika di luar jendela 24 jam.
 - Jawaban status project read-only untuk project yang sudah ada.
 - Handoff ke admin, saklar on/off bot, rate limit, kontrol biaya.
+- Balasan manual admin dari portal saat mode HUMAN + ambil alih / kembalikan ke bot (§12.5, disetujui owner 2026-11-02).
 
 ### Tidak termasuk
 
@@ -118,7 +119,7 @@ Satu percakapan hanya boleh punya **satu intake aktif** (status selain `APPROVED
 - Bot menentukan/menegosiasi harga, deadline, diskon, revisi tambahan.
 - Bot mengubah project yang sudah `APPROVED` (revisi tetap lewat portal klien).
 - Voice note, video, dokumen PDF dari klien (balas sopan: kirim sebagai teks/gambar). PDF bukti transfer: lihat §17 pertanyaan terbuka.
-- Inbox untuk membalas chat manual dari portal (fase berikutnya; admin membalas dari WhatsApp Manager selama mode HUMAN).
+- Inbox terpisah lintas percakapan (daftar chat, notifikasi pesan baru). Balasan manual dilakukan dari halaman detail Order WA (§12.5).
 - Pengingat otomatis ke klien yang diam, broadcast, marketing.
 
 ---
@@ -565,6 +566,8 @@ Tambahkan jumlah "Perlu Harga" + "Verifikasi DP" sebagai badge di menu sidebar d
 | `POST .../approve` | `proofId`, `verifiedAmount`, `checklist` | §12.4 |
 | `POST .../reject` | `proofId`, `reason` | Proof `REJECTED`, intake → `QUOTED`, kirim alasan ke klien |
 | `POST .../cancel` | `reason` | Intake → `CANCELLED`, beri tahu klien |
+| `POST .../messages` | `text` (1–4096 karakter) | Balasan manual admin (§12.5) |
+| `POST .../mode` | `mode`: `BOT` \| `HUMAN` | Ambil alih / kembalikan ke bot (§12.5) |
 
 Semua mutasi → `ActivityLog` (`entityType: "WaIntake"`).
 
@@ -598,6 +601,23 @@ Lalu dalam satu `prisma.$transaction`:
 ```
 
 Setelah transaksi commit (di luar transaksi): kirim pesan "DP valid" + kode project + link tracking (§13). Jika pengiriman WA gagal, project tetap jadi; tampilkan peringatan di portal + tombol "Kirim ulang".
+
+### 12.5 Balasan manual & mode percakapan (disetujui owner 2026-11-02)
+
+Nomor bot hanya terdaftar di Cloud API, jadi nomor itu tidak bisa dipakai di aplikasi WhatsApp Business, dan WhatsApp Manager tidak punya kotak masuk chat. Satu-satunya cara admin membalas dari nomor bot adalah lewat portal.
+
+| Topik | Keputusan owner |
+|---|---|
+| Kapan admin bisa membalas | Hanya saat mode **HUMAN**. Saat mode BOT, portal menampilkan tombol **Ambil alih** (→ HUMAN), supaya bot dan admin tidak membalas bersamaan. |
+| Kembali ke bot | Tombol **Kembalikan ke bot** (→ BOT). **Tanpa pesan** ke klien; bot baru membalas pesan klien berikutnya. |
+| Pengirim | Disimpan di `WaMessage.sentById` (aditif). Chat menampilkan label "Admin", berbeda dari "Bot" dan "Pesan sistem". |
+
+Aturan (dicek di server):
+- `POST .../messages`: mode harus `HUMAN` (selain itu `CONFLICT`) dan masih di dalam jendela 24 jam (selain itu `UNPROCESSABLE_ENTITY`; Meta hanya menerima template, dan tidak ada template untuk teks bebas). Pesan disimpan sebagai OUTBOUND (`sentByBot: false`, `sentById` = admin), berhasil maupun gagal. ActivityLog `WA_MANUAL_REPLY` mencatat id pesan dan hasilnya, tanpa isi pesan.
+- `POST .../mode`: update memakai mode lama di `where` (klik ganda → `CONFLICT`). ActivityLog `WA_CHAT_TAKEN_OVER` / `WA_CHAT_RETURNED_TO_BOT`. Mode berlaku per nomor (`WaConversation`), jadi berlaku juga untuk order lain dari nomor yang sama.
+- Di luar 24 jam, kolom balas diganti penjelasan + nomor klien untuk dihubungi dari nomor lain.
+- Pesan admin ikut masuk riwayat yang dibaca bot setelah chat dikembalikan. Harga/deadline yang disepakati lewat chat **tetap harus diisi lewat form harga**; bot hanya memakai harga dari blok STATE.
+- Selama mode HUMAN, halaman detail memuat ulang data tiap 15 detik supaya pesan baru klien terlihat.
 
 ---
 
@@ -771,6 +791,7 @@ Perbedaan dari rencana di atas, beserta alasannya. Dokumen di atas tetap acuan p
 - Teks template untuk WhatsApp Manager: `docs/WHATSAPP_TEMPLATES.md`.
 - Menu "Order WA" berada di grup `Work` (grup yang dipakai seed), bukan "Work Management".
 - Alasan handoff belum disimpan (belum ada kolom); portal hanya menampilkan mode "Ditangani admin".
+- (2026-11-02) Sebelum §12.5, mode HUMAN tidak bisa kembali ke BOT tanpa mengubah database, dan teks portal yang menyuruh membalas dari WhatsApp Business tidak bisa dijalankan untuk nomor khusus Cloud API.
 - Uji live dilakukan lewat gateway pihak ketiga yang ternyata tidak menjalankan Claude asli. Alur dan aturan bisnis lolos; kualitas bahasa perlu diuji ulang dengan API resmi sebelum go-live.
 
 ---
