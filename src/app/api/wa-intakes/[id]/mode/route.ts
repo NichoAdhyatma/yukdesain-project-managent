@@ -2,7 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { errorResponse, findIntakeForDetail, logIntakeActivity, parseBody, toDetail } from "@/lib/whatsapp/intake-api";
+import {
+  REAL_INTAKE,
+  errorResponse,
+  findIntakeForDetail,
+  logIntakeActivity,
+  parseBody,
+  toDetail,
+} from "@/lib/whatsapp/intake-api";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -20,7 +27,7 @@ export async function POST(request: Request, { params }: Params) {
   if (body.error) return body.error;
   const { mode } = body.data;
 
-  const intake = await prisma.waIntake.findUnique({ where: { id }, select: { conversationId: true } });
+  const intake = await prisma.waIntake.findFirst({ where: { id, ...REAL_INTAKE }, select: { conversationId: true } });
   if (!intake) return errorResponse("NOT_FOUND", "Order WA tidak ditemukan");
 
   const from = mode === "HUMAN" ? "BOT" : "HUMAN";

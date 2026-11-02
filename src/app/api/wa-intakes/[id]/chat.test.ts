@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Balasan manual admin + ambil alih / kembalikan ke bot.
 const db = vi.hoisted(() => {
   const d = {
-    waIntake: { findUnique: vi.fn() },
+    waIntake: { findFirst: vi.fn() },
     waConversation: { updateMany: vi.fn() },
     activityLog: { create: vi.fn() },
     $transaction: vi.fn(),
@@ -33,7 +33,7 @@ const req = (body: unknown) => new Request("http://x", { method: "POST", body: J
 const HOUR = 60 * 60 * 1000;
 
 function conversation(mode: "BOT" | "HUMAN", hoursSinceInbound: number | null = 1) {
-  db.waIntake.findUnique.mockResolvedValue({
+  db.waIntake.findFirst.mockResolvedValue({
     conversationId: "conv_1",
     conversation: {
       id: "conv_1",
@@ -56,7 +56,7 @@ describe("POST messages", () => {
   it("bukan owner → 403, tidak mengirim", async () => {
     session.getCurrentUser.mockResolvedValue({ id: "d", roles: ["DESIGNER"] });
     expect((await sendMessage(req({ text: "Halo" }), ctx)).status).toBe(403);
-    expect(db.waIntake.findUnique).not.toHaveBeenCalled();
+    expect(db.waIntake.findFirst).not.toHaveBeenCalled();
     expect(outbound.sendManualReply).not.toHaveBeenCalled();
   });
 
@@ -74,7 +74,7 @@ describe("POST messages", () => {
   });
 
   it("order tidak ada → 404", async () => {
-    db.waIntake.findUnique.mockResolvedValue(null);
+    db.waIntake.findFirst.mockResolvedValue(null);
     expect((await sendMessage(req({ text: "Halo" }), ctx)).status).toBe(404);
   });
 
@@ -158,7 +158,18 @@ describe("POST mode", () => {
   });
 
   it("order tidak ada → 404", async () => {
-    db.waIntake.findUnique.mockResolvedValue(null);
+    db.waIntake.findFirst.mockResolvedValue(null);
     expect((await setMode(req({ mode: "BOT" }), ctx)).status).toBe(404);
+  });
+});
+
+describe("order dari Uji bot (docs/WHATSAPP_BOT_GUIDE.md §5)", () => {
+  it.each([
+    ["messages", () => sendMessage(req({ text: "Halo kak" }), ctx)],
+    ["mode", () => setMode(req({ mode: "HUMAN" }), ctx)],
+  ])("%s mencari order dengan isSandbox = false", async (_name, call) => {
+    db.waIntake.findFirst.mockResolvedValue(null);
+    expect((await call()).status).toBe(404);
+    expect(db.waIntake.findFirst.mock.calls[0][0].where).toEqual({ id: "in_1", conversation: { isSandbox: false } });
   });
 });

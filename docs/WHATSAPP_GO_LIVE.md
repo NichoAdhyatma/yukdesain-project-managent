@@ -131,6 +131,11 @@ Nilai `STORAGE_PRIVATE_BUCKET` = `yukdesain-private`.
 
 Pakai key resmi, bukan gateway pihak ketiga yang dipakai saat testing: data chat klien dikirim ke server ini.
 
+**Bisa dikerjakan lebih dulu:** begitu `ANTHROPIC_API_KEY` diisi di `.env` VPS dan aplikasi di-restart (langkah 8.2
+dan 8.4, cukup baris ini saja), **Settings › WhatsApp › Uji bot** dan **Uji koneksi** sudah bisa dipakai, walau
+nomor dan token Meta belum siap. Pakai waktu menunggu persetujuan Meta untuk menulis **Panduan bot** dan
+mencobanya (`docs/WHATSAPP_BOT_GUIDE.md`).
+
 ## 8. Isi env di VPS dan restart
 
 1. Buat verify token acak (di laptop atau VPS):
