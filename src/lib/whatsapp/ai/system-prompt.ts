@@ -33,6 +33,10 @@ Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, 
 - Jika klien ingin membatalkan order, konfirmasi dulu, lalu panggil cancel_intake.
 - Jika klien minta bicara dengan admin/manusia, atau kamu tidak bisa membantu, panggil request_human_handoff.
 
+# Permintaan di luar layanan
+- Jika klien meminta jenis desain yang tidak ada di list_services, jangan langsung menolak: panggil ask_owner dengan ringkasan permintaannya, lalu sampaikan bahwa tim sedang mengecek dan akan mengabari. Jangan menjanjikan bisa atau tidak.
+- Saat STATE berisi jawaban tim yang belum disampaikan, sampaikan ke klien dengan bahasamu sendiri (catatan internal jangan dikutip mentah). Jika bisa dan catatan menyebut layanan yang ada di list_services, lanjutkan order dengan layanan itu. Jika bisa tapi tidak ada layanan yang cocok, panggil request_human_handoff supaya admin melanjutkan. Jika tidak bisa, sampaikan dengan sopan dan tawarkan layanan lain yang ada.
+
 # Setelah ada harga (status QUOTED)
 Jelaskan layanan, harga, DP ${DP_PERCENT}%, deadline, dan rekening persis seperti di STATE, tanpa mengubah angka. Minta klien mengirim foto/screenshot bukti transfer DP.
 Jika klien mengirim gambar yang terlihat seperti bukti transfer, panggil submit_payment_proof dengan messageId dari STATE, lalu sampaikan: "Bukti sudah kami terima, sedang dicek tim kami." Jika ragu gambar itu bukti transfer atau bukan, tanyakan dulu. Jangan mengomentari isi bukti transfer (nominal, penerima, tanggal) ke klien; pengecekan sepenuhnya oleh tim kami. Bukti dalam bentuk PDF atau dokumen belum bisa dibaca; minta screenshot.
@@ -105,6 +109,10 @@ export type StateInput = {
     quote: null | { agreedPrice: number; dpAmount: number; deadline: Date };
   };
   paymentAccounts: { name: string; accountNumber: string; accountHolder: string }[];
+  // Aturan harga owner yang sudah dicatat untuk order ini (docs/WHATSAPP_OWNER_COMMANDS.md §6)
+  pricingRulesApplied?: { ruleId: string; name: string }[];
+  // Pertanyaan ke owner (§5): menunggu, atau sudah dijawab tapi belum disampaikan ke klien
+  ownerQueries?: { question: string; status: "PENDING" | "ANSWERED"; approved: boolean | null; note: string | null }[];
   // Gambar dari klien yang belum ditanggapi bot (disertakan ke model sebagai gambar)
   pendingImageMessageIds: string[];
 };
@@ -141,6 +149,20 @@ export function buildStateBlock(input: StateInput): string {
             : "- Rekening studio belum diatur; minta klien menunggu info rekening dari tim (request_human_handoff).",
         );
       }
+    }
+  }
+
+  if (input.pricingRulesApplied?.length) {
+    lines.push(`- Aturan harga yang sudah dicatat untuk order ini: ${input.pricingRulesApplied.map((r) => `${r.name} [${r.ruleId}]`).join("; ")}`);
+  }
+  for (const q of input.ownerQueries ?? []) {
+    if (q.status === "PENDING") {
+      lines.push(`- Menunggu jawaban tim untuk permintaan ${JSON.stringify(q.question)}. Jangan menjanjikan apa pun soal permintaan ini.`);
+    } else {
+      const note = q.note ? ` Catatan internal tim: ${JSON.stringify(q.note)}.` : "";
+      lines.push(
+        `- Jawaban tim (belum disampaikan ke klien) untuk permintaan ${JSON.stringify(q.question)}: ${q.approved ? "BISA dikerjakan" : "TIDAK bisa dikerjakan"}.${note} Sampaikan ke klien sekarang.`,
+      );
     }
   }
 

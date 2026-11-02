@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { BotGuideCard } from "./whatsapp/BotGuideCard";
 import { BotSandboxCard } from "./whatsapp/BotSandboxCard";
+import { OwnerNumberCard } from "./whatsapp/OwnerNumberCard";
 
 type WhatsAppSettings = {
   botEnabled: boolean;
@@ -305,6 +306,8 @@ export function WhatsAppSettingsTab() {
           </div>
         </CardContent>
       </Card>
+
+      <OwnerNumberCard />
 
       <BotGuideCard />
 

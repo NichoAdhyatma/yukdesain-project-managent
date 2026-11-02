@@ -11,6 +11,7 @@ vi.mock("@/lib/db", () => ({ prisma: db }));
 import { WA_BOT_GUIDE_LIMITS } from "@/lib/constants";
 import {
   GuideConflictError,
+  allowedPriceNumbers,
   botGuideSchema,
   getDraftGuide,
   publishDraftGuide,
@@ -18,8 +19,8 @@ import {
   restoreGuideVersion,
 } from "./bot-guide";
 
-const guide = { instructions: "Admin membalas jam 09.00-17.00 WIB.", faqs: [{ question: "Ada file mentah?", answer: "Ada, AI dan PDF." }] };
-const versionRow = (version: number, g = guide) => ({ version, publishedAt: new Date("2026-11-01"), instructions: g.instructions, faqs: g.faqs });
+const guide = { instructions: "Admin membalas jam 09.00-17.00 WIB.", faqs: [{ question: "Ada file mentah?", answer: "Ada, AI dan PDF." }], pricingRules: [] };
+const versionRow = (version: number, g = guide) => ({ version, publishedAt: new Date("2026-11-01"), instructions: g.instructions, faqs: g.faqs, pricingRules: g.pricingRules });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -28,7 +29,7 @@ beforeEach(() => {
 
 describe("botGuideSchema", () => {
   it("merapikan spasi dan menerima panduan kosong", () => {
-    expect(botGuideSchema.parse({ instructions: "  halo  ", faqs: [] })).toEqual({ instructions: "halo", faqs: [] });
+    expect(botGuideSchema.parse({ instructions: "  halo  ", faqs: [] })).toEqual({ instructions: "halo", faqs: [], pricingRules: [] });
   });
 
   it("menolak teks terlalu panjang, FAQ terlalu banyak, dan FAQ kosong", () => {
@@ -43,7 +44,7 @@ describe("botGuideSchema", () => {
 describe("renderGuideSection", () => {
   it("kosong → tidak ada bagian", () => {
     expect(renderGuideSection(null, "YukDesain Studio")).toBe("");
-    expect(renderGuideSection({ instructions: "", faqs: [] }, "YukDesain Studio")).toBe("");
+    expect(renderGuideSection({ instructions: "", faqs: [], pricingRules: [] }, "YukDesain Studio")).toBe("");
   });
 
   it("memuat aturan, FAQ, dan pernyataan bahwa batas wajib tetap berlaku", () => {
@@ -55,7 +56,7 @@ describe("renderGuideSection", () => {
   });
 
   it("hanya FAQ → tanpa judul aturan tambahan", () => {
-    expect(renderGuideSection({ instructions: "", faqs: guide.faqs }, "X")).not.toContain("Aturan tambahan");
+    expect(renderGuideSection({ instructions: "", faqs: guide.faqs, pricingRules: [] }, "X")).not.toContain("Aturan tambahan");
   });
 });
 
@@ -69,13 +70,13 @@ describe("getDraftGuide", () => {
   it("draft rusak di DB → dianggap belum ada", async () => {
     db.studioSettings.findUnique.mockResolvedValue({ waBotGuideDraft: { instructions: 5 } });
     db.waBotGuideVersion.findFirst.mockResolvedValue(null);
-    expect(await getDraftGuide()).toEqual({ instructions: "", faqs: [] });
+    expect(await getDraftGuide()).toEqual({ instructions: "", faqs: [], pricingRules: [] });
   });
 });
 
 describe("publishDraftGuide", () => {
   it("versi berikutnya = versi aktif + 1, dengan penerbit", async () => {
-    const draft = { instructions: "baru", faqs: [] };
+    const draft = { instructions: "baru", faqs: [], pricingRules: [] };
     db.studioSettings.findUnique.mockResolvedValue({ waBotGuideDraft: draft });
     db.waBotGuideVersion.findFirst.mockResolvedValue(versionRow(2));
     db.waBotGuideVersion.create.mockResolvedValue({ version: 3, publishedAt: new Date() });
@@ -83,7 +84,7 @@ describe("publishDraftGuide", () => {
     const result = await publishDraftGuide("user_owner");
 
     expect(db.waBotGuideVersion.create).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { version: 3, instructions: "baru", faqs: [], publishedById: "user_owner" } }),
+      expect.objectContaining({ data: { version: 3, instructions: "baru", faqs: [], pricingRules: [], source: "PORTAL", publishedById: "user_owner" } }),
     );
     expect(result.version).toBe(3);
   });
@@ -104,7 +105,7 @@ describe("publishDraftGuide", () => {
   });
 
   it("terbit bersamaan (nomor versi bentrok) → GuideConflictError", async () => {
-    db.studioSettings.findUnique.mockResolvedValue({ waBotGuideDraft: { instructions: "x", faqs: [] } });
+    db.studioSettings.findUnique.mockResolvedValue({ waBotGuideDraft: { instructions: "x", faqs: [], pricingRules: [] } });
     db.waBotGuideVersion.findFirst.mockResolvedValue(null);
     db.waBotGuideVersion.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError("unique", { code: "P2002", clientVersion: "5.22.0" }),
@@ -124,5 +125,38 @@ describe("restoreGuideVersion", () => {
     db.waBotGuideVersion.findUnique.mockResolvedValue(null);
     expect(await restoreGuideVersion(9)).toBeNull();
     expect(db.studioSettings.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("aturan harga", () => {
+  it("id dibuat dari nama, unik; nilai persen dibatasi 100", () => {
+    const parsed = botGuideSchema.parse({
+      instructions: "",
+      faqs: [],
+      pricingRules: [
+        { kind: "DISCOUNT", name: "Diskon >5 pcs", condition: "lebih dari 5 pcs", amountType: "FIXED", amount: 50000 },
+        { kind: "DISCOUNT", name: "Diskon >5 pcs", condition: "lainnya", amountType: "FIXED", amount: 10000 },
+      ],
+    });
+    expect(parsed.pricingRules.map((r) => r.id)).toEqual(["diskon-5-pcs", "diskon-5-pcs-2"]);
+    expect(
+      botGuideSchema.safeParse({
+        instructions: "",
+        faqs: [],
+        pricingRules: [{ kind: "SURCHARGE", name: "x", condition: "y", amountType: "PERCENT", amount: 150 }],
+      }).success,
+    ).toBe(false);
+  });
+
+  it("dirender ke prompt dengan nilai yang bisa dibaca, dan angkanya diizinkan penjaga harga", () => {
+    const g = botGuideSchema.parse({
+      instructions: "",
+      faqs: [],
+      pricingRules: [{ kind: "SURCHARGE", name: "Paket express", condition: "butuh dalam 2 hari", amountType: "PERCENT", amount: 50 }],
+    });
+    const text = renderGuideSection(g, "YukDesain Studio");
+    expect(text).toContain("## Aturan harga dari owner");
+    expect(text).toContain("[paket-express] Paket express: biaya tambahan 50% dari total. Syarat: butuh dalam 2 hari.");
+    expect(allowedPriceNumbers(g)).toEqual(["50", "2"]);
   });
 });

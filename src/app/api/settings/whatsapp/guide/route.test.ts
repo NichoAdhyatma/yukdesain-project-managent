@@ -66,7 +66,7 @@ describe("PUT (simpan draft)", () => {
   it("valid → disimpan sudah dirapikan, versi aktif tidak berubah", async () => {
     const res = await PUT(json("/g", "PUT", { instructions: "  baru  ", faqs: [] }));
     expect(res.status).toBe(200);
-    expect(guide.saveDraftGuide).toHaveBeenCalledWith({ instructions: "baru", faqs: [] });
+    expect(guide.saveDraftGuide).toHaveBeenCalledWith({ instructions: "baru", faqs: [], pricingRules: [] });
     expect(guide.publishDraftGuide).not.toHaveBeenCalled();
   });
 

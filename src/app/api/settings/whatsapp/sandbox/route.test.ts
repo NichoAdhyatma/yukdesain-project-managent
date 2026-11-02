@@ -17,7 +17,8 @@ import { DELETE, GET, POST } from "./route";
 
 const owner = { id: "u_owner", roles: ["OWNER"] };
 const post = (body: unknown) => POST(new Request("http://x", { method: "POST", body: JSON.stringify(body) }));
-const empty = { mode: null, messages: [], intake: null };
+const del = (query = "") => DELETE(new Request(`http://x/api/settings/whatsapp/sandbox${query}`, { method: "DELETE" }));
+const empty = { client: { mode: null, messages: [], intake: null, pendingOwnerQuery: null }, owner: { messages: [], awaitingConfirmation: false } };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -32,16 +33,21 @@ describe("/api/settings/whatsapp/sandbox", () => {
     session.getCurrentUser.mockResolvedValue({ id: "d", roles: ["DESIGNER"] });
     expect((await GET()).status).toBe(403);
     expect((await post({ text: "halo" })).status).toBe(403);
-    expect((await DELETE()).status).toBe(403);
+    expect((await del()).status).toBe(403);
     expect(sandbox.sendSandboxMessage).not.toHaveBeenCalled();
     expect(sandbox.resetSandbox).not.toHaveBeenCalled();
   });
 
   it("percakapan uji milik owner yang login", async () => {
     await post({ text: "  halo  " });
-    expect(sandbox.sendSandboxMessage).toHaveBeenCalledWith("u_owner", "halo");
-    await DELETE();
-    expect(sandbox.resetSandbox).toHaveBeenCalledWith("u_owner");
+    expect(sandbox.sendSandboxMessage).toHaveBeenCalledWith("u_owner", "halo", "client");
+    await post({ text: "kasih diskon 50rb", role: "owner" });
+    expect(sandbox.sendSandboxMessage).toHaveBeenLastCalledWith("u_owner", "kasih diskon 50rb", "owner");
+    await del();
+    expect(sandbox.resetSandbox).toHaveBeenCalledWith("u_owner", undefined);
+    await del("?role=owner");
+    expect(sandbox.resetSandbox).toHaveBeenLastCalledWith("u_owner", "owner");
+    expect((await del("?role=admin")).status).toBe(400);
   });
 
   it("pesan kosong atau terlalu panjang → 400", async () => {

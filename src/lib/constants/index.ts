@@ -187,6 +187,7 @@ export const WA_TEMPLATES = {
   DP_VERIFIED: "yd_dp_terverifikasi", // nama, kode project, link tracking
   DP_REJECTED: "yd_dp_ditolak", // nama, alasan
   CANCELLED: "yd_order_dibatalkan", // nama, alasan
+  OWNER_QUERY: "yd_konfirmasi_owner", // klien, permintaan (ke nomor owner)
 } as const;
 
 // Percobaan kode project yang salah lewat bot WA, per nomor per jam (§17).
@@ -208,4 +209,11 @@ export const WA_BOT_GUIDE_LIMITS = {
   faqMaxItems: 30,
   faqQuestionMaxChars: 200,
   faqAnswerMaxChars: 500,
+  pricingRulesMaxItems: 20,
+} as const;
+
+// Instruksi owner lewat WhatsApp (docs/WHATSAPP_OWNER_COMMANDS.md)
+export const WA_OWNER = {
+  proposalTtlHours: 24, // usulan perubahan panduan menunggu YA
+  queryTtlHours: 24, // pertanyaan luar katalog menunggu jawaban owner → lalu mode HUMAN
 } as const;

@@ -13,8 +13,30 @@ export type WaIntakeListItem = {
   deadline: string | null;
   pendingProofs: number;
   conversationMode: "BOT" | "HUMAN";
+  waitingForOwner: boolean;
   outsideServiceWindow: boolean;
   updatedAt: string;
+};
+
+export type PricingRuleApplied = {
+  ruleId: string;
+  kind: "DISCOUNT" | "SURCHARGE";
+  name: string;
+  condition: string;
+  amountType: "FIXED" | "PERCENT";
+  amount: number;
+  note: string | null;
+};
+
+export type OwnerQuery = {
+  id: string;
+  question: string;
+  status: "PENDING" | "ANSWERED" | "EXPIRED";
+  approved: boolean | null;
+  note: string | null;
+  createdAt: string;
+  answeredAt: string | null;
+  relayedAt: string | null;
 };
 
 export type WaIntakeListResponse = {
@@ -56,6 +78,8 @@ export type WaIntakeDetail = {
     editedByAdmin: boolean;
   };
   quote: { agreedPrice: number | null; dpAmount: number | null; deadline: string | null; quotedAt: string | null };
+  pricingRulesApplied: PricingRuleApplied[];
+  ownerQueries: OwnerQuery[];
   cancelReason: string | null;
   projectId: string | null;
   project: { id: string; projectNumber: string } | null;

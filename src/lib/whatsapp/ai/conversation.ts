@@ -4,7 +4,7 @@ import { getStudioSettings } from "@/lib/studio";
 import { mimeFromStorageKey, readPrivateMedia } from "../media";
 import { aiWritableBriefFields, imageTargetFields, missingRequiredFields, type BriefDraft } from "./brief-schema";
 import { buildStateBlock, buildSystemPrompt } from "./system-prompt";
-import { getDraftGuide, getPublishedGuide } from "./bot-guide";
+import { allowedPriceNumbers, getDraftGuide, getPublishedGuide } from "./bot-guide";
 import { ACTIVE_INTAKE_STATUSES } from "../intake";
 import { getAiConfig, getAnthropicClient } from "./ai-config";
 import { modelRequestOptions } from "./model-profile";
@@ -21,6 +21,8 @@ export type AiTurnResult = {
   intakeStatus: string | null;
   // Isi brief setelah giliran ini (untuk reply-guard)
   briefText: string;
+  // Nilai aturan harga owner di panduan yang dipakai giliran ini (untuk reply-guard)
+  allowedPriceNumbers: string[];
   toolsCalled: string[];
 };
 
@@ -91,8 +93,14 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       agreedPrice: true,
       dpAmount: true,
       deadline: true,
+      pricingRulesApplied: true,
       service: { select: { code: true, name: true } },
     },
+  });
+  const ownerQueries = await prisma.waOwnerQuery.findMany({
+    where: { conversationId, OR: [{ status: "PENDING" }, { status: "ANSWERED", relayedAt: null }] },
+    orderBy: { createdAt: "asc" },
+    select: { question: true, status: true, approved: true, note: true },
   });
   const paymentAccounts =
     intake?.status === "QUOTED"
@@ -121,6 +129,10 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
           : null,
     },
     paymentAccounts,
+    pricingRulesApplied: Array.isArray(intake?.pricingRulesApplied)
+      ? (intake.pricingRulesApplied as { ruleId: string; name: string }[])
+      : [],
+    ownerQueries: ownerQueries.map((q) => ({ ...q, status: q.status === "PENDING" ? ("PENDING" as const) : ("ANSWERED" as const) })),
     pendingImageMessageIds,
   });
 }
@@ -175,7 +187,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
   ];
 
   const toolsCalled: string[] = [];
-  const ctx = { conversationId: params.conversationId };
+  const ctx = { conversationId: params.conversationId, isSandbox };
 
   for (let round = 0; ; round++) {
     const toolsAllowed = round < MAX_TOOL_ROUNDS;
@@ -198,6 +210,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
         reply: textOf(response) || null,
         intakeStatus: finalIntake?.status ?? null,
         briefText: JSON.stringify(finalIntake?.briefDraft ?? {}),
+        allowedPriceNumbers: allowedPriceNumbers(guide),
         toolsCalled,
       };
     }

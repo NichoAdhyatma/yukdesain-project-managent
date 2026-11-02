@@ -20,6 +20,10 @@ import {
   updateBriefDraft,
 } from "../intake";
 import { getBriefConfig, imageTargetFields, type BriefDraft, type BriefKey } from "./brief-schema";
+import { WA_OWNER } from "@/lib/constants";
+import { getDraftGuide, getPublishedGuide } from "./bot-guide";
+import { listOwnerNumbers } from "../owner/identity";
+import { createOwnerQuery, findPendingQuery, notifyOwners } from "../owner/query-store";
 
 // Tools AI untuk intake (docs/WHATSAPP_AI_CHATBOT.md §10.5). Model hanya menulis
 // ke draft intake milik percakapan ini; konteks (conversationId) datang dari server,
@@ -27,6 +31,8 @@ import { getBriefConfig, imageTargetFields, type BriefDraft, type BriefKey } fro
 
 export type ToolContext = {
   conversationId: string;
+  // Uji bot: panduan draft, pertanyaan ke owner tidak dikirim ke WhatsApp
+  isSandbox?: boolean;
 };
 
 export type ToolOutcome = { content: string; isError: boolean };
@@ -150,6 +156,37 @@ export const INTAKE_TOOLS: Anthropic.Tool[] = [
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "ask_owner",
+    description:
+      "Tanyakan ke owner studio apakah permintaan klien yang TIDAK ada di list_services bisa dikerjakan. Jawaban owner datang belakangan lewat STATE.",
+    input_schema: {
+      type: "object",
+      properties: {
+        request: {
+          type: "string",
+          description: "Ringkasan permintaan klien untuk owner: jenis desain, jumlah, kebutuhan khusus. Tanpa data pribadi selain nama.",
+        },
+      },
+      required: ["request"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "apply_pricing_rule",
+    description:
+      "Catat aturan harga owner (id dari bagian Aturan harga di panduan) untuk order ini, supaya tim menerapkannya di penawaran. remove=true untuk membatalkan.",
+    input_schema: {
+      type: "object",
+      properties: {
+        rule_id: { type: "string" },
+        remove: { type: "boolean" },
+        note: { type: "string", description: "Alasan syarat terpenuhi, mis. klien pesan 8 desain" },
+      },
+      required: ["rule_id"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "request_human_handoff",
     description:
       "Alihkan percakapan ke admin manusia: klien minta admin, menawar/keberatan harga, atau kamu tidak bisa membantu. Setelah ini bot berhenti membalas.",
@@ -182,6 +219,12 @@ const inputs = {
   get_my_projects: z.object({}),
   get_project_by_code: z.object({ project_code: z.string().trim().min(1).max(40) }),
   get_studio_info: z.object({}),
+  ask_owner: z.object({ request: z.string().trim().min(1).max(800) }),
+  apply_pricing_rule: z.object({
+    rule_id: z.string().trim().min(1).max(40),
+    remove: z.boolean().optional(),
+    note: z.string().trim().max(300).optional(),
+  }),
 } satisfies Record<string, z.ZodType>;
 
 type ToolName = keyof typeof inputs;
@@ -194,6 +237,7 @@ export function findActiveIntake(conversationId: string, db: Prisma.TransactionC
       id: true,
       status: true,
       briefDraft: true,
+      pricingRulesApplied: true,
       createdAt: true,
       service: { select: { id: true, code: true } },
     },
@@ -479,6 +523,60 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
   async get_studio_info() {
     const studio = await getStudioSettings();
     return ok({ name: studio.name, email: studio.email, phone: studio.phone, address: studio.address });
+  },
+
+  async ask_owner(ctx, input) {
+    if (await findPendingQuery(ctx.conversationId)) {
+      return ok({ alreadyWaiting: true, message: "Masih menunggu jawaban tim untuk permintaan sebelumnya. Minta klien menunggu." });
+    }
+    if (!ctx.isSandbox && (await listOwnerNumbers()).length === 0) {
+      return fail("Tim belum bisa dihubungi otomatis. Gunakan request_human_handoff.");
+    }
+    const intake = await findActiveIntake(ctx.conversationId);
+    const query = await createOwnerQuery({ conversationId: ctx.conversationId, intakeId: intake?.id ?? null, question: input.request });
+    if (!ctx.isSandbox && (await notifyOwners(query.id)) === 0) {
+      await prisma.waOwnerQuery.update({ where: { id: query.id }, data: { status: "EXPIRED" } });
+      return fail("Pertanyaan gagal dikirim ke tim. Gunakan request_human_handoff.");
+    }
+    return ok({
+      asked: true,
+      message: `Pertanyaan dikirim ke tim. Beri tahu klien bahwa tim sedang mengecek dan akan mengabari (paling lama ${WA_OWNER.queryTtlHours} jam). Jangan menjanjikan apa pun soal permintaan ini.`,
+    });
+  },
+
+  async apply_pricing_rule(ctx, input) {
+    const intake = await requireActiveIntake(ctx);
+    if (intake.status !== "COLLECTING" && intake.status !== "AWAITING_QUOTE") {
+      return fail("Aturan harga hanya bisa dicatat sebelum tim mengirim penawaran");
+    }
+    const guide = ctx.isSandbox ? await getDraftGuide() : (await getPublishedGuide())?.guide;
+    const rule = guide?.pricingRules.find((r) => r.id === input.rule_id);
+    if (!rule) return fail("Aturan harga tidak dikenal");
+
+    const current = Array.isArray(intake.pricingRulesApplied)
+      ? (intake.pricingRulesApplied as { ruleId: string }[])
+      : [];
+    const others = current.filter((r) => r.ruleId !== rule.id);
+    const next = input.remove
+      ? others
+      : [
+          ...others,
+          {
+            ruleId: rule.id,
+            kind: rule.kind,
+            name: rule.name,
+            condition: rule.condition,
+            amountType: rule.amountType,
+            amount: rule.amount,
+            note: input.note ?? null,
+          },
+        ];
+    await prisma.waIntake.update({ where: { id: intake.id }, data: { pricingRulesApplied: next as Prisma.InputJsonValue } });
+    return ok({
+      recorded: !input.remove,
+      rule: rule.name,
+      message: "Tercatat untuk tim. Harga akhir tetap dari penawaran tim; jangan menghitung total.",
+    });
   },
 
   async request_human_handoff(ctx) {

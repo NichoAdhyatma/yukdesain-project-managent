@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BriefSection } from "@/components/wa-orders/BriefSection";
+import { OwnerQueriesCard } from "@/components/wa-orders/OwnerNotes";
 import { ChatHistory } from "@/components/wa-orders/ChatHistory";
 import { DpReviewPanel } from "@/components/wa-orders/DpReviewPanel";
 import { QuotePanel } from "@/components/wa-orders/QuotePanel";
@@ -118,6 +119,8 @@ export default function WaOrderDetailPage({ params }: { params: Promise<{ id: st
             {intake.status === "DP_REVIEW" && <DpReviewPanel key={intake.proofs[0]?.id} intake={intake} />}
             {intake.status === "APPROVED" && <ApprovedPanel intake={intake} />}
             {intake.status === "CANCELLED" && <CancelledPanel intake={intake} />}
+
+            <OwnerQueriesCard queries={intake.ownerQueries} />
 
             <BriefSection intake={intake} />
 

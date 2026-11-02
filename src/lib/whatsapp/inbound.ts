@@ -59,6 +59,7 @@ export async function storeInboundMessage(msg: InboundMessage): Promise<string |
         conversationId: conversation.id,
         wamid: msg.wamid,
         direction: "INBOUND",
+        contextWamid: msg.contextWamid,
         ...content,
       },
       select: { id: true },

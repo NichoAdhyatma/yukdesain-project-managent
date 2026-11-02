@@ -19,7 +19,7 @@ dikerjakan paling awal.
 |---|---|---|---|
 | 1 | Siapkan nomor WhatsApp | HP / Meta | 10 menit |
 | 2 | Buat app Meta + hubungkan nomor | developers.facebook.com | 20 menit |
-| 3 | Ajukan 4 template | WhatsApp Manager | 10 menit + tunggu persetujuan |
+| 3 | Ajukan 5 template | WhatsApp Manager | 10 menit + tunggu persetujuan |
 | 4 | Tambah metode pembayaran Meta | WhatsApp Manager | 5 menit |
 | 5 | Buat token permanen (System User) | business.facebook.com | 10 menit |
 | 6 | Buat bucket R2 privat | Cloudflare | 5 menit |
@@ -66,14 +66,15 @@ STORAGE_PRIVATE_BUCKET    (langkah 6)
 8. Disarankan: **Business Settings › Security Center › Start verification** (verifikasi bisnis). Tanpa ini,
    batas pesan per hari kecil dan nama tampilan bisa ditolak.
 
-## 3. Ajukan 4 template (lakukan sekarang, persetujuan butuh waktu)
+## 3. Ajukan 5 template (lakukan sekarang, persetujuan butuh waktu)
 
 1. Buka https://business.facebook.com/wa/manage/message-templates (WhatsApp Manager › **Message templates**).
-2. **Create template** untuk masing-masing dari 4 template di `docs/WHATSAPP_TEMPLATES.md`:
+2. **Create template** untuk masing-masing dari 5 template di `docs/WHATSAPP_TEMPLATES.md`:
    - `yd_penawaran_order`
    - `yd_dp_terverifikasi`
    - `yd_dp_ditolak`
    - `yd_order_dibatalkan`
+   - `yd_konfirmasi_owner` (dikirim ke nomor owner untuk permintaan klien di luar katalog)
 3. Untuk setiap template:
    - **Category:** Utility
    - **Name:** persis seperti di atas (huruf kecil, garis bawah)
@@ -219,6 +220,10 @@ Login sebagai owner › **Settings**:
 2. Tab **Payment**: pastikan rekening studio yang benar **aktif**. Bot mengirim daftar rekening aktif ini
    bersama penawaran, dan bukti transfer dicocokkan ke rekening ini.
 3. Sidebar: menu **Order WA** ada (sudah ditambahkan 2026-11-02).
+4. Tab **WhatsApp** › **Nomor WhatsApp owner**: isi nomor pribadi owner (bukan nomor bot). Dari nomor ini owner bisa
+   mengatur bot lewat chat, dan bot mengirim pertanyaan klien di luar katalog ke nomor ini
+   (`docs/WHATSAPP_OWNER_COMMANDS.md`). Kirim satu pesan dari nomor itu ke bot, misalnya "aturan apa saja sekarang?",
+   untuk memastikan bot mengenalinya sebagai owner.
 
 ## 11. Nyalakan bot dan uji dengan nomor sendiri
 

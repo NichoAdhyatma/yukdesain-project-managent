@@ -4,7 +4,7 @@ Dipakai bot saat pesan dari admin (penawaran, DP terverifikasi, DP ditolak, orde
 **lebih dari 24 jam** setelah pesan terakhir klien (`docs/WHATSAPP_AI_CHATBOT.md` §5.2, §13). Di dalam 24 jam,
 bot mengirim teks bebas dengan isi yang sama.
 
-Ajukan keempatnya sekarang: persetujuan Meta butuh waktu, dan selama template belum disetujui, pesan di luar
+Ajukan kelimanya sekarang: persetujuan Meta butuh waktu, dan selama template belum disetujui, pesan di luar
 24 jam akan gagal (portal menampilkan "Pesan gagal terkirim, hubungi klien manual").
 
 Aturan pengajuan:
@@ -95,6 +95,26 @@ Balas pesan ini jika ada pertanyaan.
 |---|---|---|
 | `{{1}}` | nama klien | Sari |
 | `{{2}}` | alasan dari admin | Klien meminta pembatalan |
+
+## 5. `yd_konfirmasi_owner`
+
+Dikirim ke **nomor owner** (bukan klien) saat klien meminta sesuatu di luar katalog dan owner tidak chat ke bot
+dalam 24 jam terakhir (`docs/WHATSAPP_OWNER_COMMANDS.md` §5). Owner membalas (reply) pesan ini dengan BISA/TIDAK.
+
+**Body:**
+
+```text
+Ada permintaan klien di luar katalog.
+Klien: {{1}}
+Permintaan: {{2}}
+
+Balas pesan ini dengan BISA atau TIDAK, boleh tambah catatan.
+```
+
+| Parameter | Isi | Contoh untuk Meta |
+|---|---|---|
+| `{{1}}` | nama klien + nomor tersamar | Sari (6281****7890) |
+| `{{2}}` | ringkasan permintaan | Desain kaos sablon untuk seragam komunitas, 2 desain |
 
 ---
 

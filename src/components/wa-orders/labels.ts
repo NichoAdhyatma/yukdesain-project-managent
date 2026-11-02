@@ -79,3 +79,9 @@ export function formatReceiptDate(raw: string | null): string {
   const date = `${Number(d)} ${MONTHS[Number(mo) - 1] ?? mo} ${y}`;
   return h ? `${date} ${h}.${mi}` : date;
 }
+
+// Aturan harga owner (docs/WHATSAPP_OWNER_COMMANDS.md §6), versi klien dari describeRuleValue.
+export function describePricingRule(rule: { kind: "DISCOUNT" | "SURCHARGE"; amountType: "FIXED" | "PERCENT"; amount: number }): string {
+  const value = rule.amountType === "PERCENT" ? `${rule.amount}% dari total` : formatRupiah(rule.amount);
+  return rule.kind === "DISCOUNT" ? `potongan ${value}` : `biaya tambahan ${value}`;
+}
