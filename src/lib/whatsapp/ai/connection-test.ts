@@ -29,7 +29,7 @@ function describeError(error: unknown): string {
 }
 
 export async function testAiConnection(config: AiConfig): Promise<ConnectionCheck[]> {
-  const client = getAnthropicClient(config.baseUrl);
+  const client = getAnthropicClient(config);
   const base = { model: config.model, max_tokens: 300, ...modelRequestOptions(config.model) };
   const checks: ConnectionCheck[] = [];
 

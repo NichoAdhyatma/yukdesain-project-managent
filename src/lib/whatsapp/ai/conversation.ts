@@ -151,7 +151,7 @@ function textOf(response: Anthropic.Message): string {
  */
 export async function runAiTurn(params: { conversationId: string; messageId: string }): Promise<AiTurnResult> {
   const config = await getAiConfig();
-  const client = getAnthropicClient(config.baseUrl);
+  const client = getAnthropicClient(config);
   const current = await prisma.waMessage.findUniqueOrThrow({
     where: { id: params.messageId },
     select: { createdAt: true },

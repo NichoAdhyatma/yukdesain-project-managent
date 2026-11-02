@@ -132,6 +132,10 @@ Nilai `STORAGE_PRIVATE_BUCKET` = `yukdesain-private`.
 
 Pakai key resmi, bukan gateway pihak ketiga yang dipakai saat testing: data chat klien dikirim ke server ini.
 
+**Testing pakai gateway olagon dulu (opsional):** isi `AI_GATEWAY_API_KEY="key-olagon"` di `.env` VPS (bukan di
+`ANTHROPIC_API_KEY`), restart, lalu Settings › WhatsApp › Model AI › pilih **Olagon gateway** › Simpan › Uji koneksi.
+Saat key resmi siap, cukup pilih **Anthropic (resmi)** di tempat yang sama; tidak perlu mengedit `.env` lagi.
+
 **Bisa dikerjakan lebih dulu:** begitu `ANTHROPIC_API_KEY` diisi di `.env` VPS dan aplikasi di-restart (langkah 8.2
 dan 8.4, cukup baris ini saja), **Settings › WhatsApp › Uji bot** dan **Uji koneksi** sudah bisa dipakai, walau
 nomor dan token Meta belum siap. Pakai waktu menunggu persetujuan Meta untuk menulis **Panduan bot** dan
@@ -213,8 +217,8 @@ mencobanya (`docs/WHATSAPP_BOT_GUIDE.md`).
 Login sebagai owner › **Settings**:
 
 1. Tab **WhatsApp**:
-   - **Model chat** dan **Model ekstraksi bukti transfer** kosong/default (`claude-haiku-5-5` dan
-     `claude-sonnet-5-5`), **Base URL API** default `https://api.anthropic.com`. Jangan isi gateway.
+   - **Model AI › Penyedia AI** = **Anthropic (resmi)**, bukan gateway. Model chat dan ekstraksi boleh dibiarkan
+     "Default server" (`claude-haiku-5-5` dan `claude-sonnet-5-5`) atau dipilih dari dropdown.
    - Klik **Uji koneksi**. Kedua model harus berhasil.
    - **Balas otomatis** masih nonaktif. Biarkan dulu.
 2. Tab **Payment**: pastikan rekening studio yang benar **aktif**. Bot mengirim daftar rekening aktif ini

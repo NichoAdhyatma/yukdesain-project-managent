@@ -5,7 +5,7 @@ vi.mock("./ai-config", () => ({ getAnthropicClient: () => ({ messages: { create 
 
 import { computeProofFlags, extractPaymentProof, normalizeReference, type PaymentExtraction } from "./extract-payment-proof";
 
-const config = { model: "m", extractionModel: "claude-sonnet-5-5", baseUrl: "https://x", maxTokens: 800 };
+const config = { provider: "ANTHROPIC" as const, label: "Anthropic", apiKey: "k", model: "m", extractionModel: "claude-sonnet-5-5", baseUrl: "https://x", maxTokens: 800 };
 const image = { data: Buffer.from("IMG"), mimeType: "image/jpeg" as const };
 
 const good: PaymentExtraction = {

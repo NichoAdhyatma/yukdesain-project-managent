@@ -8,14 +8,15 @@ const session = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/auth/session", () => session);
+const keys = vi.hoisted(() => ({ ANTHROPIC: true, GATEWAY: true }));
 vi.mock("@/lib/whatsapp/env", () => ({
+  AI_PROVIDERS: ["ANTHROPIC", "GATEWAY"],
   isWhatsAppConfigured: () => true,
-  isAiConfigured: () => true,
-  getAiEnvDefaults: () => ({
-    model: "claude-haiku-5-5",
-    extractionModel: "claude-sonnet-5-5",
-    baseUrl: "https://api.anthropic.com",
-  }),
+  isAiConfigured: (p: "ANTHROPIC" | "GATEWAY" = "ANTHROPIC") => keys[p],
+  getProviderEnv: (p: "ANTHROPIC" | "GATEWAY") =>
+    p === "GATEWAY"
+      ? { provider: p, label: "Olagon gateway", baseUrl: "https://gateway.olagon.site/anthropic", apiKey: keys.GATEWAY ? "gw-secret" : null, defaultModel: "claude-sonnet-4-6", defaultExtractionModel: "claude-sonnet-4-6" }
+      : { provider: p, label: "Anthropic (resmi)", baseUrl: "https://api.anthropic.com", apiKey: keys.ANTHROPIC ? "sk-ant-secret" : null, defaultModel: "claude-haiku-5-5", defaultExtractionModel: "claude-sonnet-5-5" },
 }));
 
 vi.mock("@/lib/whatsapp/rate-limit", () => ({
@@ -27,13 +28,22 @@ import { GET, PUT } from "./route";
 const owner = { id: "u_owner", roles: ["OWNER"] };
 const put = (body: unknown) =>
   PUT(new Request("http://x/api/settings/whatsapp", { method: "PUT", body: JSON.stringify(body) }));
-const row = { waBotEnabled: false, waAiModel: null, waAiExtractionModel: null, waAiBaseUrl: null };
+const row = {
+  waBotEnabled: false,
+  waAiProvider: "ANTHROPIC",
+  waAiModel: null,
+  waAiExtractionModel: null,
+  waAiGatewayModel: null,
+  waAiGatewayExtractionModel: null,
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   session.getCurrentUser.mockResolvedValue(owner);
   db.studioSettings.findUnique.mockResolvedValue(row);
   db.studioSettings.upsert.mockImplementation(async ({ update }) => ({ ...row, ...update }));
+  keys.ANTHROPIC = true;
+  keys.GATEWAY = true;
 });
 
 describe("GET /api/settings/whatsapp", () => {
@@ -50,45 +60,44 @@ describe("GET /api/settings/whatsapp", () => {
     expect(body).toMatchObject({
       botEnabled: false,
       whatsappConfigured: true,
+      aiConfigured: true,
       ai: {
-        model: null,
-        defaults: { model: "claude-haiku-5-5", baseUrl: "https://api.anthropic.com" },
-        effective: { model: "claude-haiku-5-5" },
+        provider: "ANTHROPIC",
+        effective: { label: "Anthropic (resmi)", model: "claude-haiku-5-5", baseUrlHost: "api.anthropic.com" },
         modelRecognized: true,
       },
     });
+    expect(body.ai.providers.map((p: { id: string; configured: boolean }) => `${p.id}:${p.configured}`)).toEqual([
+      "ANTHROPIC:true",
+      "GATEWAY:true",
+    ]);
+    expect(JSON.stringify(body)).not.toContain("gw-secret");
     expect(JSON.stringify(body)).not.toContain("sk-ant");
     expect(body.usage).toMatchObject({ month: "2026-11", outboundSent: 820, nearLimit: true });
   });
 });
 
 describe("PUT /api/settings/whatsapp", () => {
-  it("menyimpan override dan mencatat ActivityLog", async () => {
-    const res = await put({
-      aiModel: "claude-sonnet-4-6",
-      aiBaseUrl: "https://gateway.olagon.site/anthropic/",
-    });
+  it("pindah ke gateway + model gateway, tercatat di ActivityLog", async () => {
+    const res = await put({ aiProvider: "GATEWAY", aiGatewayModel: "claude-opus-4-8" });
     expect(res.status).toBe(200);
-    expect(db.studioSettings.upsert.mock.calls[0][0].update).toEqual({
-      waAiModel: "claude-sonnet-4-6",
-      waAiBaseUrl: "https://gateway.olagon.site/anthropic",
-    });
-    expect(db.activityLog.create.mock.calls[0][0].data).toMatchObject({
-      entityType: "StudioSettings",
-      action: "WHATSAPP_SETTINGS_UPDATED",
-      actorId: "u_owner",
-    });
-    expect((await res.json()).ai.effective.model).toBe("claude-sonnet-4-6");
+    expect(db.studioSettings.upsert.mock.calls[0][0].update).toEqual({ waAiProvider: "GATEWAY", waAiGatewayModel: "claude-opus-4-8" });
+    expect(db.activityLog.create.mock.calls[0][0].data).toMatchObject({ action: "WHATSAPP_SETTINGS_UPDATED", actorId: "u_owner" });
+    const body = await res.json();
+    expect(body.ai.effective).toMatchObject({ label: "Olagon gateway", model: "claude-opus-4-8", baseUrlHost: "gateway.olagon.site" });
+  });
+
+  it("provider yang key-nya belum ada → 400, tidak disimpan", async () => {
+    keys.GATEWAY = false;
+    const res = await put({ aiProvider: "GATEWAY" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).fields.aiProvider).toContain("Olagon gateway");
+    expect(db.studioSettings.upsert).not.toHaveBeenCalled();
   });
 
   it("string kosong → kembali ke default (null)", async () => {
-    await put({ aiModel: "", aiBaseUrl: "" });
-    expect(db.studioSettings.upsert.mock.calls[0][0].update).toEqual({ waAiModel: null, waAiBaseUrl: null });
-  });
-
-  it("base URL http → pesan https", async () => {
-    const body = await (await put({ aiBaseUrl: "http://gateway.example" })).json();
-    expect(body.fields.aiBaseUrl).toBe("Harus URL https");
+    await put({ aiModel: "", aiGatewayExtractionModel: "" });
+    expect(db.studioSettings.upsert.mock.calls[0][0].update).toEqual({ waAiModel: null, waAiGatewayExtractionModel: null });
   });
 
   it("toggle bot saja", async () => {
@@ -96,14 +105,11 @@ describe("PUT /api/settings/whatsapp", () => {
     expect(db.studioSettings.upsert.mock.calls[0][0].update).toEqual({ waBotEnabled: true });
   });
 
-  it("validasi: model non-Claude & URL internal ditolak per field", async () => {
-    const res = await put({ aiModel: "gpt-5.5", aiBaseUrl: "https://127.0.0.1/anthropic" });
+  it("validasi: model non-Claude dan provider tidak dikenal ditolak per field", async () => {
+    const res = await put({ aiModel: "gpt-5.5", aiProvider: "OPENAI" });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error).toBe("VALIDATION_ERROR");
-    expect(Object.keys(body.fields).sort()).toEqual(["aiBaseUrl", "aiModel"]);
-    expect(body.fields.aiBaseUrl).toBe("Alamat internal/lokal tidak diizinkan");
-    expect(body.fields.aiModel).toMatch(/model Claude/);
+    expect(Object.keys(body.fields).sort()).toEqual(["aiModel", "aiProvider"]);
     expect(db.studioSettings.upsert).not.toHaveBeenCalled();
   });
 

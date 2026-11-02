@@ -1,57 +1,87 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({ studioSettings: { findUnique: vi.fn() } }));
+const env = vi.hoisted(() => ({
+  ANTHROPIC_API_KEY: "sk-ant" as string | undefined,
+  AI_GATEWAY_API_KEY: "gw-key" as string | undefined,
+}));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("../env", () => ({
-  getAiEnv: () => ({
-    ANTHROPIC_API_KEY: "k",
-    ANTHROPIC_BASE_URL: "https://api.anthropic.com",
-    WA_AI_MODEL: "claude-haiku-5-5",
-    WA_AI_EXTRACTION_MODEL: "claude-sonnet-5-5",
-    WA_AI_MAX_TOKENS: 800,
-  }),
+  getAiEnv: () => ({ WA_AI_MAX_TOKENS: 800 }),
+  getProviderEnv: (provider: "ANTHROPIC" | "GATEWAY") =>
+    provider === "GATEWAY"
+      ? { provider, label: "Olagon gateway", baseUrl: "https://gateway.example/anthropic", apiKey: env.AI_GATEWAY_API_KEY ?? null, defaultModel: "claude-sonnet-4-6", defaultExtractionModel: "claude-sonnet-4-6" }
+      : { provider, label: "Anthropic (resmi)", baseUrl: "https://api.anthropic.com", apiKey: env.ANTHROPIC_API_KEY ?? null, defaultModel: "claude-haiku-5-5", defaultExtractionModel: "claude-sonnet-5-5" },
 }));
 
-import { aiBaseUrlSchema, aiModelSchema, getAiConfig, getAnthropicClient } from "./ai-config";
+import { AiNotConfiguredError, aiModelSchema, getAiConfig, getAnthropicClient, isAiReady } from "./ai-config";
+
+const row = (over: Record<string, unknown> = {}) => ({
+  waAiProvider: "ANTHROPIC",
+  waAiModel: null,
+  waAiExtractionModel: null,
+  waAiGatewayModel: null,
+  waAiGatewayExtractionModel: null,
+  ...over,
+});
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  env.ANTHROPIC_API_KEY = "sk-ant";
+  env.AI_GATEWAY_API_KEY = "gw-key";
+});
 
 describe("getAiConfig", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("tanpa override → default env", async () => {
+  it("tanpa settings → Anthropic resmi dengan default env", async () => {
     db.studioSettings.findUnique.mockResolvedValue(null);
     expect(await getAiConfig()).toEqual({
+      provider: "ANTHROPIC",
+      label: "Anthropic (resmi)",
       model: "claude-haiku-5-5",
       extractionModel: "claude-sonnet-5-5",
       baseUrl: "https://api.anthropic.com",
+      apiKey: "sk-ant",
       maxTokens: 800,
     });
   });
 
-  it("override dari Settings menang", async () => {
-    db.studioSettings.findUnique.mockResolvedValue({
-      waAiModel: "claude-sonnet-4-6",
-      waAiExtractionModel: null,
-      waAiBaseUrl: "https://gateway.example/anthropic",
-    });
+  it("provider GATEWAY: base URL, key, dan model gateway; model Anthropic tidak terbawa", async () => {
+    db.studioSettings.findUnique.mockResolvedValue(row({ waAiProvider: "GATEWAY", waAiModel: "claude-opus-5-5", waAiGatewayModel: "claude-opus-4-8" }));
     expect(await getAiConfig()).toMatchObject({
-      model: "claude-sonnet-4-6",
-      extractionModel: "claude-sonnet-5-5",
+      provider: "GATEWAY",
       baseUrl: "https://gateway.example/anthropic",
+      apiKey: "gw-key",
+      model: "claude-opus-4-8",
+      extractionModel: "claude-sonnet-4-6",
     });
+  });
+
+  it("model pilihan owner untuk Anthropic menang atas default", async () => {
+    db.studioSettings.findUnique.mockResolvedValue(row({ waAiModel: "claude-sonnet-5-5" }));
+    expect((await getAiConfig()).model).toBe("claude-sonnet-5-5");
+  });
+
+  it("key provider aktif belum ada → AiNotConfiguredError, isAiReady false", async () => {
+    env.AI_GATEWAY_API_KEY = undefined;
+    db.studioSettings.findUnique.mockResolvedValue(row({ waAiProvider: "GATEWAY" }));
+    await expect(getAiConfig()).rejects.toBeInstanceOf(AiNotConfiguredError);
+    expect(await isAiReady()).toBe(false);
   });
 });
 
 describe("getAnthropicClient", () => {
-  it("satu klien per base URL, base URL eksplisit", () => {
-    const a = getAnthropicClient("https://api.anthropic.com");
-    expect(getAnthropicClient("https://api.anthropic.com")).toBe(a);
-    const b = getAnthropicClient("https://gateway.example/anthropic");
+  it("satu klien per provider + base URL; key dan base URL eksplisit", () => {
+    const official = { provider: "ANTHROPIC" as const, baseUrl: "https://api.anthropic.com", apiKey: "sk-ant" };
+    const a = getAnthropicClient(official);
+    expect(getAnthropicClient(official)).toBe(a);
+    const b = getAnthropicClient({ provider: "GATEWAY", baseUrl: "https://gateway.example/anthropic", apiKey: "gw-key" });
     expect(b).not.toBe(a);
     expect(b.baseURL).toBe("https://gateway.example/anthropic");
+    expect(b.apiKey).toBe("gw-key");
   });
 });
 
-describe("validasi Settings", () => {
+describe("validasi model", () => {
   it.each(["claude-haiku-5-5", "claude-sonnet-4-6", "claude-3-5-sonnet-20241022", "claude-opus-4-5@20251101"])(
     "model valid: %s",
     (m) => expect(aiModelSchema.safeParse(m).success).toBe(true),
@@ -59,26 +89,5 @@ describe("validasi Settings", () => {
 
   it.each(["gpt-5.5", "gemini-3.5-flash", "claude", "CLAUDE-HAIKU", "claude-haiku 5", ""])("model ditolak: %j", (m) => {
     expect(aiModelSchema.safeParse(m).success).toBe(false);
-  });
-
-  it("base URL https publik diterima, slash akhir dibuang", () => {
-    expect(aiBaseUrlSchema.parse("https://gateway.olagon.site/anthropic/")).toBe("https://gateway.olagon.site/anthropic");
-  });
-
-  it.each([
-    "http://gateway.example",
-    "https://localhost:3000",
-    "https://api.localhost",
-    "https://127.0.0.1",
-    "https://10.0.0.5",
-    "https://192.168.1.10",
-    "https://172.20.0.1",
-    "https://169.254.169.254",
-    "https://[::1]",
-    "https://db.internal",
-    "ftp://example.com",
-    "bukan url",
-  ])("base URL ditolak: %s", (u) => {
-    expect(aiBaseUrlSchema.safeParse(u).success).toBe(false);
   });
 });

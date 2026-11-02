@@ -2,41 +2,69 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { getAiEnvDefaults, isAiConfigured, isWhatsAppConfigured } from "@/lib/whatsapp/env";
-import { aiBaseUrlSchema, aiModelSchema } from "@/lib/whatsapp/ai/ai-config";
+import { AI_PROVIDERS, getProviderEnv, isAiConfigured, isWhatsAppConfigured } from "@/lib/whatsapp/env";
+import { aiModelSchema, aiProviderSchema, modelOverrides, providerOf } from "@/lib/whatsapp/ai/ai-config";
 import { getModelProfile } from "@/lib/whatsapp/ai/model-profile";
 import { getMonthlyUsage } from "@/lib/whatsapp/rate-limit";
 
 // Pengaturan bot WhatsApp (owner). API key tidak pernah dikirim ke browser.
 
-type Overrides = { waBotEnabled: boolean; waAiModel: string | null; waAiExtractionModel: string | null; waAiBaseUrl: string | null };
+const select = {
+  waBotEnabled: true,
+  waAiProvider: true,
+  waAiModel: true,
+  waAiExtractionModel: true,
+  waAiGatewayModel: true,
+  waAiGatewayExtractionModel: true,
+} as const;
 
-async function toDto(row: Overrides | null) {
-  const defaults = getAiEnvDefaults();
-  const model = row?.waAiModel || defaults?.model || null;
+type Row = {
+  waBotEnabled: boolean;
+  waAiProvider: string;
+  waAiModel: string | null;
+  waAiExtractionModel: string | null;
+  waAiGatewayModel: string | null;
+  waAiGatewayExtractionModel: string | null;
+};
+
+async function toDto(row: Row | null) {
+  const provider = providerOf(row);
+  const providers = AI_PROVIDERS.map((id) => {
+    const env = getProviderEnv(id);
+    const overrides = modelOverrides(row, id);
+    return {
+      id,
+      label: env.label,
+      configured: env.apiKey !== null,
+      baseUrlHost: new URL(env.baseUrl).host,
+      // null = default env
+      model: overrides.model,
+      extractionModel: overrides.extractionModel,
+      defaults: { model: env.defaultModel, extractionModel: env.defaultExtractionModel },
+    };
+  });
+  const active = providers.find((p) => p.id === provider)!;
+  const effectiveModel = active.model || active.defaults.model;
   return {
     botEnabled: row?.waBotEnabled ?? false,
     whatsappConfigured: isWhatsAppConfigured(),
-    // Cukup untuk Uji bot & Uji koneksi walau token WhatsApp belum ada
-    aiConfigured: isAiConfigured(),
+    // Provider aktif punya key: cukup untuk Uji bot & Uji koneksi walau token WhatsApp belum ada
+    aiConfigured: isAiConfigured(provider),
     ai: {
-      model: row?.waAiModel ?? null,
-      extractionModel: row?.waAiExtractionModel ?? null,
-      baseUrl: row?.waAiBaseUrl ?? null,
-      defaults,
+      provider,
+      providers,
       effective: {
-        model,
-        extractionModel: row?.waAiExtractionModel || defaults?.extractionModel || null,
-        baseUrl: row?.waAiBaseUrl || defaults?.baseUrl || null,
+        label: active.label,
+        model: effectiveModel,
+        extractionModel: active.extractionModel || active.defaults.extractionModel,
+        baseUrlHost: active.baseUrlHost,
       },
-      modelRecognized: model ? getModelProfile(model).family !== null : false,
+      modelRecognized: getModelProfile(effectiveModel).family !== null,
     },
     // Pemakaian bulan berjalan (WIB): kuota gratis Meta & peringatan §17
     usage: await getMonthlyUsage(),
   };
 }
-
-const select = { waBotEnabled: true, waAiModel: true, waAiExtractionModel: true, waAiBaseUrl: true } as const;
 
 export async function GET() {
   const auth = await requireOwner();
@@ -52,9 +80,11 @@ const nullable = <T extends z.ZodType>(schema: T) =>
 
 const updateSchema = z.object({
   botEnabled: z.boolean().optional(),
+  aiProvider: aiProviderSchema.optional(),
   aiModel: nullable(aiModelSchema),
   aiExtractionModel: nullable(aiModelSchema),
-  aiBaseUrl: nullable(aiBaseUrlSchema),
+  aiGatewayModel: nullable(aiModelSchema),
+  aiGatewayExtractionModel: nullable(aiModelSchema),
 });
 
 export async function PUT(request: Request) {
@@ -73,11 +103,23 @@ export async function PUT(request: Request) {
   }
 
   const input = parsed.data;
-  const data: Partial<Overrides> = {
+  if (input.aiProvider && !isAiConfigured(input.aiProvider)) {
+    return NextResponse.json(
+      {
+        error: "VALIDATION_ERROR",
+        fields: { aiProvider: `API key ${getProviderEnv(input.aiProvider).label} belum diisi di server` },
+      },
+      { status: 400 },
+    );
+  }
+
+  const data: Partial<Row> = {
     ...(input.botEnabled !== undefined && { waBotEnabled: input.botEnabled }),
+    ...(input.aiProvider !== undefined && { waAiProvider: input.aiProvider }),
     ...(input.aiModel !== undefined && { waAiModel: input.aiModel }),
     ...(input.aiExtractionModel !== undefined && { waAiExtractionModel: input.aiExtractionModel }),
-    ...(input.aiBaseUrl !== undefined && { waAiBaseUrl: input.aiBaseUrl }),
+    ...(input.aiGatewayModel !== undefined && { waAiGatewayModel: input.aiGatewayModel }),
+    ...(input.aiGatewayExtractionModel !== undefined && { waAiGatewayExtractionModel: input.aiGatewayExtractionModel }),
   };
 
   const before = await prisma.studioSettings.findUnique({ where: { id: "default" }, select });
