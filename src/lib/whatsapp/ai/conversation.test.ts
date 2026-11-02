@@ -5,8 +5,10 @@ const create = vi.hoisted(() => vi.fn());
 const db = vi.hoisted(() => ({
   waMessage: { findUniqueOrThrow: vi.fn(), findMany: vi.fn() },
   waIntake: { findFirst: vi.fn() },
+  waConversation: { findUniqueOrThrow: vi.fn() },
   paymentAccount: { findMany: vi.fn() },
 }));
+const guides = vi.hoisted(() => ({ getDraftGuide: vi.fn(), getPublishedGuide: vi.fn() }));
 const tools = vi.hoisted(() => ({ executeTool: vi.fn(), findActiveIntake: vi.fn() }));
 const media = vi.hoisted(() => ({ readPrivateMedia: vi.fn(), mimeFromStorageKey: vi.fn(() => "image/jpeg") }));
 
@@ -23,6 +25,7 @@ vi.mock("./ai-config", () => ({
   getAnthropicClient: () => ({ messages: { create } }),
 }));
 vi.mock("../media", () => media);
+vi.mock("./bot-guide", async (orig) => ({ ...(await orig<typeof import("./bot-guide")>()), ...guides }));
 vi.mock("./tools", async (orig) => ({ ...(await orig<typeof import("./tools")>()), ...tools }));
 
 import { runAiTurn } from "./conversation";
@@ -50,12 +53,16 @@ const toolResponse = (name: string, input: unknown, id = "tu_1") => ({
 const params = { conversationId: "conv_1", messageId: "m_last" };
 const sentMessages = (call = 0) => create.mock.calls[call][0].messages as Anthropic.MessageParam[];
 const stateOf = (call = 0) => (create.mock.calls[call][0].system as Anthropic.TextBlockParam[])[1].text;
+const rulesOf = (call = 0) => (create.mock.calls[call][0].system as Anthropic.TextBlockParam[])[0].text;
 
 beforeEach(() => {
   vi.clearAllMocks();
   db.waMessage.findUniqueOrThrow.mockResolvedValue({ createdAt: new Date() });
   db.waIntake.findFirst.mockResolvedValue(null);
   db.paymentAccount.findMany.mockResolvedValue([]);
+  db.waConversation.findUniqueOrThrow.mockResolvedValue({ isSandbox: false });
+  guides.getPublishedGuide.mockResolvedValue(null);
+  guides.getDraftGuide.mockResolvedValue({ instructions: "", faqs: [] });
   tools.findActiveIntake.mockResolvedValue(null);
   tools.executeTool.mockResolvedValue({ content: '{"ok":true}', isError: false });
 });
@@ -222,5 +229,44 @@ describe("runAiTurn", () => {
     expect(state).not.toContain("999");
     expect(state).toContain("business_desc");
     expect(db.paymentAccount.findMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("runAiTurn — panduan owner", () => {
+  const published = { instructions: "Admin membalas jam 09.00-17.00 WIB.", faqs: [] };
+  const draft = { instructions: "", faqs: [{ question: "Bisa minta file mentah?", answer: "Bisa, file AI dan PDF ikut dikirim." }] };
+
+  beforeEach(() => {
+    givenHistory([inbound("m_last", "halo")]);
+    create.mockResolvedValue(textResponse("Halo kak"));
+    guides.getPublishedGuide.mockResolvedValue({ version: 3, publishedAt: new Date(), guide: published });
+    guides.getDraftGuide.mockResolvedValue(draft);
+  });
+
+  it("klien sungguhan: versi terbit, draft tidak dipakai", async () => {
+    await runAiTurn(params);
+    expect(rulesOf()).toContain("Admin membalas jam 09.00-17.00 WIB.");
+    expect(rulesOf()).not.toContain("file mentah");
+    expect(guides.getDraftGuide).not.toHaveBeenCalled();
+  });
+
+  it("Uji bot (sandbox): draft dipakai", async () => {
+    db.waConversation.findUniqueOrThrow.mockResolvedValue({ isSandbox: true });
+    await runAiTurn(params);
+    expect(rulesOf()).toContain("Bisa minta file mentah?");
+    expect(rulesOf()).not.toContain("09.00-17.00");
+  });
+
+  it("panduan ditaruh setelah aturan wajib, di blok yang di-cache", async () => {
+    await runAiTurn(params);
+    const rules = rulesOf();
+    expect(rules.indexOf("# Batas yang tidak boleh dilanggar")).toBeLessThan(rules.indexOf("# Panduan dari pemilik"));
+    expect((create.mock.calls[0][0].system as Anthropic.TextBlockParam[])[0].cache_control).toEqual({ type: "ephemeral" });
+  });
+
+  it("belum ada panduan terbit: prompt tanpa bagian panduan", async () => {
+    guides.getPublishedGuide.mockResolvedValue(null);
+    await runAiTurn(params);
+    expect(rulesOf()).not.toContain("# Panduan dari pemilik");
   });
 });

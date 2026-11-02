@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { WaIntakeStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { errorResponse, listInclude, toListItem } from "@/lib/whatsapp/intake-api";
+import { REAL_INTAKE, errorResponse, listInclude, toListItem } from "@/lib/whatsapp/intake-api";
 
 const STATUSES = Object.values(WaIntakeStatus);
 
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   }
   const page = Math.max(1, Number.parseInt(params.get("page") ?? "1", 10) || 1);
   const pageSize = Math.min(50, Math.max(1, Number.parseInt(params.get("pageSize") ?? "20", 10) || 20));
-  const where = statusParam && statusParam !== "all" ? { status: statusParam as WaIntakeStatus } : {};
+  const where = statusParam && statusParam !== "all" ? { ...REAL_INTAKE, status: statusParam as WaIntakeStatus } : REAL_INTAKE;
 
   const [rows, total, grouped] = await Promise.all([
     prisma.waIntake.findMany({
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
       skip: (page - 1) * pageSize,
     }),
     prisma.waIntake.count({ where }),
-    prisma.waIntake.groupBy({ by: ["status"], _count: { _all: true } }),
+    prisma.waIntake.groupBy({ by: ["status"], where: REAL_INTAKE, _count: { _all: true } }),
   ]);
 
   // Jumlah per status untuk badge tab (§12.1)

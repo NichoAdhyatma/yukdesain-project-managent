@@ -201,3 +201,11 @@ export const WA_RATE_LIMITS = {
   outboundMonthlyWarning: 800, // pesan keluar per bulan → banner peringatan
   outboundMonthlyFreeTier: 1000, // kuota gratis Meta per nomor per bulan (§5.3)
 } as const;
+
+// Panduan bot dari owner (docs/WHATSAPP_BOT_GUIDE.md §2)
+export const WA_BOT_GUIDE_LIMITS = {
+  instructionsMaxChars: 4000,
+  faqMaxItems: 30,
+  faqQuestionMaxChars: 200,
+  faqAnswerMaxChars: 500,
+} as const;

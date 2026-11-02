@@ -33,7 +33,17 @@ const PRE_QUOTE_STATUSES = new Set([null, "COLLECTING", "AWAITING_QUOTE"]);
  * pengiriman dari webhook bisa dicocokkan via wamid. Kegagalan kirim tetap
  * disimpan dengan errorCode untuk ditampilkan di portal.
  */
-export async function sendBotText(conversation: { id: string; waId: string }, body: string): Promise<boolean> {
+export async function sendBotText(
+  conversation: { id: string; waId: string; isSandbox?: boolean },
+  body: string,
+): Promise<boolean> {
+  if (conversation.isSandbox) {
+    // Uji bot: balasan hanya disimpan untuk ditampilkan di Settings, tidak dikirim ke WhatsApp.
+    await prisma.waMessage.create({
+      data: { conversationId: conversation.id, direction: "OUTBOUND", body, sentByBot: true, deliveryStatus: "sandbox" },
+    });
+    return true;
+  }
   try {
     const wamid = await sendText(conversation.waId, body);
     await prisma.waMessage.create({
@@ -71,17 +81,20 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
       type: true,
       body: true,
       createdAt: true,
-      conversation: { select: { id: true, waId: true, mode: true } },
+      conversation: { select: { id: true, waId: true, mode: true, isSandbox: true } },
     },
   });
   const { conversation } = message;
 
-  // Saklar dibaca langsung tanpa cache: mematikan bot harus langsung berlaku.
-  const settings = await prisma.studioSettings.findUnique({
-    where: { id: "default" },
-    select: { waBotEnabled: true },
-  });
-  if (!settings?.waBotEnabled) return;
+  // Saklar dibaca langsung tanpa cache: mematikan bot harus langsung berlaku. Uji bot tetap
+  // jalan saat bot nonaktif, supaya owner bisa mencoba sebelum menyalakannya.
+  if (!conversation.isSandbox) {
+    const settings = await prisma.studioSettings.findUnique({
+      where: { id: "default" },
+      select: { waBotEnabled: true },
+    });
+    if (!settings?.waBotEnabled) return;
+  }
   if (conversation.mode === "HUMAN") return;
 
   if (message.wamid) {
@@ -89,8 +102,8 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
     await markAsRead(message.wamid).catch(() => undefined);
   }
 
-  // Banjir pesan: peringatan sekali, sisanya diabaikan (§17).
-  const rate = await checkInboundRate(conversation.id, message.createdAt);
+  // Banjir pesan: peringatan sekali, sisanya diabaikan (§17). Owner yang menguji tidak dibatasi.
+  const rate = conversation.isSandbox ? "ok" : await checkInboundRate(conversation.id, message.createdAt);
   if (rate === "warn") {
     await sendBotText(conversation, BOT_REPLIES.tooManyMessages);
     return;

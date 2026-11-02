@@ -253,3 +253,58 @@ describe("handleInboundMessage", () => {
     expect(data.wamid).toBeUndefined();
   });
 });
+
+describe("handleInboundMessage — Uji bot (sandbox)", () => {
+  function givenSandboxMessage(body = "halo") {
+    db.waMessage.findUniqueOrThrow.mockResolvedValue({
+      id: "msg_s",
+      wamid: null,
+      type: "text",
+      body,
+      createdAt: new Date("2026-11-01T10:00:00Z"),
+      conversation: { id: "conv_s", waId: "sandbox:u_owner", mode: "BOT", isSandbox: true },
+    });
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
+    db.waMessage.count.mockResolvedValue(0);
+    aiReply("Halo kak, mau desain apa?");
+    limits.botReplyLimitReached.mockResolvedValue(false);
+  });
+
+  it("bot nonaktif tetap membalas; balasan disimpan, tidak dikirim ke WhatsApp", async () => {
+    givenSandboxMessage();
+    await handleInboundMessage("msg_s");
+    expect(ai.runAiTurn).toHaveBeenCalled();
+    expect(api.sendText).not.toHaveBeenCalled();
+    expect(api.markAsRead).not.toHaveBeenCalled();
+    expect(db.waMessage.create).toHaveBeenCalledWith({
+      data: {
+        conversationId: "conv_s",
+        direction: "OUTBOUND",
+        body: "Halo kak, mau desain apa?",
+        sentByBot: true,
+        deliveryStatus: "sandbox",
+      },
+    });
+  });
+
+  it("tanpa batas banjir pesan; batas harga tetap berlaku", async () => {
+    givenSandboxMessage("berapa harganya?");
+    aiReply("Harga logo Rp1.500.000 ya kak. Ada lagi?", "COLLECTING");
+    await handleInboundMessage("msg_s");
+    expect(limits.checkInboundRate).not.toHaveBeenCalled();
+    const body = db.waMessage.create.mock.calls[0][0].data.body as string;
+    expect(body).not.toContain("1.500.000");
+  });
+
+  it("kata kunci admin → mode HUMAN, balasan handoff tersimpan", async () => {
+    givenSandboxMessage("admin");
+    await handleInboundMessage("msg_s");
+    expect(humanModeSet()).toBe(true);
+    expect(db.waMessage.create.mock.calls[0][0].data.body).toBe(BOT_REPLIES.handoff);
+    expect(api.sendText).not.toHaveBeenCalled();
+  });
+});

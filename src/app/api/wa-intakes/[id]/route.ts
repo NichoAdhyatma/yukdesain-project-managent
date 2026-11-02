@@ -5,6 +5,7 @@ import { requireOwner } from "@/lib/auth/require-owner";
 import { updateBriefDraft } from "@/lib/whatsapp/intake";
 import {
   errorResponse,
+  REAL_INTAKE,
   findIntakeForDetail,
   intakeErrorResponse,
   logIntakeActivity,
@@ -34,6 +35,9 @@ export async function PATCH(request: Request, { params }: Params) {
 
   const body = await parseBody(request, patchSchema);
   if (body.error) return body.error;
+
+  const exists = await prisma.waIntake.findFirst({ where: { id, ...REAL_INTAKE }, select: { id: true } });
+  if (!exists) return errorResponse("NOT_FOUND", "Order WA tidak ditemukan");
 
   try {
     const result = await prisma.$transaction(async (tx) => {

@@ -63,7 +63,8 @@ export type MonthlyUsage = {
 
 export async function getMonthlyUsage(now = new Date()): Promise<MonthlyUsage> {
   const since = startOfMonthWib(now);
-  const where = { createdAt: { gte: since } };
+  // Uji bot tidak mengirim apa pun ke WhatsApp, jadi tidak memakai kuota Meta.
+  const where = { createdAt: { gte: since }, conversation: { isSandbox: false } };
   const [outboundSent, outboundFailed, templatesSent, botReplies, inbound] = await Promise.all([
     prisma.waMessage.count({ where: { ...where, direction: "OUTBOUND", NOT: { deliveryStatus: "failed" } } }),
     prisma.waMessage.count({ where: { ...where, direction: "OUTBOUND", deliveryStatus: "failed" } }),

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({ studioSettings: { findUnique: vi.fn() } }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("../env", () => ({
-  getWhatsAppEnv: () => ({
+  getAiEnv: () => ({
     ANTHROPIC_API_KEY: "k",
     ANTHROPIC_BASE_URL: "https://api.anthropic.com",
     WA_AI_MODEL: "claude-haiku-5-5",

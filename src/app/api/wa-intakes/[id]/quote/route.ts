@@ -11,6 +11,7 @@ import {
   logIntakeActivity,
   parseBody,
   toDetail,
+  REAL_INTAKE,
 } from "@/lib/whatsapp/intake-api";
 
 type Params = { params: Promise<{ id: string }> };
@@ -37,8 +38,8 @@ export async function POST(request: Request, { params }: Params) {
   if (body.error) return body.error;
   const { agreedPrice, deadline } = body.data;
 
-  const intake = await prisma.waIntake.findUnique({
-    where: { id },
+  const intake = await prisma.waIntake.findFirst({
+    where: { id, ...REAL_INTAKE },
     select: {
       status: true,
       clientName: true,

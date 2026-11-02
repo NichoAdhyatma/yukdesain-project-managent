@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, vi } from "vitest";
-import { getAiEnvDefaults, parseWhatsAppEnv } from "./env";
+import { getAiEnvDefaults, isAiConfigured, isWhatsAppConfigured, parseWhatsAppEnv } from "./env";
 
 const valid = {
   WHATSAPP_ACCESS_TOKEN: "EAAG-test-token",
@@ -82,5 +82,22 @@ describe("getAiEnvDefaults", () => {
   it("mengikuti env jika diisi", () => {
     vi.stubEnv("WA_AI_MODEL", "claude-sonnet-4-6");
     expect(getAiEnvDefaults()?.model).toBe("claude-sonnet-4-6");
+  });
+});
+
+describe("isAiConfigured", () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("cukup ANTHROPIC_API_KEY: Uji bot jalan sebelum token WhatsApp & bucket privat diisi", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test");
+    vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "");
+    vi.stubEnv("STORAGE_PRIVATE_BUCKET", "");
+    expect(isAiConfigured()).toBe(true);
+    expect(isWhatsAppConfigured()).toBe(false);
+  });
+
+  it("tanpa ANTHROPIC_API_KEY → belum siap", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "");
+    expect(isAiConfigured()).toBe(false);
   });
 });

@@ -772,3 +772,11 @@ Perbedaan dari rencana di atas, beserta alasannya. Dokumen di atas tetap acuan p
 - Menu "Order WA" berada di grup `Work` (grup yang dipakai seed), bukan "Work Management".
 - Alasan handoff belum disimpan (belum ada kolom); portal hanya menampilkan mode "Ditangani admin".
 - Uji live dilakukan lewat gateway pihak ketiga yang ternyata tidak menjalankan Claude asli. Alur dan aturan bisnis lolos; kualitas bahasa perlu diuji ulang dengan API resmi sebelum go-live.
+
+---
+
+## 23. Panduan Bot & Uji Bot (2026-11-02)
+
+Owner bisa menambah aturan dan FAQ untuk bot, mencobanya di simulator, lalu menerbitkannya dari Settings ›
+WhatsApp. Desain, batas, dan catatan implementasi: `docs/WHATSAPP_BOT_GUIDE.md`. Aturan §2 dan §10.4 tetap
+berlaku di atas panduan owner.

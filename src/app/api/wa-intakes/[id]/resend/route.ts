@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { dpVerifiedMessage, sendToClient } from "@/lib/whatsapp/outbound";
-import { errorResponse, trackingUrl } from "@/lib/whatsapp/intake-api";
+import { REAL_INTAKE, errorResponse, trackingUrl } from "@/lib/whatsapp/intake-api";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -12,8 +12,8 @@ export async function POST(request: Request, { params }: Params) {
   if (auth.error) return auth.error;
   const { id } = await params;
 
-  const intake = await prisma.waIntake.findUnique({
-    where: { id },
+  const intake = await prisma.waIntake.findFirst({
+    where: { id, ...REAL_INTAKE },
     select: {
       status: true,
       clientName: true,

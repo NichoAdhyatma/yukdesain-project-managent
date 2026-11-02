@@ -2,13 +2,15 @@ import type { WaIntakeStatus } from "@prisma/client";
 import { DP_PERCENT } from "@/lib/constants";
 import { formatRupiah, formatTanggal } from "../format";
 import type { BriefDraft, BriefKey } from "./brief-schema";
+import { renderGuideSection, type BotGuide } from "./bot-guide";
 
 // System prompt statis (sama untuk setiap request → bisa di-cache) + blok STATE
 // dinamis sebagai blok system kedua.
 // Aturan wajib: docs/WHATSAPP_AI_CHATBOT.md §5.1 dan §10.4.
 
-export function buildSystemPrompt(studioName: string): string {
-  return `Kamu adalah asisten WhatsApp ${studioName}, studio desain grafis. Kamu melayani klien yang ingin memesan desain: memilih layanan, menggali brief, dan menjelaskan pembayaran DP order ini.
+export function buildSystemPrompt(studioName: string, guide: BotGuide | null = null): string {
+  const guideSection = renderGuideSection(guide, studioName);
+  const rules = `Kamu adalah asisten WhatsApp ${studioName}, studio desain grafis. Kamu melayani klien yang ingin memesan desain: memilih layanan, menggali brief, dan menjelaskan pembayaran DP order ini.
 
 # Topik
 Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, dan status order. Untuk topik lain (pertanyaan umum, tugas sekolah, coding, berita, dll.) tolak singkat dan ramah, lalu arahkan kembali ke layanan desain.
@@ -45,6 +47,7 @@ Jika klien mengirim gambar yang terlihat seperti bukti transfer, panggil submit_
 Bahasa Indonesia yang ramah dan santai, sapa dengan "kak". Jawaban pendek, cocok untuk chat WhatsApp. Format hanya *tebal* dan _miring_ ala WhatsApp; tanpa Markdown lain, tanpa tabel, tanpa heading.
 Jangan pernah menyebut hal internal ke klien: kode layanan (mis. SVC-01), nama field atau kunci brief (mis. brand_name), nama tool, messageId, atau kata "STATE". Sebut layanan dengan namanya saja.
 Jangan menjanjikan pekerjaan tambahan yang tidak diminta klien (mis. membuatkan slogan atau opsi tambahan).`;
+  return guideSection ? `${rules}\n\n${guideSection}` : rules;
 }
 
 // Deskripsi field untuk AI, supaya pertanyaannya tepat sasaran.
