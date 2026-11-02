@@ -1,5 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import {
+  clientLinkSelect,
+  clientPaymentAccountSelect,
+  toClientLinkDto,
+  toClientPaymentAccountDto,
+} from "@/lib/client-portal/link-dto";
+
+const linkExpired = () =>
+  NextResponse.json({ error: "Link has expired", code: "LINK_EXPIRED" }, { status: 410 });
 
 export async function GET(
   request: Request,
@@ -10,57 +19,11 @@ export async function GET(
 
     const link = await prisma.clientLink.findUnique({
       where: { token },
-      include: {
-        project: {
-          include: {
-            client: true,
-            service: true,
-            brief: true,
-            invoices: {
-              orderBy: { issuedAt: "desc" },
-              take: 1,
-              select: {
-                id: true,
-                invoiceNumber: true,
-                items: true,
-                subtotal: true,
-                total: true,
-                status: true,
-                issuedAt: true,
-              },
-            },
-            assignments: {
-              include: {
-                designer: {
-                  select: { id: true, name: true },
-                },
-              },
-            },
-            updates: {
-              include: {
-                author: { select: { name: true } },
-                attachment: true,
-              },
-              orderBy: { createdAt: "desc" },
-              take: 20,
-            },
-            revisions: {
-              include: {
-                attachments: true,
-              },
-              orderBy: { requestedAt: "desc" },
-            },
-            payments: {
-              orderBy: { date: "desc" },
-              take: 20,
-            },
-          },
-        },
-      },
+      select: clientLinkSelect,
     });
 
     if (!link) {
-      return NextResponse.json({ error: "Link not found" }, { status: 404 });
+      return NextResponse.json({ error: "Link not found", code: "NOT_FOUND" }, { status: 404 });
     }
 
     // Check expiration
@@ -71,38 +34,31 @@ export async function GET(
         where: { id: link.id },
         data: { status: "EXPIRED" },
       });
-      return NextResponse.json({ error: "Link has expired" }, { status: 410 });
+      return linkExpired();
     }
 
     // Check expired - block if already marked expired
     if (link.status === "EXPIRED") {
-      return NextResponse.json({ error: "Link has expired" }, { status: 410 });
+      return linkExpired();
     }
 
     // Fetch active payment accounts for the studio
     const paymentAccounts = await prisma.paymentAccount.findMany({
       where: { isActive: true },
       orderBy: { order: "asc" },
-      select: {
-        id: true,
-        type: true,
-        name: true,
-        accountNumber: true,
-        accountHolder: true,
-        logoUrl: true,
-        qrisImageUrl: true,
-      },
+      select: clientPaymentAccountSelect,
     });
 
-    // Check locked/submitted - still return data for tracking
-    if (link.status === "LOCKED" || link.status === "SUBMITTED") {
-      return NextResponse.json({ link, paymentAccounts });
-    }
-
-    // Active link - return as normal
-    return NextResponse.json({ link, paymentAccounts });
+    // ACTIVE, LOCKED and SUBMITTED links all return tracking data
+    return NextResponse.json({
+      link: toClientLinkDto(link),
+      paymentAccounts: paymentAccounts.map(toClientPaymentAccountDto),
+    });
   } catch (error) {
     console.error("Error fetching link:", error);
-    return NextResponse.json({ error: "Failed to fetch link" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch link", code: "INTERNAL_SERVER_ERROR" },
+      { status: 500 }
+    );
   }
 }

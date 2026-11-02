@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
-import { isWhatsAppConfigured } from "@/lib/whatsapp/env";
+import { isAiConfigured } from "@/lib/whatsapp/env";
 import { getAiConfig } from "@/lib/whatsapp/ai/ai-config";
 import { testAiConnection } from "@/lib/whatsapp/ai/connection-test";
 
@@ -12,8 +12,9 @@ export async function POST() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
   if (!user.roles.includes("OWNER")) return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-  if (!isWhatsAppConfigured()) {
-    return NextResponse.json({ error: "UNPROCESSABLE_ENTITY", message: "Env WhatsApp/AI belum lengkap" }, { status: 422 });
+  // Hanya butuh env Claude, supaya bisa diuji sebelum setup Meta selesai.
+  if (!isAiConfigured()) {
+    return NextResponse.json({ error: "UNPROCESSABLE_ENTITY", message: "ANTHROPIC_API_KEY di server belum diisi" }, { status: 422 });
   }
 
   const config = await getAiConfig();

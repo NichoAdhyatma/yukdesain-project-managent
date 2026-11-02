@@ -4,6 +4,7 @@ import { getStudioSettings } from "@/lib/studio";
 import { mimeFromStorageKey, readPrivateMedia } from "../media";
 import { aiWritableBriefFields, imageTargetFields, missingRequiredFields, type BriefDraft } from "./brief-schema";
 import { buildStateBlock, buildSystemPrompt } from "./system-prompt";
+import { getDraftGuide, getPublishedGuide } from "./bot-guide";
 import { ACTIVE_INTAKE_STATUSES } from "../intake";
 import { getAiConfig, getAnthropicClient } from "./ai-config";
 import { modelRequestOptions } from "./model-profile";
@@ -159,10 +160,17 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
 
   const { messages, pendingImageIds } = await buildMessages(rows);
   const studio = await getStudioSettings();
-  // Aturan statis (di-cache) lalu STATE dinamis. Keduanya di system prompt: kanal
-  // operator yang terpisah dari teks klien dan didukung semua model Claude.
+  // Uji bot memakai draft panduan owner; klien sungguhan hanya versi terbit.
+  const { isSandbox } = await prisma.waConversation.findUniqueOrThrow({
+    where: { id: params.conversationId },
+    select: { isSandbox: true },
+  });
+  const guide = isSandbox ? await getDraftGuide() : ((await getPublishedGuide())?.guide ?? null);
+  // Aturan statis + panduan owner (di-cache; berubah hanya saat panduan diterbitkan) lalu
+  // STATE dinamis. Keduanya di system prompt: kanal operator yang terpisah dari teks klien
+  // dan didukung semua model Claude.
   const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: buildSystemPrompt(studio.name), cache_control: { type: "ephemeral" } },
+    { type: "text", text: buildSystemPrompt(studio.name, guide), cache_control: { type: "ephemeral" } },
     { type: "text", text: await buildState(params.conversationId, pendingImageIds) },
   ];
 

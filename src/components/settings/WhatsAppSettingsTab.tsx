@@ -11,10 +11,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
+import { BotGuideCard } from "./whatsapp/BotGuideCard";
+import { BotSandboxCard } from "./whatsapp/BotSandboxCard";
 
 type WhatsAppSettings = {
   botEnabled: boolean;
   whatsappConfigured: boolean;
+  aiConfigured: boolean;
   ai: {
     model: string | null;
     extractionModel: string | null;
@@ -263,6 +266,7 @@ export function WhatsAppSettingsTab() {
           <p>
             Env WhatsApp/AI di server belum lengkap. Bot tidak akan berjalan sampai token WhatsApp,
             <code className="mx-1">ANTHROPIC_API_KEY</code>, dan bucket privat diisi.
+            {data.aiConfigured && " Uji bot dan uji koneksi AI sudah bisa dipakai."}
           </p>
         </div>
       )}
@@ -301,6 +305,10 @@ export function WhatsAppSettingsTab() {
           </div>
         </CardContent>
       </Card>
+
+      <BotGuideCard />
+
+      <BotSandboxCard />
 
       <Card>
         <CardHeader>
@@ -425,7 +433,7 @@ export function WhatsAppSettingsTab() {
             <Button
               variant="outline"
               onClick={() => testConnection.mutate()}
-              disabled={testConnection.isPending || dirty || !data.whatsappConfigured}
+              disabled={testConnection.isPending || dirty || !data.aiConfigured}
             >
               {testConnection.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

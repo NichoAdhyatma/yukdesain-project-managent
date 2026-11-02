@@ -64,6 +64,35 @@ export function getWhatsAppEnv(): WhatsAppEnv {
   return cached;
 }
 
+// Bagian Claude saja: Uji bot dan Uji koneksi di Settings bisa dipakai sebelum token
+// WhatsApp dan bucket privat diisi (docs/WHATSAPP_BOT_GUIDE.md §5).
+const aiEnvSchema = whatsAppEnvSchema.pick({
+  ANTHROPIC_API_KEY: true,
+  ANTHROPIC_BASE_URL: true,
+  WA_AI_MODEL: true,
+  WA_AI_EXTRACTION_MODEL: true,
+  WA_AI_MAX_TOKENS: true,
+});
+
+export type AiEnv = z.infer<typeof aiEnvSchema>;
+
+let cachedAi: AiEnv | null = null;
+
+export function getAiEnv(): AiEnv {
+  if (cachedAi) return cachedAi;
+  const result = aiEnvSchema.safeParse(normalize(process.env));
+  if (!result.success) {
+    const issues = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
+    throw new Error(`Konfigurasi AI tidak valid — ${issues}`);
+  }
+  cachedAi = result.data;
+  return cachedAi;
+}
+
+export function isAiConfigured(): boolean {
+  return aiEnvSchema.safeParse(normalize(process.env)).success;
+}
+
 const aiDefaultsSchema = whatsAppEnvSchema.pick({
   WA_AI_MODEL: true,
   WA_AI_EXTRACTION_MODEL: true,

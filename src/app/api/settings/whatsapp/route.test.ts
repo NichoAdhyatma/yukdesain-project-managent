@@ -10,6 +10,7 @@ vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/auth/session", () => session);
 vi.mock("@/lib/whatsapp/env", () => ({
   isWhatsAppConfigured: () => true,
+  isAiConfigured: () => true,
   getAiEnvDefaults: () => ({
     model: "claude-haiku-5-5",
     extractionModel: "claude-sonnet-5-5",

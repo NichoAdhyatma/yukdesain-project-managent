@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { isIP } from "node:net";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { getWhatsAppEnv } from "../env";
+import { getAiEnv } from "../env";
 
 // Konfigurasi AI efektif: nilai dari Settings (DB) jika diisi owner, selain itu
 // default dari env. API key selalu dari env dan tidak pernah disimpan di DB.
@@ -42,7 +42,7 @@ export const aiBaseUrlSchema = z
   .transform((u) => u.replace(/\/+$/, ""));
 
 export async function getAiConfig(): Promise<AiConfig> {
-  const env = getWhatsAppEnv();
+  const env = getAiEnv();
   // Dibaca tanpa cache: perubahan dari Settings langsung berlaku.
   const settings = await prisma.studioSettings.findUnique({
     where: { id: "default" },
@@ -62,7 +62,7 @@ const clients = new Map<string, Anthropic>();
 export function getAnthropicClient(baseUrl: string): Anthropic {
   let client = clients.get(baseUrl);
   if (!client) {
-    client = new Anthropic({ apiKey: getWhatsAppEnv().ANTHROPIC_API_KEY, baseURL: baseUrl, timeout: 30_000, maxRetries: 2 });
+    client = new Anthropic({ apiKey: getAiEnv().ANTHROPIC_API_KEY, baseURL: baseUrl, timeout: 30_000, maxRetries: 2 });
     clients.set(baseUrl, client);
   }
   return client;

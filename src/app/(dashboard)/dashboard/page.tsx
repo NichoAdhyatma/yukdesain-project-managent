@@ -41,7 +41,8 @@ export default async function DashboardPage() {
     fetchPendingRevisions(),
     prisma.waIntake.groupBy({
       by: ["status"],
-      where: { status: { in: ["AWAITING_QUOTE", "DP_REVIEW"] } },
+      // Order dari Uji bot tidak dihitung (docs/WHATSAPP_BOT_GUIDE.md §5)
+      where: { status: { in: ["AWAITING_QUOTE", "DP_REVIEW"] }, conversation: { isSandbox: false } },
       _count: { _all: true },
     }),
   ]);

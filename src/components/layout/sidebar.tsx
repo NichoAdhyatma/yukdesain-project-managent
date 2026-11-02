@@ -26,6 +26,7 @@ import {
   ImageIcon,
   LayoutGrid,
   MessageCircle,
+  X,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -98,8 +99,14 @@ interface NavGroup {
 }
 
 interface SidebarProps {
+  /** "desktop" is the persistent md+ aside; "drawer" fills the mobile Sheet. */
+  variant?: "desktop" | "drawer";
   collapsed?: boolean;
   onToggle?: () => void;
+  /** Drawer only: called after a nav link is tapped. */
+  onNavigate?: () => void;
+  /** Drawer only: renders the close button in the header. */
+  onClose?: () => void;
   user?: {
     name: string;
     email: string;
@@ -142,7 +149,18 @@ function groupMenus(menus: MenuItem[]): NavGroup[] {
     });
 }
 
-export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarProps) {
+export function Sidebar({
+  variant = "desktop",
+  collapsed: collapsedProp = false,
+  onToggle,
+  onNavigate,
+  onClose,
+  user,
+  menus,
+}: SidebarProps) {
+  const isDrawer = variant === "drawer";
+  const collapsed = !isDrawer && collapsedProp;
+  const Root = isDrawer ? "div" : "aside";
   const pathname = usePathname();
   const waBadge = useWaOrderBadge(
     user?.activeRole === "OWNER" && menus.some((m) => m.href === "/wa-orders"),
@@ -229,16 +247,21 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
   };
 
   return (
-    <aside
+    <Root
       className={cn(
-        "flex flex-col h-screen bg-sidebar border-r border-sidebar-border transition-all duration-200",
-        collapsed ? "w-16" : "w-64"
+        "flex flex-col bg-sidebar",
+        isDrawer
+          ? "h-full"
+          : cn(
+              "hidden md:flex h-screen border-r border-sidebar-border transition-all duration-200",
+              collapsed ? "w-16" : "w-64"
+            )
       )}
     >
       {/* Logo */}
-      <div className="flex items-center h-14 px-4 border-b border-sidebar-border">
+      <div className={cn("flex items-center h-14 border-b border-sidebar-border", isDrawer ? "pl-4 pr-2" : "px-4")}>
         {!collapsed ? (
-          <Link href={homeHref} className="flex items-center gap-2">
+          <Link href={homeHref} onClick={onNavigate} className={cn("flex items-center gap-2", isDrawer && "min-h-11")}>
             <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
               <span className="text-sidebar-primary-foreground font-bold text-sm">
                 YD
@@ -262,18 +285,39 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
             </div>
           </Link>
         )}
+        {isDrawer && onClose && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="ml-auto size-11"
+            aria-label="Close menu"
+          >
+            <X className="size-5" />
+          </Button>
+        )}
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 px-2 py-3 overflow-y-auto">
+      <nav className="flex-1 px-2 py-3 overflow-y-auto overscroll-contain">
         {navigationGroups.map((group) => {
           const hasActiveChild = group.items.some((item) => isActive(item.href));
-          const isOpen = collapsed ? true : (openGroups[group.label] ?? group.defaultOpen);
+          // The drawer shows every group expanded; its headers are plain labels
+          const isOpen = collapsed || isDrawer ? true : (openGroups[group.label] ?? group.defaultOpen);
 
           return (
             <div key={group.label} className="mb-1">
               {/* Group Header */}
-              {!collapsed && (
+              {isDrawer ? (
+                <p
+                  className={cn(
+                    "px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider",
+                    hasActiveChild ? "text-sidebar-primary" : "text-muted-foreground"
+                  )}
+                >
+                  {group.label}
+                </p>
+              ) : !collapsed && (
                 <button
                   onClick={() => toggleGroup(group.label)}
                   className={cn(
@@ -303,8 +347,11 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
                     const linkContent = (
                       <Link
                         href={item.href}
+                        onClick={onNavigate}
+                        aria-current={active ? "page" : undefined}
                         className={cn(
                           "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+                          isDrawer && "min-h-11",
                           active
                             ? "bg-sidebar-accent text-sidebar-primary"
                             : "text-sidebar-foreground hover:bg-sidebar-accent/60"
@@ -349,25 +396,27 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
         })}
       </nav>
 
-      {/* Collapse button */}
-      <div className="px-2 pb-2">
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggle}
-          className="w-full justify-center"
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          <PanelLeft className={cn("w-4 h-4", collapsed && "rotate-180")} />
-          {!collapsed && <span className="ml-2 text-xs">Collapse</span>}
-        </Button>
-      </div>
+      {/* Collapse button (desktop only) */}
+      {!isDrawer && (
+        <div className="px-2 pb-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onToggle}
+            className="w-full justify-center"
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <PanelLeft className={cn("w-4 h-4", collapsed && "rotate-180")} />
+            {!collapsed && <span className="ml-2 text-xs">Collapse</span>}
+          </Button>
+        </div>
+      )}
 
       {/* User section */}
       <div className="p-4 border-t border-sidebar-border">
         <div className={cn("flex items-center", collapsed ? "justify-center" : "gap-3")}>
           <DropdownMenu>
-            <DropdownMenuTrigger className={cn("flex items-center gap-2 rounded-lg hover:bg-sidebar-accent/50 transition-colors w-full", collapsed ? "justify-center" : "")}>
+            <DropdownMenuTrigger className={cn("flex items-center gap-2 rounded-lg hover:bg-sidebar-accent/50 transition-colors w-full", collapsed ? "justify-center" : "", isDrawer && "min-h-11")}>
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="text-xs bg-sidebar-primary text-sidebar-primary-foreground">
                     {user ? getInitials(user.name) : "?"}
@@ -400,6 +449,7 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
                     active={user?.activeRole === "OWNER"}
                     onToggle={() => handleToggleRole("OWNER")}
                     disabled={savingRole}
+                    touch={isDrawer}
                   />
                   <RoleToggle
                     role="DESIGNER"
@@ -408,12 +458,13 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
                     active={user?.activeRole === "DESIGNER"}
                     onToggle={() => handleToggleRole("DESIGNER")}
                     disabled={savingRole}
+                    touch={isDrawer}
                   />
                 </div>
                 {savingRole && <p className="text-xs text-muted-foreground mt-1">Saving...</p>}
               </div>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
+              <DropdownMenuItem onClick={handleLogout} className={cn("text-destructive cursor-pointer", isDrawer && "min-h-11")}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Logout
               </DropdownMenuItem>
@@ -437,7 +488,7 @@ export function Sidebar({ collapsed = false, onToggle, user, menus }: SidebarPro
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </aside>
+    </Root>
   );
 }
 
@@ -447,6 +498,7 @@ function RoleToggle({
   active,
   onToggle,
   disabled,
+  touch,
 }: {
   role?: string;
   label: string;
@@ -454,6 +506,8 @@ function RoleToggle({
   active: boolean;
   onToggle: (active: boolean) => void;
   disabled: boolean;
+  /** Raise the row to a 44px tap target (mobile drawer). */
+  touch?: boolean;
 }) {
   return (
     <button
@@ -461,6 +515,7 @@ function RoleToggle({
       onClick={() => onToggle(!active)}
       className={cn(
         "w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+        touch && "min-h-11",
         active ? "bg-sidebar-accent text-sidebar-foreground" : "text-muted-foreground hover:bg-sidebar-accent/50",
         disabled && "opacity-50 cursor-not-allowed"
       )}

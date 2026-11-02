@@ -152,3 +152,49 @@ export async function sendToClient(conversationId: string, message: OutboundMess
     return { ok: false, via, errorCode, messageId: saved.id };
   }
 }
+
+// Batas teks bebas Cloud API (text.body).
+export const MANUAL_REPLY_MAX_LENGTH = 4096;
+
+/**
+ * Balasan manual admin dari portal (mode HUMAN). Hanya teks bebas, jadi pemanggil wajib
+ * memastikan masih di dalam jendela 24 jam. Disimpan sebagai OUTBOUND (berhasil atau gagal)
+ * dengan sentById supaya portal bisa membedakannya dari pesan bot/sistem.
+ */
+export async function sendManualReply(
+  conversation: { id: string; waId: string },
+  text: string,
+  senderId: string,
+): Promise<DeliveryResult> {
+  const store = (data: { wamid?: string; deliveryStatus: string; errorCode?: string }) =>
+    prisma.waMessage.create({
+      data: {
+        conversationId: conversation.id,
+        direction: "OUTBOUND",
+        type: "text",
+        body: text,
+        sentByBot: false,
+        sentById: senderId,
+        ...data,
+      },
+      select: { id: true },
+    });
+
+  try {
+    getWhatsAppEnv();
+  } catch {
+    const saved = await store({ deliveryStatus: "failed", errorCode: "NOT_CONFIGURED" });
+    return { ok: false, via: null, errorCode: "NOT_CONFIGURED", messageId: saved.id };
+  }
+
+  try {
+    const wamid = await sendText(conversation.waId, text);
+    const saved = await store({ wamid, deliveryStatus: "sent" });
+    return { ok: true, via: "text", messageId: saved.id };
+  } catch (error) {
+    const errorCode = error instanceof WhatsAppApiError ? (error.code ?? String(error.status)) : "SEND_FAILED";
+    const saved = await store({ deliveryStatus: "failed", errorCode });
+    console.error(`[whatsapp] balasan manual gagal ke ${maskPhone(conversation.waId)}: ${errorCode}`);
+    return { ok: false, via: "text", errorCode, messageId: saved.id };
+  }
+}

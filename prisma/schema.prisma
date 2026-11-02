@@ -152,6 +152,7 @@ model User {
   payments     Payment[]
   activityLogs ActivityLog[]
   sessions     Session[]
+  waBotGuideVersions WaBotGuideVersion[]
 
   @@map("users")
 }
@@ -533,6 +534,8 @@ model StudioSettings {
   waAiModel           String?
   waAiExtractionModel String?
   waAiBaseUrl         String?
+  // Draft panduan bot dari owner ({ instructions, faqs }); versi terbit di WaBotGuideVersion
+  waBotGuideDraft     Json?
   updatedAt DateTime @updatedAt
 
   @@map("studio_settings")
@@ -574,6 +577,9 @@ model WaConversation {
   clientId      String?
   mode          WaConversationMode @default(BOT)
   lastInboundAt DateTime?
+  // Percakapan uji dari Settings › Uji bot: tidak pernah dikirim ke WhatsApp dan disaring
+  // dari Order WA, statistik, dan rate limit (docs/WHATSAPP_BOT_GUIDE.md §5)
+  isSandbox     Boolean            @default(false)
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
@@ -597,6 +603,7 @@ model WaMessage {
   mediaStorageKey String? // key R2 jika gambar
   mediaSha256     String? // dari payload Meta; deteksi duplikat
   sentByBot       Boolean            @default(false)
+  sentById        String? // User.id admin yang membalas manual dari portal; null = bot/pesan sistem
   deliveryStatus  String?
   errorCode       String?
   createdAt       DateTime           @default(now())
@@ -678,4 +685,19 @@ model WaLookupAttempt {
 
   @@index([conversationId, createdAt])
   @@map("wa_lookup_attempts")
+}
+
+// Panduan bot yang sudah diterbitkan owner (docs/WHATSAPP_BOT_GUIDE.md). Tidak pernah diubah;
+// versi aktif = version terbesar.
+model WaBotGuideVersion {
+  id            String   @id @default(cuid())
+  version       Int      @unique
+  instructions  String   @db.Text
+  faqs          Json // [{ question, answer }]
+  publishedById String?
+  publishedAt   DateTime @default(now())
+
+  publishedBy User? @relation(fields: [publishedById], references: [id], onDelete: SetNull)
+
+  @@map("wa_bot_guide_versions")
 }

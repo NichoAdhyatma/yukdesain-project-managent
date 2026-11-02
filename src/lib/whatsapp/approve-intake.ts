@@ -102,8 +102,9 @@ async function resolveClient(
 export async function approveIntake(input: ApproveInput): Promise<ApproveResult> {
   return prisma.$transaction(
     async (tx) => {
-      const intake = await tx.waIntake.findUnique({
-        where: { id: input.intakeId },
+      // Order dari Uji bot tidak boleh pernah menjadi project (docs/WHATSAPP_BOT_GUIDE.md §5).
+      const intake = await tx.waIntake.findFirst({
+        where: { id: input.intakeId, conversation: { isSandbox: false } },
         select: {
           status: true,
           serviceId: true,

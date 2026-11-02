@@ -52,6 +52,12 @@ export function logIntakeActivity(
   });
 }
 
+/**
+ * Order dari Uji bot (docs/WHATSAPP_BOT_GUIDE.md §5) tidak pernah muncul di, atau bisa
+ * diproses lewat, Order WA. Pakai di setiap query order WA milik portal.
+ */
+export const REAL_INTAKE = { conversation: { isSandbox: false } } satisfies Prisma.WaIntakeWhereInput;
+
 // ---- List ----
 
 export const listInclude = {
@@ -100,6 +106,7 @@ export const detailInclude = {
           body: true,
           mediaStorageKey: true,
           sentByBot: true,
+          sentById: true,
           deliveryStatus: true,
           errorCode: true,
           createdAt: true,
@@ -146,6 +153,8 @@ export async function toDetail(row: DetailRow) {
       body: m.body,
       imageUrl: m.type === "image" ? await signedUrl(m.mediaStorageKey) : null,
       sentByBot: m.sentByBot,
+      // Balasan manual admin dari portal; id admin tidak ikut di DTO
+      sentByAdmin: m.sentById !== null,
       deliveryStatus: m.deliveryStatus,
       errorCode: m.errorCode,
       createdAt: m.createdAt,
@@ -206,7 +215,7 @@ export async function toDetail(row: DetailRow) {
 }
 
 export async function findIntakeForDetail(id: string) {
-  return prisma.waIntake.findUnique({ where: { id }, include: detailInclude });
+  return prisma.waIntake.findFirst({ where: { id, ...REAL_INTAKE }, include: detailInclude });
 }
 
 /** URL publik link tracking klien: APP_PUBLIC_URL, atau Origin request owner. */

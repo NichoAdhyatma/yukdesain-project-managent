@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { getAiEnvDefaults, isWhatsAppConfigured } from "@/lib/whatsapp/env";
+import { getAiEnvDefaults, isAiConfigured, isWhatsAppConfigured } from "@/lib/whatsapp/env";
 import { aiBaseUrlSchema, aiModelSchema } from "@/lib/whatsapp/ai/ai-config";
 import { getModelProfile } from "@/lib/whatsapp/ai/model-profile";
 import { getMonthlyUsage } from "@/lib/whatsapp/rate-limit";
@@ -17,6 +17,8 @@ async function toDto(row: Overrides | null) {
   return {
     botEnabled: row?.waBotEnabled ?? false,
     whatsappConfigured: isWhatsAppConfigured(),
+    // Cukup untuk Uji bot & Uji koneksi walau token WhatsApp belum ada
+    aiConfigured: isAiConfigured(),
     ai: {
       model: row?.waAiModel ?? null,
       extractionModel: row?.waAiExtractionModel ?? null,
