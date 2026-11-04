@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { BriefReader } from "@/components/forms/brief/BriefReader";
 import { STATUS_BADGE } from "@/components/wa-orders/labels";
+import { WhatsAppText } from "@/components/wa-orders/WhatsAppText";
 import type { WaIntakeStatus } from "@/components/wa-orders/types";
 import { cn } from "@/lib/utils";
 import { GUIDE_QUERY_KEY } from "./BotGuideCard";
@@ -78,7 +79,7 @@ function Bubble({ fromBot, label, time, children }: { fromBot: boolean; label: s
             </>
           )}
         </p>
-        <div className="whitespace-pre-wrap break-words">{children}</div>
+        {children}
       </div>
     </li>
   );
@@ -261,10 +262,14 @@ export function BotSandboxCard() {
                 <ol className="space-y-3" role="log" aria-live="polite" aria-label="Percakapan uji">
                   {messages.map((m) => (
                     <Bubble key={m.id} fromBot={m.direction === "OUTBOUND"} label={m.direction === "OUTBOUND" ? "Bot" : ROLE_LABEL[role]} time={m.createdAt}>
-                      {m.body}
+                      <WhatsAppText text={m.body} />
                     </Bubble>
                   ))}
-                  {pendingText && <Bubble fromBot={false} label={ROLE_LABEL[role]}>{pendingText}</Bubble>}
+                  {pendingText && (
+                    <Bubble fromBot={false} label={ROLE_LABEL[role]}>
+                      <WhatsAppText text={pendingText} />
+                    </Bubble>
+                  )}
                   {(pendingText || answer.isPending) && (
                     <li className="flex justify-start">
                       <p className="flex items-center gap-2 rounded-lg border bg-background px-3 py-2 text-sm text-muted-foreground">

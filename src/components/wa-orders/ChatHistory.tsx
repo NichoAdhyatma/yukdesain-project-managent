@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { formatDateTime } from "./labels";
 import type { WaIntakeDetail } from "./types";
 import { useIntakeAction } from "./use-intake-action";
+import { WhatsAppText } from "./WhatsAppText";
 
 // Batas teks bebas Cloud API, sama dengan validasi server (MANUAL_REPLY_MAX_LENGTH).
 const MAX_LENGTH = 4096;
@@ -226,7 +227,7 @@ export function ChatHistory({ intake }: { intake: WaIntakeDetail }) {
                     {m.type === "unsupported" ? (
                       <p className="italic text-muted-foreground">[pesan suara/video/dokumen]</p>
                     ) : (
-                      m.body && <p className="mt-1 whitespace-pre-wrap break-words">{m.body}</p>
+                      m.body && <WhatsAppText text={m.body} className="mt-1 whitespace-pre-wrap break-words" />
                     )}
                     {failed && (
                       <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
