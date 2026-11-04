@@ -211,7 +211,7 @@ export async function runOwnerAiTurn(p: {
       select: { direction: true, body: true },
     }),
   ]);
-  const client = getAnthropicClient(config.baseUrl);
+  const client = getAnthropicClient(config);
   const openIds = new Set(queries.map((q) => q.id));
 
   const messages: Anthropic.MessageParam[] = history

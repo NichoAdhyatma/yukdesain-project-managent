@@ -539,7 +539,11 @@ model StudioSettings {
   // Override konfigurasi AI bot WA dari Settings; null = pakai default env
   waAiModel           String?
   waAiExtractionModel String?
-  waAiBaseUrl         String?
+  waAiBaseUrl         String? // tidak dipakai lagi sejak pilihan provider (Settings › Model AI)
+  // Provider AI aktif: ANTHROPIC (resmi) | GATEWAY (testing). Model per provider; null = default env.
+  waAiProvider               String  @default("ANTHROPIC")
+  waAiGatewayModel           String?
+  waAiGatewayExtractionModel String?
   // Draft panduan bot dari owner ({ instructions, faqs }); versi terbit di WaBotGuideVersion
   waBotGuideDraft     Json?
   updatedAt DateTime @updatedAt

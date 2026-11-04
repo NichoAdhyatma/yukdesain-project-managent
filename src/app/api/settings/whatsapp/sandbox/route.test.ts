@@ -6,11 +6,11 @@ const sandbox = vi.hoisted(() => ({
   sendSandboxMessage: vi.fn(),
   resetSandbox: vi.fn(),
 }));
-const env = vi.hoisted(() => ({ isAiConfigured: vi.fn() }));
+const ai = vi.hoisted(() => ({ isAiReady: vi.fn() }));
 
 vi.mock("@/lib/auth/session", () => session);
 vi.mock("@/lib/whatsapp/sandbox", async (orig) => ({ ...(await orig<typeof import("@/lib/whatsapp/sandbox")>()), ...sandbox }));
-vi.mock("@/lib/whatsapp/env", () => env);
+vi.mock("@/lib/whatsapp/ai/ai-config", () => ai);
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 
 import { DELETE, GET, POST } from "./route";
@@ -23,7 +23,7 @@ const empty = { client: { mode: null, messages: [], intake: null, pendingOwnerQu
 beforeEach(() => {
   vi.clearAllMocks();
   session.getCurrentUser.mockResolvedValue(owner);
-  env.isAiConfigured.mockReturnValue(true);
+  ai.isAiReady.mockResolvedValue(true);
   sandbox.getSandboxState.mockResolvedValue(empty);
   sandbox.sendSandboxMessage.mockResolvedValue(empty);
 });
@@ -56,11 +56,11 @@ describe("/api/settings/whatsapp/sandbox", () => {
     expect(sandbox.sendSandboxMessage).not.toHaveBeenCalled();
   });
 
-  it("ANTHROPIC_API_KEY belum ada → 422 dengan pesan jelas, bot tidak dipanggil", async () => {
-    env.isAiConfigured.mockReturnValue(false);
+  it("key provider AI aktif belum ada → 422 dengan pesan jelas, bot tidak dipanggil", async () => {
+    ai.isAiReady.mockResolvedValue(false);
     const res = await post({ text: "halo" });
     expect(res.status).toBe(422);
-    expect((await res.json()).message).toContain("ANTHROPIC_API_KEY");
+    expect((await res.json()).message).toContain("API key");
     expect(sandbox.sendSandboxMessage).not.toHaveBeenCalled();
   });
 });

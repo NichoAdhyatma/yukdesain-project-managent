@@ -810,3 +810,14 @@ Owner bisa mengubah panduan bot lewat chat WA dari nomornya sendiri (berlaku set
 bertanya ke owner untuk permintaan di luar katalog. **Perubahan keputusan §2:** bot kini boleh menyebut aturan harga
 yang diterbitkan owner (potongan/biaya tambahan dengan nilai pasti) sebelum penawaran; harga layanan, kisaran, dan total
 tetap hanya dari admin. Detail: `docs/WHATSAPP_OWNER_COMMANDS.md`.
+
+---
+
+## 25. Pilihan penyedia AI (2026-11-02)
+
+Settings › WhatsApp › Model AI: owner memilih **Anthropic (resmi)** atau **gateway pihak ketiga untuk testing**
+(default olagon), dan model chat/ekstraksi dari dropdown (daftar dari `/v1/models` penyedia, cadangan statis jika
+gagal). Key masing-masing di env (`ANTHROPIC_API_KEY`, `AI_GATEWAY_API_KEY`); pilihan model disimpan per penyedia.
+Kolom Base URL bebas diganti pilihan penyedia; `StudioSettings.waAiBaseUrl` tidak dipakai lagi. Env WhatsApp tidak lagi
+mensyaratkan `ANTHROPIC_API_KEY` (webhook tetap jalan walau AI memakai gateway). Saat gateway aktif, Settings menampilkan
+peringatan bahwa data klien dikirim ke pihak ketiga; owner yang memutuskan kapan menyalakan balas otomatis.

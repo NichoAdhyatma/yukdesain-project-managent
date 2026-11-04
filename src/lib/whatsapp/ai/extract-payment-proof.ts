@@ -65,7 +65,7 @@ export async function extractPaymentProof(
   image: { data: Buffer; mimeType: "image/jpeg" | "image/png" | "image/webp" },
   config: AiConfig,
 ): Promise<PaymentExtraction | null> {
-  const response = await getAnthropicClient(config.baseUrl).messages.create({
+  const response = await getAnthropicClient(config).messages.create({
     model: config.extractionModel,
     max_tokens: 1024,
     system: SYSTEM,

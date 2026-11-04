@@ -1,13 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, vi } from "vitest";
-import { getAiEnvDefaults, isAiConfigured, isWhatsAppConfigured, parseWhatsAppEnv } from "./env";
+import { getProviderEnv, isAiConfigured, isWhatsAppConfigured, parseWhatsAppEnv } from "./env";
 
 const valid = {
   WHATSAPP_ACCESS_TOKEN: "EAAG-test-token",
   WHATSAPP_PHONE_NUMBER_ID: "1234567890",
   WHATSAPP_APP_SECRET: "app-secret",
   WHATSAPP_VERIFY_TOKEN: "verify-token-yang-panjang",
-  ANTHROPIC_API_KEY: "sk-ant-test",
   STORAGE_PRIVATE_BUCKET: "yukdesain-private",
 };
 
@@ -17,29 +16,10 @@ describe("parseWhatsAppEnv", () => {
     expect(env.WHATSAPP_GRAPH_VERSION).toBe("v23.0");
     expect(env.WHATSAPP_TEMPLATE_LANG).toBe("id");
     expect(env.WHATSAPP_GRAPH_BASE_URL).toBe("https://graph.facebook.com");
-    expect(env.ANTHROPIC_BASE_URL).toBe("https://api.anthropic.com");
-    expect(env.WA_AI_MODEL).toBe("claude-haiku-5-5");
-    expect(env.WA_AI_EXTRACTION_MODEL).toBe("claude-sonnet-5-5");
-    expect(env.WA_AI_MAX_TOKENS).toBe(800);
-  });
-
-  it("mengubah WA_AI_MAX_TOKENS menjadi angka", () => {
-    expect(parseWhatsAppEnv({ ...valid, WA_AI_MAX_TOKENS: "1200" }).WA_AI_MAX_TOKENS).toBe(1200);
   });
 
   it("menganggap string kosong sebagai tidak di-set", () => {
-    const env = parseWhatsAppEnv({ ...valid, WA_AI_MODEL: "  " });
-    expect(env.WA_AI_MODEL).toBe("claude-haiku-5-5");
-    expect(() => parseWhatsAppEnv({ ...valid, WHATSAPP_APP_SECRET: "" })).toThrow(
-      /WHATSAPP_APP_SECRET/,
-    );
-  });
-
-  it("ANTHROPIC_BASE_URL wajib https", () => {
-    expect(parseWhatsAppEnv({ ...valid, ANTHROPIC_BASE_URL: "https://gateway.example/anthropic" }).ANTHROPIC_BASE_URL).toBe(
-      "https://gateway.example/anthropic",
-    );
-    expect(() => parseWhatsAppEnv({ ...valid, ANTHROPIC_BASE_URL: "http://gateway.example" })).toThrow(/ANTHROPIC_BASE_URL/);
+    expect(() => parseWhatsAppEnv({ ...valid, WHATSAPP_APP_SECRET: "" })).toThrow(/WHATSAPP_APP_SECRET/);
   });
 
   it("menolak format yang salah", () => {
@@ -66,38 +46,43 @@ describe("parseWhatsAppEnv", () => {
   });
 });
 
-describe("getAiEnvDefaults", () => {
+describe("provider AI", () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it("tetap tersedia walau token WhatsApp belum diisi", () => {
-    vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "");
+  it("Anthropic resmi: default model & base URL, key dari ANTHROPIC_API_KEY", () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test");
     vi.stubEnv("WA_AI_MODEL", "");
-    expect(getAiEnvDefaults()).toEqual({
-      model: "claude-haiku-5-5",
-      extractionModel: "claude-sonnet-5-5",
+    expect(getProviderEnv("ANTHROPIC")).toEqual({
+      provider: "ANTHROPIC",
+      label: "Anthropic (resmi)",
       baseUrl: "https://api.anthropic.com",
+      apiKey: "sk-ant-test",
+      defaultModel: "claude-haiku-5-5",
+      defaultExtractionModel: "claude-sonnet-5-5",
     });
   });
 
-  it("mengikuti env jika diisi", () => {
-    vi.stubEnv("WA_AI_MODEL", "claude-sonnet-4-6");
-    expect(getAiEnvDefaults()?.model).toBe("claude-sonnet-4-6");
-  });
-});
-
-describe("isAiConfigured", () => {
-  afterEach(() => vi.unstubAllEnvs());
-
-  it("cukup ANTHROPIC_API_KEY: Uji bot jalan sebelum token WhatsApp & bucket privat diisi", () => {
-    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test");
-    vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "");
-    vi.stubEnv("STORAGE_PRIVATE_BUCKET", "");
-    expect(isAiConfigured()).toBe(true);
-    expect(isWhatsAppConfigured()).toBe(false);
+  it("gateway: key & base URL sendiri, default olagon", () => {
+    vi.stubEnv("AI_GATEWAY_API_KEY", "gw-key");
+    expect(getProviderEnv("GATEWAY")).toMatchObject({
+      label: "Olagon gateway",
+      baseUrl: "https://gateway.olagon.site/anthropic",
+      apiKey: "gw-key",
+      defaultModel: "claude-sonnet-4-6",
+    });
   });
 
-  it("tanpa ANTHROPIC_API_KEY → belum siap", () => {
+  it("base URL harus https", () => {
+    vi.stubEnv("AI_GATEWAY_BASE_URL", "http://gateway.example");
+    expect(() => getProviderEnv("GATEWAY")).toThrow(/AI_GATEWAY_BASE_URL/);
+  });
+
+  it("isAiConfigured per provider; token WhatsApp tidak diperlukan", () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "");
-    expect(isAiConfigured()).toBe(false);
+    vi.stubEnv("AI_GATEWAY_API_KEY", "gw-key");
+    vi.stubEnv("WHATSAPP_ACCESS_TOKEN", "");
+    expect(isAiConfigured("ANTHROPIC")).toBe(false);
+    expect(isAiConfigured("GATEWAY")).toBe(true);
+    expect(isWhatsAppConfigured()).toBe(false);
   });
 });

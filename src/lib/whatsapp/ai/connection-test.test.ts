@@ -5,7 +5,7 @@ vi.mock("./ai-config", () => ({ getAnthropicClient: () => ({ messages: { create 
 
 import { testAiConnection } from "./connection-test";
 
-const config = { model: "claude-sonnet-4-6", extractionModel: "claude-sonnet-4-6", baseUrl: "https://gw.example", maxTokens: 800 };
+const config = { provider: "GATEWAY" as const, label: "Gateway", apiKey: "k", model: "claude-sonnet-4-6", extractionModel: "claude-sonnet-4-6", baseUrl: "https://gw.example", maxTokens: 800 };
 
 beforeEach(() => vi.clearAllMocks());
 

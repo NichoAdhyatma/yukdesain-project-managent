@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { validationError } from "@/lib/whatsapp/ai/bot-guide-api";
-import { isAiConfigured } from "@/lib/whatsapp/env";
+import { isAiReady } from "@/lib/whatsapp/ai/ai-config";
 import { answerSandboxQuery } from "@/lib/whatsapp/sandbox";
 
 // Jawab pertanyaan luar katalog dari percakapan uji, seolah owner membalas lewat WA
@@ -21,9 +21,9 @@ export async function POST(request: Request) {
 
   const parsed = schema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return validationError(parsed.error);
-  if (!isAiConfigured()) {
+  if (!(await isAiReady())) {
     return NextResponse.json(
-      { error: "UNPROCESSABLE_ENTITY", message: "ANTHROPIC_API_KEY di server belum diisi, jadi bot belum bisa diuji." },
+      { error: "UNPROCESSABLE_ENTITY", message: "API key provider AI yang dipilih belum diisi di server, jadi bot belum bisa diuji." },
       { status: 422 },
     );
   }
