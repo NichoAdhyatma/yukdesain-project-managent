@@ -61,14 +61,15 @@ const CJK = /[぀-ヿ㐀-鿿가-힯]+/g;
 // Kode layanan internal (SVC-01) tidak untuk klien; nama layanan sudah cukup.
 const SERVICE_CODE = /\s*\(?\bSVC-\d{2}\b\)?/g;
 
-export type SanitizedReply = { text: string; rejected: boolean; changed: boolean };
+export type RejectReason = "tool_markup" | "too_short";
+export type SanitizedReply = { text: string; rejected: boolean; changed: boolean; reason?: RejectReason };
 
 /**
  * Bersihkan balasan model sebelum dikirim ke klien. `rejected` = balasan tidak layak
  * dikirim sama sekali (pemanggil memakai fallback).
  */
 export function sanitizeReply(text: string): SanitizedReply {
-  if (TOOL_MARKUP.test(text)) return { text: "", rejected: true, changed: true };
+  if (TOOL_MARKUP.test(text)) return { text: "", rejected: true, changed: true, reason: "tool_markup" };
 
   let out = text;
   const run = out.match(DEGENERATE_RUN);
@@ -82,6 +83,6 @@ export function sanitizeReply(text: string): SanitizedReply {
     .trim();
 
   // Sisa terlalu pendek untuk jadi balasan yang bermakna.
-  if (out.length < 15) return { text: "", rejected: true, changed: true };
+  if (out.length < 15) return { text: "", rejected: true, changed: true, reason: "too_short" };
   return { text: out, rejected: false, changed: out !== text.trim() };
 }
