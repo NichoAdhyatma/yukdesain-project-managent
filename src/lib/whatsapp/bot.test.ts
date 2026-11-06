@@ -56,6 +56,7 @@ describe("handleInboundMessage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: true });
     db.waMessage.count.mockResolvedValue(0);
     api.sendText.mockResolvedValue("wamid.OUT");
@@ -240,6 +241,29 @@ describe("handleInboundMessage", () => {
     await handleInboundMessage("msg_1");
     expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
     expect(humanModeSet()).toBe(true);
+  });
+
+  it("markup tool-call sekali lalu balasan normal → percobaan ulang yang dikirim, tetap mode BOT", async () => {
+    givenMessage("text");
+    const turn = { intakeStatus: "COLLECTING", briefText: "{}", allowedPriceNumbers: [], toolsCalled: [] };
+    ai.runAiTurn
+      .mockResolvedValueOnce({ ...turn, reply: '<tool_call>\n<invoke name="get_brief">' })
+      .mockResolvedValueOnce({ ...turn, reply: "Siap kak, layanan nomor 11 ya. Nama brandnya apa?" });
+    await handleInboundMessage("msg_1");
+    expect(ai.runAiTurn).toHaveBeenCalledTimes(2);
+    expect(sentBodies()).toEqual(["Siap kak, layanan nomor 11 ya. Nama brandnya apa?"]);
+    expect(humanModeSet()).toBe(false);
+    const warned = vi.mocked(console.warn).mock.calls.flat().join(" ");
+    expect(warned).toContain("tool_markup");
+    expect(warned).not.toContain("get_brief");
+  });
+
+  it("balasan rusak dua kali → baru fallback sibuk", async () => {
+    givenMessage("text");
+    aiReply("<tool_call>");
+    await handleInboundMessage("msg_1");
+    expect(ai.runAiTurn).toHaveBeenCalledTimes(2);
+    expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
   });
 
   it("kode layanan internal dibuang dari balasan", async () => {

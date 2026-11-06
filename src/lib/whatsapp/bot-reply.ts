@@ -68,6 +68,10 @@ export async function isSuperseded(conversationId: string, createdAt: Date): Pro
   return newer > 0;
 }
 
+// Model lewat gateway sesekali menulis tool call sebagai teks atau membalas kosong. Satu percobaan
+// ulang biasanya cukup; baru setelah itu klien menerima pesan "sibuk" dan percakapan dialihkan ke admin.
+const AI_ATTEMPTS = 2;
+
 /**
  * Satu giliran AI untuk percakapan klien lalu kirim balasannya (dengan semua penjaga balasan).
  * `anchor` = pesan terakhir yang dijawab. Return true jika balasan AI terkirim/tersimpan.
@@ -78,34 +82,38 @@ export async function replyWithAi(
   opts: { checkSuperseded: boolean },
 ): Promise<boolean> {
   const turnStartedAt = new Date();
-  let turn: Awaited<ReturnType<typeof runAiTurn>>;
-  try {
-    turn = await runAiTurn({ conversationId: conversation.id, messageId: anchor.id });
-  } catch (error) {
-    // Hanya nama error: pesan error API bisa memuat potongan isi chat.
-    const reason =
-      error instanceof Anthropic.APIError
-        ? `api_${error.status ?? "connection"}`
-        : (error as Error).message === "AI_REFUSAL"
-          ? "refusal"
-          : (error as Error).name;
-    console.error(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)}: ${reason}`);
-    await setHumanMode(conversation.id);
-    await sendBotText(conversation, BOT_REPLIES.busy);
-    return false;
+  let turn: Awaited<ReturnType<typeof runAiTurn>> | null = null;
+  let sanitized: ReturnType<typeof sanitizeReply> | null = null;
+  for (let attempt = 1; attempt <= AI_ATTEMPTS; attempt++) {
+    try {
+      turn = await runAiTurn({ conversationId: conversation.id, messageId: anchor.id });
+    } catch (error) {
+      // Hanya nama error: pesan error API bisa memuat potongan isi chat.
+      const reason =
+        error instanceof Anthropic.APIError
+          ? `api_${error.status ?? "connection"}`
+          : (error as Error).message === "AI_REFUSAL"
+            ? "refusal"
+            : (error as Error).name;
+      console.error(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)}: ${reason}`);
+      await setHumanMode(conversation.id);
+      await sendBotText(conversation, BOT_REPLIES.busy);
+      return false;
+    }
+
+    // Klien sudah mengirim pesan baru selama AI berpikir → biarkan giliran itu yang membalas.
+    if (opts.checkSuperseded && (await isSuperseded(conversation.id, anchor.createdAt))) return false;
+
+    sanitized = turn.reply ? sanitizeReply(turn.reply) : null;
+    if (sanitized && !sanitized.rejected) break;
+    // Hanya alasan dan panjang: isi balasan bisa memuat data klien.
+    console.warn(
+      `[whatsapp] balasan AI ditolak untuk ${maskPhone(conversation.waId)} (percobaan ${attempt}/${AI_ATTEMPTS}): ` +
+        `${sanitized?.reason ?? "empty"}, ${turn.reply?.length ?? 0} karakter`,
+    );
   }
 
-  if (!turn.reply) {
-    await setHumanMode(conversation.id);
-    await sendBotText(conversation, BOT_REPLIES.busy);
-    return false;
-  }
-
-  // Klien sudah mengirim pesan baru selama AI berpikir → biarkan giliran itu yang membalas.
-  if (opts.checkSuperseded && (await isSuperseded(conversation.id, anchor.createdAt))) return false;
-
-  const sanitized = sanitizeReply(turn.reply);
-  if (sanitized.rejected) {
+  if (!turn || !sanitized || sanitized.rejected) {
     console.error(`[whatsapp] balasan AI rusak untuk ${maskPhone(conversation.waId)}, dialihkan ke admin`);
     await setHumanMode(conversation.id);
     await sendBotText(conversation, BOT_REPLIES.busy);
