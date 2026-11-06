@@ -32,6 +32,7 @@ const TYPE_OPTIONS = [
 ];
 
 type Props = {
+  id?: string;
   rules: FormRule[];
   max: number;
   errors: Record<string, string>;
@@ -40,9 +41,9 @@ type Props = {
   onAdd: () => void;
 };
 
-export function PricingRulesEditor({ rules, max, errors, onChange, onRemove, onAdd }: Props) {
+export function PricingRulesEditor({ id, rules, max, errors, onChange, onRemove, onAdd }: Props) {
   return (
-    <fieldset className="space-y-4">
+    <fieldset id={id} className="scroll-mt-6 space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <legend className="text-sm font-medium">Aturan harga</legend>
         <span className="text-sm text-muted-foreground tabular-nums">
