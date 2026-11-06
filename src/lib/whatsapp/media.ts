@@ -1,9 +1,9 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { CopyObjectCommand, DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@/lib/db";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getClient } from "@/lib/storage";
-import { getWhatsAppEnv } from "./env";
+import { getPrivateBucket } from "./env";
 import { MediaTooLargeError, downloadMediaContent, getMediaInfo } from "./client-api";
 
 // Sama dengan batas route upload klien (§10.2).
@@ -22,6 +22,34 @@ export function sniffImageType(buf: Buffer): AllowedMime | null {
     return "image/webp";
   }
   return null;
+}
+
+/** WaMessage.mediaId untuk lampiran Fonnte: "url:<https URL>" (Meta memakai media id). */
+export const FONNTE_MEDIA_PREFIX = "url:";
+
+function isSafeMediaUrl(raw: string): boolean {
+  if (!URL.canParse(raw)) return false;
+  const url = new URL(raw);
+  const host = url.hostname.toLowerCase();
+  // Hanya https ke host publik: URL datang dari webhook, jangan sampai dipakai menembak jaringan internal.
+  if (url.protocol !== "https:" || host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) return false;
+  return !/^(\d+\.){3}\d+$/.test(host) && !host.includes(":");
+}
+
+async function downloadPublicMedia(url: string, maxBytes: number): Promise<Buffer> {
+  if (!isSafeMediaUrl(url)) throw new Error("URL lampiran tidak diizinkan");
+  const res = await fetch(url, { signal: AbortSignal.timeout(15_000), redirect: "error" });
+  if (!res.ok || !res.body) throw new Error(`Unduh lampiran gagal (${res.status})`);
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > maxBytes) throw new MediaTooLargeError();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+    total += chunk.byteLength;
+    if (total > maxBytes) throw new MediaTooLargeError();
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
 
 export type StoredMedia = { storageKey: string; mimeType: AllowedMime; data: Buffer };
@@ -49,13 +77,21 @@ export async function storeInboundMedia(messageId: string): Promise<StoreMediaRe
     return { ok: false, reason };
   };
 
-  const info = await getMediaInfo(message.mediaId);
-  if (!(info.mimeType in EXTENSIONS)) return reject("MEDIA_TYPE_NOT_ALLOWED");
-  if (info.fileSize !== null && info.fileSize > WA_MEDIA_MAX_BYTES) return reject("MEDIA_TOO_LARGE");
-
   let data: Buffer;
+  let sha256: string | null = null;
   try {
-    data = await downloadMediaContent(info.url, WA_MEDIA_MAX_BYTES);
+    if (message.mediaId.startsWith(FONNTE_MEDIA_PREFIX)) {
+      // Fonnte mengirim URL lampiran langsung; jenis file dicek dari magic bytes di bawah.
+      const url = message.mediaId.slice(FONNTE_MEDIA_PREFIX.length);
+      if (!isSafeMediaUrl(url)) return reject("MEDIA_TYPE_NOT_ALLOWED");
+      data = await downloadPublicMedia(url, WA_MEDIA_MAX_BYTES);
+    } else {
+      const info = await getMediaInfo(message.mediaId);
+      if (!(info.mimeType in EXTENSIONS)) return reject("MEDIA_TYPE_NOT_ALLOWED");
+      if (info.fileSize !== null && info.fileSize > WA_MEDIA_MAX_BYTES) return reject("MEDIA_TOO_LARGE");
+      data = await downloadMediaContent(info.url, WA_MEDIA_MAX_BYTES);
+      sha256 = info.sha256;
+    }
   } catch (error) {
     if (error instanceof MediaTooLargeError) return reject("MEDIA_TOO_LARGE");
     throw error;
@@ -69,7 +105,7 @@ export async function storeInboundMedia(messageId: string): Promise<StoreMediaRe
 
   await getClient().send(
     new PutObjectCommand({
-      Bucket: getWhatsAppEnv().STORAGE_PRIVATE_BUCKET,
+      Bucket: getPrivateBucket(),
       Key: storageKey,
       ContentType: mimeType,
       Body: data,
@@ -78,7 +114,8 @@ export async function storeInboundMedia(messageId: string): Promise<StoreMediaRe
 
   await prisma.waMessage.update({
     where: { id: messageId },
-    data: { mediaStorageKey: storageKey, ...(info.sha256 ? { mediaSha256: info.sha256 } : {}) },
+    // Fonnte tidak mengirim hash: dihitung dari isi file (dipakai deteksi bukti transfer ganda).
+    data: { mediaStorageKey: storageKey, mediaSha256: sha256 ?? createHash("sha256").update(data).digest("base64") },
   });
 
   return { ok: true, media: { storageKey, mimeType, data } };
@@ -87,7 +124,7 @@ export async function storeInboundMedia(messageId: string): Promise<StoreMediaRe
 /** Baca media dari bucket privat (untuk dikirim ulang ke model). */
 export async function readPrivateMedia(storageKey: string): Promise<Buffer> {
   const res = await getClient().send(
-    new GetObjectCommand({ Bucket: getWhatsAppEnv().STORAGE_PRIVATE_BUCKET, Key: storageKey }),
+    new GetObjectCommand({ Bucket: getPrivateBucket(), Key: storageKey }),
   );
   if (!res.Body) throw new Error("Media kosong");
   return Buffer.from(await res.Body.transformToByteArray());
@@ -100,7 +137,7 @@ export function mimeFromStorageKey(storageKey: string): AllowedMime {
 
 /** Pindahkan objek di dalam bucket privat (salin lalu hapus sumber, hapus bersifat best-effort). */
 export async function movePrivateMedia(fromKey: string, toKey: string): Promise<void> {
-  const bucket = getWhatsAppEnv().STORAGE_PRIVATE_BUCKET;
+  const bucket = getPrivateBucket();
   const client = getClient();
   await client.send(
     new CopyObjectCommand({
@@ -121,7 +158,7 @@ export const PRIVATE_MEDIA_URL_TTL_SECONDS = 600;
 export function getPrivateMediaUrl(storageKey: string): Promise<string> {
   return getSignedUrl(
     getClient(),
-    new GetObjectCommand({ Bucket: getWhatsAppEnv().STORAGE_PRIVATE_BUCKET, Key: storageKey }),
+    new GetObjectCommand({ Bucket: getPrivateBucket(), Key: storageKey }),
     { expiresIn: PRIVATE_MEDIA_URL_TTL_SECONDS },
   );
 }

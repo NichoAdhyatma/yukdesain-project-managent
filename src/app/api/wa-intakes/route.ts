@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { REAL_INTAKE, errorResponse, listInclude, toListItem } from "@/lib/whatsapp/intake-api";
 import { expireOwnerQueries } from "@/lib/whatsapp/owner/queries";
+import { getChannel, usesServiceWindow } from "@/lib/whatsapp/channel";
 
 const STATUSES = Object.values(WaIntakeStatus);
 
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
   const pageSize = Math.min(50, Math.max(1, Number.parseInt(params.get("pageSize") ?? "20", 10) || 20));
   // Label "menunggu owner" harus akurat; tidak ada cron, jadi dicek saat daftar dibuka.
   await expireOwnerQueries();
+  const serviceWindow = usesServiceWindow(await getChannel());
   const where = statusParam && statusParam !== "all" ? { ...REAL_INTAKE, status: statusParam as WaIntakeStatus } : REAL_INTAKE;
 
   const [rows, total, grouped] = await Promise.all([
@@ -40,7 +42,7 @@ export async function GET(request: Request) {
   for (const g of grouped) counts[g.status] = g._count._all;
 
   return NextResponse.json({
-    items: rows.map(toListItem),
+    items: rows.map((row) => toListItem(row, serviceWindow)),
     counts,
     page,
     pageSize,

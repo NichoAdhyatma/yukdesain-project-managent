@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { briefResponsesToEntries } from "@/lib/brief/responses";
 import { IntakeError, type IntakeErrorCode } from "./intake";
 import { isWithinServiceWindow } from "./outbound";
+import { getChannel, usesServiceWindow } from "./channel";
 import { getPrivateMediaUrl } from "./media";
 import { maskPhone } from "./phone";
 import { getAppPublicUrl } from "./env";
@@ -76,7 +77,8 @@ export const listInclude = {
 
 type ListRow = Prisma.WaIntakeGetPayload<{ include: typeof listInclude }>;
 
-export function toListItem(row: ListRow) {
+/** `serviceWindow` = saluran aktif memakai aturan 24 jam (Meta); Fonnte tidak. */
+export function toListItem(row: ListRow, serviceWindow = true) {
   return {
     id: row.id,
     status: row.status,
@@ -91,7 +93,7 @@ export function toListItem(row: ListRow) {
     // Pertanyaan luar katalog sedang menunggu jawaban owner (docs/WHATSAPP_OWNER_COMMANDS.md §5)
     waitingForOwner: row.conversation._count.ownerQueries > 0,
     // Pesan berikutnya ke klien akan memakai template (§12.1)
-    outsideServiceWindow: !isWithinServiceWindow(row.conversation.lastInboundAt),
+    outsideServiceWindow: serviceWindow && !isWithinServiceWindow(row.conversation.lastInboundAt),
     updatedAt: row.updatedAt,
   };
 }
@@ -160,6 +162,7 @@ async function signedUrl(key: string | null): Promise<string | null> {
 
 export async function toDetail(row: DetailRow) {
   const { conversation } = row;
+  const serviceWindow = usesServiceWindow(await getChannel());
   const messages = await Promise.all(
     [...conversation.messages].reverse().map(async (m) => ({
       id: m.id,
@@ -233,7 +236,7 @@ export async function toDetail(row: DetailRow) {
       profileName: conversation.profileName,
       mode: conversation.mode,
       lastInboundAt: conversation.lastInboundAt,
-      outsideServiceWindow: !isWithinServiceWindow(conversation.lastInboundAt),
+      outsideServiceWindow: serviceWindow && !isWithinServiceWindow(conversation.lastInboundAt),
     },
     messages,
     proofs,

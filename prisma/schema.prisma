@@ -544,6 +544,10 @@ model StudioSettings {
   waAiProvider               String  @default("ANTHROPIC")
   waAiGatewayModel           String?
   waAiGatewayExtractionModel String?
+  // Saluran WhatsApp: META (Cloud API resmi) | FONNTE (gateway scan QR, testing)
+  // (docs/WHATSAPP_CHANNEL_FONNTE.md). waFonnteDevice = nomor perangkat Fonnte saat webhook dipasang.
+  waChannel                  String  @default("META")
+  waFonnteDevice             String?
   // Draft panduan bot dari owner ({ instructions, faqs }); versi terbit di WaBotGuideVersion
   waBotGuideDraft     Json?
   updatedAt DateTime @updatedAt

@@ -11,6 +11,7 @@ import { BotGuideCard } from "./whatsapp/BotGuideCard";
 import { BotSandboxCard } from "./whatsapp/BotSandboxCard";
 import { OwnerNumberCard } from "./whatsapp/OwnerNumberCard";
 import { AiProviderCard } from "./whatsapp/AiProviderCard";
+import { ChannelCard } from "./whatsapp/ChannelCard";
 import { WHATSAPP_SETTINGS_KEY, putWhatsAppSettings, type WhatsAppSettings, type WhatsAppUsage } from "./whatsapp/settings-api";
 
 export type { WhatsAppUsage } from "./whatsapp/settings-api";
@@ -148,8 +149,7 @@ export function WhatsAppSettingsTab() {
         <div role="status" className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
           <p>
-            Env WhatsApp di server belum lengkap. Bot tidak akan menerima pesan sampai token WhatsApp dan bucket privat
-            diisi.
+            Saluran WhatsApp yang aktif belum siap: env di server belum lengkap, jadi bot belum menerima pesan.
             {data.aiConfigured
               ? " Uji bot dan uji koneksi AI sudah bisa dipakai."
               : " API key penyedia AI yang dipilih juga belum diisi."}
@@ -198,6 +198,8 @@ export function WhatsAppSettingsTab() {
           )}
         </CardContent>
       </Card>
+
+      <ChannelCard data={data} />
 
       <OwnerNumberCard />
 

@@ -27,7 +27,7 @@ const storage = vi.hoisted(() => ({ copyToPublicBucket: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/storage", () => storage);
-vi.mock("../env", () => ({ getWhatsAppEnv: () => ({ STORAGE_PRIVATE_BUCKET: "private-bucket" }) }));
+vi.mock("../env", () => ({ getWhatsAppEnv: () => ({ STORAGE_PRIVATE_BUCKET: "private-bucket" }), getPrivateBucket: () => "private-bucket" }));
 const media = vi.hoisted(() => ({
   movePrivateMedia: vi.fn(),
   readPrivateMedia: vi.fn(),

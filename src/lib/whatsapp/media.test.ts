@@ -8,7 +8,7 @@ const api = vi.hoisted(() => ({ getMediaInfo: vi.fn(), downloadMediaContent: vi.
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/storage", () => ({ getClient: () => ({ send: s3Send }) }));
-vi.mock("./env", () => ({ getWhatsAppEnv: () => ({ STORAGE_PRIVATE_BUCKET: "private-bucket" }) }));
+vi.mock("./env", () => ({ getWhatsAppEnv: () => ({ STORAGE_PRIVATE_BUCKET: "private-bucket" }), getPrivateBucket: () => "private-bucket" }));
 vi.mock("./client-api", async (orig) => ({
   ...(await orig<typeof import("./client-api")>()),
   getMediaInfo: api.getMediaInfo,
@@ -119,4 +119,43 @@ describe("movePrivateMedia", () => {
     const { movePrivateMedia } = await import("./media");
     await expect(movePrivateMedia("wa-media/c/a.jpg", "payment-proofs/i/b.jpg")).resolves.toBeUndefined();
   });
+});
+
+describe("storeInboundMedia — lampiran Fonnte (docs/WHATSAPP_CHANNEL_FONNTE.md)", () => {
+  const fetchMock = vi.fn();
+  beforeEach(() => {
+    vi.clearAllMocks();
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  const given = (url: string) =>
+    db.waMessage.findUniqueOrThrow.mockResolvedValue({ conversationId: "conv_1", type: "image", mediaId: `url:${url}`, mediaStorageKey: null });
+
+  it("unduh dari URL Fonnte tanpa Graph API, hash dihitung dari isi", async () => {
+    given("https://cdn.fonnte.com/a.jpg");
+    fetchMock.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Headers(),
+      body: (async function* () {
+        yield new Uint8Array(JPEG);
+      })(),
+    });
+    const result = await storeInboundMedia("msg_1");
+    expect(result.ok).toBe(true);
+    expect(api.getMediaInfo).not.toHaveBeenCalled();
+    expect(db.waMessage.update.mock.calls[0][0].data.mediaSha256).toEqual(expect.any(String));
+    vi.unstubAllGlobals();
+  });
+
+  it.each(["http://cdn.fonnte.com/a.jpg", "https://127.0.0.1/a.jpg", "https://localhost/a.jpg"])(
+    "URL tidak aman %s → ditolak tanpa diunduh",
+    async (url) => {
+      given(url);
+      expect(await storeInboundMedia("msg_1")).toEqual({ ok: false, reason: "MEDIA_TYPE_NOT_ALLOWED" });
+      expect(fetchMock).not.toHaveBeenCalled();
+      vi.unstubAllGlobals();
+    },
+  );
 });

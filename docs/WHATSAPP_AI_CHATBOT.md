@@ -821,3 +821,11 @@ gagal). Key masing-masing di env (`ANTHROPIC_API_KEY`, `AI_GATEWAY_API_KEY`); pi
 Kolom Base URL bebas diganti pilihan penyedia; `StudioSettings.waAiBaseUrl` tidak dipakai lagi. Env WhatsApp tidak lagi
 mensyaratkan `ANTHROPIC_API_KEY` (webhook tetap jalan walau AI memakai gateway). Saat gateway aktif, Settings menampilkan
 peringatan bahwa data klien dikirim ke pihak ketiga; owner yang memutuskan kapan menyalakan balas otomatis.
+
+---
+
+## 26. Saluran Fonnte untuk testing (2026-11-06)
+
+Selama verifikasi Meta, bot bisa dites lewat **Fonnte** (gateway scan QR, tidak resmi) — dipilih di Settings ›
+WhatsApp › Saluran WhatsApp, nomor dihubungkan dengan scan QR dari portal. Tanpa template dan aturan 24 jam. Risiko blokir
+nomor diterima owner; hanya untuk nomor testing. Detail: `docs/WHATSAPP_CHANNEL_FONNTE.md`.

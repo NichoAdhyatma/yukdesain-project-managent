@@ -11,6 +11,7 @@ import {
   parseBody,
   toDetail,
 } from "@/lib/whatsapp/intake-api";
+import { getChannel, usesServiceWindow } from "@/lib/whatsapp/channel";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -42,7 +43,8 @@ export async function POST(request: Request, { params }: Params) {
   if (conversation.mode !== "HUMAN") {
     return errorResponse("CONFLICT", "Chat masih dilayani bot. Ambil alih dulu sebelum membalas.");
   }
-  if (!isWithinServiceWindow(conversation.lastInboundAt)) {
+  // Aturan 24 jam hanya untuk Cloud API Meta; Fonnte selalu teks (docs/WHATSAPP_CHANNEL_FONNTE.md).
+  if (usesServiceWindow(await getChannel()) && !isWithinServiceWindow(conversation.lastInboundAt)) {
     return errorResponse(
       "UNPROCESSABLE_ENTITY",
       "Sudah lewat 24 jam sejak pesan terakhir klien. WhatsApp hanya mengizinkan template, jadi balasan manual tidak bisa dikirim.",

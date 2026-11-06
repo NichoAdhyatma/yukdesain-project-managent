@@ -135,6 +135,35 @@ export function isAiConfigured(provider: AiProvider = "ANTHROPIC"): boolean {
   }
 }
 
+// Fonnte: gateway WhatsApp tidak resmi untuk testing (docs/WHATSAPP_CHANNEL_FONNTE.md).
+// Token device dan secret webhook hanya di env, tidak pernah ke browser.
+const fonnteEnvSchema = z.object({
+  FONNTE_DEVICE_TOKEN: nonEmpty,
+  FONNTE_WEBHOOK_SECRET: z.string().trim().min(16, "minimal 16 karakter"),
+});
+
+export type FonnteEnv = z.infer<typeof fonnteEnvSchema>;
+
+export function getFonnteEnv(): FonnteEnv {
+  const result = fonnteEnvSchema.safeParse(normalize(process.env, Object.keys(fonnteEnvSchema.shape)));
+  if (!result.success) {
+    const issues = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
+    throw new Error(`Konfigurasi Fonnte tidak valid — ${issues}`);
+  }
+  return result.data;
+}
+
+export function isFonnteConfigured(): boolean {
+  return fonnteEnvSchema.safeParse(normalize(process.env, Object.keys(fonnteEnvSchema.shape))).success;
+}
+
+/** Bucket privat untuk media WA & bukti transfer; dipakai kedua saluran. */
+export function getPrivateBucket(): string {
+  const bucket = process.env.STORAGE_PRIVATE_BUCKET?.trim();
+  if (!bucket) throw new Error("Konfigurasi tidak valid — STORAGE_PRIVATE_BUCKET belum diisi");
+  return bucket;
+}
+
 // URL publik portal untuk link tracking yang dikirim ke klien. Opsional; jika kosong,
 // diambil dari Origin request owner (approve selalu dipicu dari portal).
 const appUrlSchema = z.url({ protocol: /^https?$/ }).transform((u) => u.replace(/\/+$/, ""));

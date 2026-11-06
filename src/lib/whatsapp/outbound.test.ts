@@ -3,9 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   waConversation: { findUniqueOrThrow: vi.fn() },
   waMessage: { create: vi.fn() },
+  studioSettings: { findUnique: vi.fn(async () => null) },
 }));
 const api = vi.hoisted(() => ({ sendText: vi.fn(), sendTemplate: vi.fn() }));
-const env = vi.hoisted(() => ({ getWhatsAppEnv: vi.fn() }));
+const env = vi.hoisted(() => ({ getWhatsAppEnv: vi.fn(), isWhatsAppConfigured: vi.fn(), isFonnteConfigured: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("./env", () => env);
@@ -36,6 +37,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => undefined);
   env.getWhatsAppEnv.mockReturnValue({ WHATSAPP_TEMPLATE_LANG: "id" });
+  env.isWhatsAppConfigured.mockReturnValue(true);
   db.waMessage.create.mockResolvedValue({ id: "out_1" });
   api.sendText.mockResolvedValue("wamid.T");
   api.sendTemplate.mockResolvedValue("wamid.TPL");
@@ -146,6 +148,7 @@ describe("sendToClient", () => {
 
   it("env WhatsApp belum lengkap → NOT_CONFIGURED tanpa memanggil API", async () => {
     conversation(2);
+    env.isWhatsAppConfigured.mockReturnValue(false);
     env.getWhatsAppEnv.mockImplementation(() => {
       throw new Error("x");
     });
@@ -182,6 +185,7 @@ describe("sendManualReply", () => {
   });
 
   it("env belum lengkap → NOT_CONFIGURED tanpa memanggil Meta", async () => {
+    env.isWhatsAppConfigured.mockReturnValue(false);
     env.getWhatsAppEnv.mockImplementation(() => {
       throw new Error("Konfigurasi WhatsApp tidak valid");
     });

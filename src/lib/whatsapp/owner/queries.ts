@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { isWithinServiceWindow } from "../outbound";
+import { getChannel, usesServiceWindow } from "../channel";
 import { replyWithAi, setHumanMode } from "../bot-reply";
 
 export { answerOwnerQuery, createOwnerQuery, findPendingQuery, notifyOwners, ownerQuestionText, queryIdFromContext } from "./query-store";
@@ -22,7 +23,7 @@ export async function relayOwnerAnswer(queryId: string): Promise<boolean> {
   if (!query || query.status !== "ANSWERED" || query.relayedAt) return false;
   const { conversation } = query;
   if (conversation.mode === "HUMAN") return false;
-  if (!conversation.isSandbox && !isWithinServiceWindow(conversation.lastInboundAt)) {
+  if (!conversation.isSandbox && usesServiceWindow(await getChannel()) && !isWithinServiceWindow(conversation.lastInboundAt)) {
     await setHumanMode(conversation.id);
     return false;
   }
