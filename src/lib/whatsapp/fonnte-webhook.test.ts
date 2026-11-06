@@ -17,7 +17,7 @@ describe("parseFonntePayload", () => {
       kind: "message",
       device: "6285100000000",
       message: {
-        wamid: "fonnte:in:987",
+        wamid: expect.stringMatching(/^fonnte:in:[0-9a-f]{32}$/),
         waId: "6281234567890",
         profileName: "Sari",
         sentAt: new Date(1793700000 * 1000),
@@ -63,6 +63,30 @@ describe("parseFonntePayload", () => {
   ])("chat pribadi dengan format JID / member sama dengan pengirim: %j", (body) => {
     const r = parseFonntePayload(body, now);
     expect(r.kind === "message" && r.message.waId).toBe("6281234567890");
+  });
+});
+
+describe("parseFonntePayload — id dedupe", () => {
+  const wamid = (body: Record<string, unknown>) => {
+    const r = parseFonntePayload(body, now);
+    return r.kind === "message" ? r.message.wamid : null;
+  };
+
+  it("inboxid 0 dari Fonnte: pesan berbeda tetap mendapat id berbeda", () => {
+    const a = wamid({ sender: "6281234567890", message: "hai", timestamp: "1793700000", inboxid: 0 });
+    const b = wamid({ sender: "6281234567890", message: "mau logo", timestamp: "1793700060", inboxid: 0 });
+    expect(a).not.toBe(b);
+  });
+
+  it("pesan sama di detik berbeda → id berbeda", () => {
+    const a = wamid({ sender: "6281234567890", message: "ok", timestamp: "1793700000", inboxid: 0 });
+    const b = wamid({ sender: "6281234567890", message: "ok", timestamp: "1793700005", inboxid: 0 });
+    expect(a).not.toBe(b);
+  });
+
+  it("tanpa timestamp → tidak didedupe (id unik per kiriman)", () => {
+    const body = { sender: "6281234567890", message: "ok" };
+    expect(wamid(body)).not.toBe(wamid({ ...body }));
   });
 });
 
