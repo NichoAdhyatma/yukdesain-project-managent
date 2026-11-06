@@ -4,7 +4,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { copyToPublicBucket } from "@/lib/storage";
-import { getWhatsAppEnv } from "../env";
+import { getPrivateBucket } from "../env";
 import { mimeFromStorageKey, movePrivateMedia, readPrivateMedia } from "../media";
 import { WA_MAX_FAILED_LOOKUPS_PER_HOUR, WA_MAX_PAYMENT_PROOFS_PER_INTAKE } from "@/lib/constants";
 import { getAiConfig } from "./ai-config";
@@ -335,7 +335,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     const ext = message.mediaStorageKey.split(".").pop() ?? "jpg";
     const contentType = mimeFromStorageKey(message.mediaStorageKey);
     const url = await copyToPublicBucket(
-      getWhatsAppEnv().STORAGE_PRIVATE_BUCKET,
+      getPrivateBucket(),
       message.mediaStorageKey,
       `wa-intake/${intake.id}/${message.id}.${ext}`,
       contentType,

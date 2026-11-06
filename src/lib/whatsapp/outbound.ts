@@ -1,7 +1,13 @@
 import { prisma } from "@/lib/db";
 import { DP_PERCENT, WA_TEMPLATES } from "@/lib/constants";
-import { getWhatsAppEnv } from "./env";
-import { WhatsAppApiError, sendTemplate, sendText } from "./client-api";
+import {
+  deliveryErrorCode,
+  getChannel,
+  isChannelConfigured,
+  sendTemplateOnChannel,
+  sendTextOnChannel,
+  usesServiceWindow,
+} from "./channel";
 import { formatRupiah, formatTanggal } from "./format";
 import { maskPhone } from "./phone";
 
@@ -115,7 +121,9 @@ export async function sendToClient(conversationId: string, message: OutboundMess
     where: { id: conversationId },
     select: { id: true, waId: true, lastInboundAt: true },
   });
-  const via = isWithinServiceWindow(conversation.lastInboundAt) ? "text" : "template";
+  const channel = await getChannel();
+  // Fonnte tidak punya aturan 24 jam/template: selalu teks (docs/WHATSAPP_CHANNEL_FONNTE.md §3).
+  const via = !usesServiceWindow(channel) || isWithinServiceWindow(conversation.lastInboundAt) ? "text" : "template";
 
   const store = (data: { wamid?: string; deliveryStatus: string; errorCode?: string }) =>
     prisma.waMessage.create({
@@ -130,10 +138,7 @@ export async function sendToClient(conversationId: string, message: OutboundMess
       select: { id: true },
     });
 
-  let lang: string;
-  try {
-    lang = getWhatsAppEnv().WHATSAPP_TEMPLATE_LANG;
-  } catch {
+  if (!isChannelConfigured(channel)) {
     const saved = await store({ deliveryStatus: "failed", errorCode: "NOT_CONFIGURED" });
     return { ok: false, via: null, errorCode: "NOT_CONFIGURED", messageId: saved.id };
   }
@@ -141,12 +146,12 @@ export async function sendToClient(conversationId: string, message: OutboundMess
   try {
     const wamid =
       via === "text"
-        ? await sendText(conversation.waId, message.text)
-        : await sendTemplate(conversation.waId, message.template.name, lang, message.template.params);
+        ? await sendTextOnChannel(conversation.waId, message.text, channel)
+        : (await sendTemplateOnChannel(conversation.waId, message.template, message.text, channel)).id;
     const saved = await store({ wamid, deliveryStatus: "sent" });
     return { ok: true, via, messageId: saved.id };
   } catch (error) {
-    const errorCode = error instanceof WhatsAppApiError ? (error.code ?? String(error.status)) : "SEND_FAILED";
+    const errorCode = deliveryErrorCode(error);
     const saved = await store({ deliveryStatus: "failed", errorCode });
     console.error(`[whatsapp] ${message.kind} gagal ke ${maskPhone(conversation.waId)} via ${via}: ${errorCode}`);
     return { ok: false, via, errorCode, messageId: saved.id };
@@ -180,19 +185,18 @@ export async function sendManualReply(
       select: { id: true },
     });
 
-  try {
-    getWhatsAppEnv();
-  } catch {
+  const channel = await getChannel();
+  if (!isChannelConfigured(channel)) {
     const saved = await store({ deliveryStatus: "failed", errorCode: "NOT_CONFIGURED" });
     return { ok: false, via: null, errorCode: "NOT_CONFIGURED", messageId: saved.id };
   }
 
   try {
-    const wamid = await sendText(conversation.waId, text);
+    const wamid = await sendTextOnChannel(conversation.waId, text, channel);
     const saved = await store({ wamid, deliveryStatus: "sent" });
     return { ok: true, via: "text", messageId: saved.id };
   } catch (error) {
-    const errorCode = error instanceof WhatsAppApiError ? (error.code ?? String(error.status)) : "SEND_FAILED";
+    const errorCode = deliveryErrorCode(error);
     const saved = await store({ deliveryStatus: "failed", errorCode });
     console.error(`[whatsapp] balasan manual gagal ke ${maskPhone(conversation.waId)}: ${errorCode}`);
     return { ok: false, via: "text", errorCode, messageId: saved.id };

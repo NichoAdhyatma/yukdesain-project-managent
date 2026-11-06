@@ -19,6 +19,12 @@ vi.mock("@/lib/whatsapp/env", () => ({
       : { provider: p, label: "Anthropic (resmi)", baseUrl: "https://api.anthropic.com", apiKey: keys.ANTHROPIC ? "sk-ant-secret" : null, defaultModel: "claude-haiku-5-5", defaultExtractionModel: "claude-sonnet-5-5" },
 }));
 
+const channels = vi.hoisted(() => ({ META: true, FONNTE: true }));
+vi.mock("@/lib/whatsapp/channel", () => ({
+  WA_CHANNELS: ["META", "FONNTE"],
+  isChannelConfigured: (c: "META" | "FONNTE") => channels[c],
+}));
+
 vi.mock("@/lib/whatsapp/rate-limit", () => ({
   getMonthlyUsage: async () => ({ month: "2026-11", outboundSent: 820, outboundFailed: 1, templatesSent: 2, botReplies: 800, inbound: 900, warningThreshold: 800, freeTier: 1000, nearLimit: true }),
 }));
@@ -30,6 +36,7 @@ const put = (body: unknown) =>
   PUT(new Request("http://x/api/settings/whatsapp", { method: "PUT", body: JSON.stringify(body) }));
 const row = {
   waBotEnabled: false,
+  waChannel: "META",
   waAiProvider: "ANTHROPIC",
   waAiModel: null,
   waAiExtractionModel: null,
@@ -44,6 +51,8 @@ beforeEach(() => {
   db.studioSettings.upsert.mockImplementation(async ({ update }) => ({ ...row, ...update }));
   keys.ANTHROPIC = true;
   keys.GATEWAY = true;
+  channels.META = true;
+  channels.FONNTE = true;
 });
 
 describe("GET /api/settings/whatsapp", () => {
@@ -116,6 +125,34 @@ describe("PUT /api/settings/whatsapp", () => {
   it("bukan owner → 403 tanpa menyimpan", async () => {
     session.getCurrentUser.mockResolvedValue({ id: "d", roles: ["DESIGNER"] });
     expect((await put({ botEnabled: true })).status).toBe(403);
+    expect(db.studioSettings.upsert).not.toHaveBeenCalled();
+  });
+});
+
+describe("saluran WhatsApp (docs/WHATSAPP_CHANNEL_FONNTE.md)", () => {
+  it("GET: saluran aktif dan status siap per saluran", async () => {
+    channels.FONNTE = false;
+    const body = await (await GET()).json();
+    expect(body.channel.active).toBe("META");
+    expect(body.channel.options.map((o: { id: string; configured: boolean }) => `${o.id}:${o.configured}`)).toEqual([
+      "META:true",
+      "FONNTE:false",
+    ]);
+    expect(body.whatsappConfigured).toBe(true);
+  });
+
+  it("PUT: pindah ke Fonnte disimpan", async () => {
+    const res = await put({ channel: "FONNTE" });
+    expect(res.status).toBe(200);
+    expect(db.studioSettings.upsert.mock.calls[0][0].update).toEqual({ waChannel: "FONNTE" });
+    expect((await res.json()).channel.active).toBe("FONNTE");
+  });
+
+  it("PUT: saluran yang env-nya belum lengkap ditolak", async () => {
+    channels.FONNTE = false;
+    const res = await put({ channel: "FONNTE" });
+    expect(res.status).toBe(400);
+    expect((await res.json()).fields.channel).toContain("FONNTE_DEVICE_TOKEN");
     expect(db.studioSettings.upsert).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,6 @@
 import { prisma } from "@/lib/db";
 import { WA_OWNER, WA_TEMPLATES } from "@/lib/constants";
-import { getWhatsAppEnv } from "../env";
-import { WhatsAppApiError, sendTemplate, sendText } from "../client-api";
+import { deliveryErrorCode, getChannel, isChannelConfigured, sendTemplateOnChannel, sendTextOnChannel, usesServiceWindow } from "../channel";
 import { isWithinServiceWindow, templateParam } from "../outbound";
 import { maskPhone } from "../phone";
 import { listOwnerNumbers } from "./identity";
@@ -58,12 +57,8 @@ export async function notifyOwners(queryId: string): Promise<number> {
   const clientLabel = `${clientName} (${maskPhone(query.conversation.waId)})`;
   const text = ownerQuestionText({ clientLabel, question: query.question });
 
-  let lang: string | null = null;
-  try {
-    lang = getWhatsAppEnv().WHATSAPP_TEMPLATE_LANG;
-  } catch {
-    lang = null;
-  }
+  const channel = await getChannel();
+  const configured = isChannelConfigured(channel);
 
   let delivered = 0;
   for (const owner of await listOwnerNumbers()) {
@@ -73,7 +68,7 @@ export async function notifyOwners(queryId: string): Promise<number> {
       update: {},
       select: { id: true, lastInboundAt: true },
     });
-    const via = isWithinServiceWindow(conversation.lastInboundAt) ? "text" : "template";
+    const via = !usesServiceWindow(channel) || isWithinServiceWindow(conversation.lastInboundAt) ? "text" : "template";
     const store = (data: { wamid?: string; deliveryStatus: string; errorCode?: string }) =>
       prisma.waMessage.create({
         data: {
@@ -87,22 +82,26 @@ export async function notifyOwners(queryId: string): Promise<number> {
         },
       });
 
-    if (!lang) {
+    if (!configured) {
       await store({ deliveryStatus: "failed", errorCode: "NOT_CONFIGURED" });
       continue;
     }
     try {
       const wamid =
         via === "text"
-          ? await sendText(owner.waNumber, text)
-          : await sendTemplate(owner.waNumber, WA_TEMPLATES.OWNER_QUERY, lang, [
-              templateParam(clientLabel),
-              templateParam(query.question),
-            ]);
+          ? await sendTextOnChannel(owner.waNumber, text, channel)
+          : (
+              await sendTemplateOnChannel(
+                owner.waNumber,
+                { name: WA_TEMPLATES.OWNER_QUERY, params: [templateParam(clientLabel), templateParam(query.question)] },
+                text,
+                channel,
+              )
+            ).id;
       await store({ wamid, deliveryStatus: "sent" });
       delivered++;
     } catch (error) {
-      const errorCode = error instanceof WhatsAppApiError ? (error.code ?? String(error.status)) : "SEND_FAILED";
+      const errorCode = deliveryErrorCode(error);
       await store({ deliveryStatus: "failed", errorCode });
       console.error(`[whatsapp] pertanyaan owner gagal ke ${maskPhone(owner.waNumber)} via ${via}: ${errorCode}`);
     }

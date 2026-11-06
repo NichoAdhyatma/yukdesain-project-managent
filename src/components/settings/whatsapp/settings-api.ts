@@ -14,9 +14,12 @@ export type WhatsAppUsage = {
   nearLimit: boolean;
 };
 
+export type WaChannelId = "META" | "FONNTE";
+
 export type WhatsAppSettings = {
   botEnabled: boolean;
   whatsappConfigured: boolean;
+  channel: { active: WaChannelId; options: { id: WaChannelId; label: string; configured: boolean }[] };
   aiConfigured: boolean;
   ai: {
     provider: AiProviderId;

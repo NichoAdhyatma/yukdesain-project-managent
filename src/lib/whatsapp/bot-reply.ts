@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
-import { WhatsAppApiError, sendText } from "./client-api";
+import { deliveryErrorCode, sendTextOnChannel } from "./channel";
 import { maskPhone } from "./phone";
 import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
@@ -41,13 +41,13 @@ export async function sendBotText(
     return true;
   }
   try {
-    const wamid = await sendText(conversation.waId, body);
+    const wamid = await sendTextOnChannel(conversation.waId, body);
     await prisma.waMessage.create({
       data: { conversationId: conversation.id, wamid, direction: "OUTBOUND", body, sentByBot: true, deliveryStatus: "sent" },
     });
     return true;
   } catch (error) {
-    const errorCode = error instanceof WhatsAppApiError ? (error.code ?? String(error.status)) : "SEND_FAILED";
+    const errorCode = deliveryErrorCode(error);
     await prisma.waMessage.create({
       data: { conversationId: conversation.id, direction: "OUTBOUND", body, sentByBot: true, deliveryStatus: "failed", errorCode },
     });

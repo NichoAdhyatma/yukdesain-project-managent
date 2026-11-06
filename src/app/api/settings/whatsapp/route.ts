@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { AI_PROVIDERS, getProviderEnv, isAiConfigured, isWhatsAppConfigured } from "@/lib/whatsapp/env";
+import { AI_PROVIDERS, getProviderEnv, isAiConfigured } from "@/lib/whatsapp/env";
+import { WA_CHANNELS, isChannelConfigured, type WaChannel } from "@/lib/whatsapp/channel";
 import { aiModelSchema, aiProviderSchema, modelOverrides, providerOf } from "@/lib/whatsapp/ai/ai-config";
 import { getModelProfile } from "@/lib/whatsapp/ai/model-profile";
 import { getMonthlyUsage } from "@/lib/whatsapp/rate-limit";
@@ -11,6 +12,7 @@ import { getMonthlyUsage } from "@/lib/whatsapp/rate-limit";
 
 const select = {
   waBotEnabled: true,
+  waChannel: true,
   waAiProvider: true,
   waAiModel: true,
   waAiExtractionModel: true,
@@ -20,6 +22,7 @@ const select = {
 
 type Row = {
   waBotEnabled: boolean;
+  waChannel: string;
   waAiProvider: string;
   waAiModel: string | null;
   waAiExtractionModel: string | null;
@@ -45,9 +48,19 @@ async function toDto(row: Row | null) {
   });
   const active = providers.find((p) => p.id === provider)!;
   const effectiveModel = active.model || active.defaults.model;
+  const channel: WaChannel = row?.waChannel === "FONNTE" ? "FONNTE" : "META";
   return {
     botEnabled: row?.waBotEnabled ?? false,
-    whatsappConfigured: isWhatsAppConfigured(),
+    // Saluran aktif siap menerima & mengirim (Meta: env Cloud API lengkap; Fonnte: token + bucket)
+    whatsappConfigured: isChannelConfigured(channel),
+    channel: {
+      active: channel,
+      options: WA_CHANNELS.map((id) => ({
+        id,
+        label: id === "FONNTE" ? "Fonnte (tidak resmi, testing)" : "Meta Cloud API (resmi)",
+        configured: isChannelConfigured(id),
+      })),
+    },
     // Provider aktif punya key: cukup untuk Uji bot & Uji koneksi walau token WhatsApp belum ada
     aiConfigured: isAiConfigured(provider),
     ai: {
@@ -80,6 +93,7 @@ const nullable = <T extends z.ZodType>(schema: T) =>
 
 const updateSchema = z.object({
   botEnabled: z.boolean().optional(),
+  channel: z.enum(["META", "FONNTE"]).optional(),
   aiProvider: aiProviderSchema.optional(),
   aiModel: nullable(aiModelSchema),
   aiExtractionModel: nullable(aiModelSchema),
@@ -113,8 +127,24 @@ export async function PUT(request: Request) {
     );
   }
 
+  if (input.channel && !isChannelConfigured(input.channel)) {
+    return NextResponse.json(
+      {
+        error: "VALIDATION_ERROR",
+        fields: {
+          channel:
+            input.channel === "FONNTE"
+              ? "FONNTE_DEVICE_TOKEN, FONNTE_WEBHOOK_SECRET, atau bucket privat belum diisi di server"
+              : "Env WhatsApp Cloud API belum lengkap di server",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   const data: Partial<Row> = {
     ...(input.botEnabled !== undefined && { waBotEnabled: input.botEnabled }),
+    ...(input.channel !== undefined && { waChannel: input.channel }),
     ...(input.aiProvider !== undefined && { waAiProvider: input.aiProvider }),
     ...(input.aiModel !== undefined && { waAiModel: input.aiModel }),
     ...(input.aiExtractionModel !== undefined && { waAiExtractionModel: input.aiExtractionModel }),

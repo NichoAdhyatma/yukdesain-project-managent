@@ -15,6 +15,8 @@ const PUBLIC_PATHS = [
   "/api/portal/lookup",
   // Meta Cloud API webhook — authenticated by X-Hub-Signature-256, not session
   "/api/whatsapp/webhook",
+  // Fonnte webhook — authenticated by the secret in the URL, not session
+  "/api/whatsapp/fonnte/",
 ];
 
 // API endpoints that expose owner-scoped data. Derived from the owner-only

@@ -5,6 +5,7 @@ const db = vi.hoisted(() => {
   const d = {
     waIntake: { findFirst: vi.fn() },
     waConversation: { updateMany: vi.fn() },
+    studioSettings: { findUnique: vi.fn(async () => null) },
     activityLog: { create: vi.fn() },
     $transaction: vi.fn(),
   };

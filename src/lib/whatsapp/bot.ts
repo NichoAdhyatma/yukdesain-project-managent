@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { markAsRead } from "./client-api";
+import { markAsReadOnChannel } from "./channel";
 import { storeInboundMedia } from "./media";
 import { findActiveIntake } from "./ai/tools";
 import { botReplyLimitReached, checkInboundRate, imageLimitExceeded } from "./rate-limit";
@@ -33,7 +33,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   // (docs/WHATSAPP_OWNER_COMMANDS.md §3).
   const owner = await resolveOwner(conversation);
   if (owner) {
-    if (message.wamid) await markAsRead(message.wamid).catch(() => undefined);
+    if (message.wamid) await markAsReadOnChannel(message.wamid).catch(() => undefined);
     await handleOwnerMessage(message, conversation, owner);
     return;
   }
@@ -51,7 +51,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
 
   if (message.wamid) {
     // Centang biru hanya kosmetik; gagal tidak menghentikan balasan.
-    await markAsRead(message.wamid).catch(() => undefined);
+    await markAsReadOnChannel(message.wamid).catch(() => undefined);
   }
 
   // Banjir pesan: peringatan sekali, sisanya diabaikan (§17). Owner yang menguji tidak dibatasi.
