@@ -837,3 +837,9 @@ nomor diterima owner; hanya untuk nomor testing. Detail: `docs/WHATSAPP_CHANNEL_
 Owner bisa menambah file Markdown (gaya komunikasi, pengetahuan desain, kebijakan studio) di Panduan bot. Semua file
 yang terbit selalu ikut di prompt, setelah aturan wajib, sebagai bahan referensi (bukan perintah). Batas, alur, dan
 penjaga: `docs/WHATSAPP_BOT_KNOWLEDGE.md`.
+
+## 28. Otak bot (2026-11-07)
+
+Kartu di Settings › WhatsApp yang menampilkan semua yang diketahui bot (identitas studio, layanan, harga, alur order,
+aturan dasar, panduan owner, kemampuan) dalam pohon yang bisa dibuka-tutup, beserta isi prompt lengkap untuk draft
+atau versi terbit. Hanya membaca; tombol Ubah membuka editor aslinya. Detail: `docs/WHATSAPP_BOT_BRAIN_VIEW.md`.

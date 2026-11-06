@@ -24,6 +24,7 @@ export type KnowledgeLimits = {
 };
 
 type Props = {
+  id?: string;
   files: FormKnowledgeFile[];
   limits: KnowledgeLimits;
   errors: Record<string, string>;
@@ -58,7 +59,7 @@ function downloadMarkdown(file: FormKnowledgeFile) {
   URL.revokeObjectURL(url);
 }
 
-export function KnowledgeFilesEditor({ files, limits, errors, onChange, onRemove, onAdd }: Props) {
+export function KnowledgeFilesEditor({ id, files, limits, errors, onChange, onRemove, onAdd }: Props) {
   const ids = useId();
   const uploadInput = useRef<HTMLInputElement | null>(null);
   const [openKeys, setOpenKeys] = useState<Set<number>>(new Set());
@@ -120,7 +121,7 @@ export function KnowledgeFilesEditor({ files, limits, errors, onChange, onRemove
   };
 
   return (
-    <fieldset className="space-y-4">
+    <fieldset id={id} className="scroll-mt-6 space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <legend className="text-sm font-medium">File pengetahuan</legend>
         <span className="text-sm text-muted-foreground tabular-nums">

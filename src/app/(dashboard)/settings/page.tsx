@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import Image from "next/image";
 import { toast } from "@/components/ui/toast";
@@ -83,8 +84,23 @@ type StudioSettings = {
 };
 type PaymentAccountsResponse = { accounts: PaymentAccount[] };
 
+// Tab aktif ada di URL (?tab=…) supaya bisa ditautkan, mis. dari Otak bot ke tab General.
+const SETTINGS_TABS = ["general", "notifications", "appearance", "system", "menus", "payment", "whatsapp"];
+
 export default function SettingsPage() {
+  return (
+    <Suspense>
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+function SettingsContent() {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab") ?? "";
+  const activeTab = SETTINGS_TABS.includes(requestedTab) ? requestedTab : "general";
 
   // Studio settings form state (pre-populated from defaults, updated from query)
   const [studioName, setStudioName] = useState<string>(STUDIO_DEFAULTS.name);
@@ -379,7 +395,11 @@ export default function SettingsPage() {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
-        <Tabs defaultValue="general" className="w-full max-w-3xl">
+        <Tabs
+          value={activeTab}
+          onValueChange={(value) => router.replace(`/settings?tab=${value}`, { scroll: false })}
+          className="w-full max-w-3xl"
+        >
           <TabsList className="h-auto! w-full flex-wrap justify-start gap-1">
             <TabsTrigger value="general" className="h-7 flex-none gap-2">
               <User className="h-4 w-4" />

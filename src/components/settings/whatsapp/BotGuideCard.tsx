@@ -62,6 +62,8 @@ type FormFaq = { key: number; question: string; answer: string };
 type FormState = { instructions: string; faqs: FormFaq[]; pricingRules: FormRule[]; knowledgeFiles: FormKnowledgeFile[] };
 
 export const GUIDE_QUERY_KEY = ["settings", "whatsapp", "guide"];
+// Otak bot membaca panduan yang sama; disegarkan setiap panduan berubah.
+export const BRAIN_QUERY_KEY = ["settings", "whatsapp", "brain"];
 
 class GuideApiError extends Error {
   constructor(
@@ -136,6 +138,7 @@ export function BotGuideCard() {
 
   const onSaved = (next: GuideResponse) => {
     queryClient.setQueryData(GUIDE_QUERY_KEY, next);
+    queryClient.invalidateQueries({ queryKey: BRAIN_QUERY_KEY });
     setErrors({});
   };
   const onFailed = (error: Error, fallback: string) => {
@@ -259,7 +262,7 @@ export function BotGuideCard() {
             dijaga sistem. Panduan juga bisa diubah lewat chat WhatsApp dari nomor owner.
           </p>
 
-          <div className="space-y-2">
+          <div id="wa-guide-section-instructions" className="scroll-mt-6 space-y-2">
             <div className="flex items-baseline justify-between gap-2 text-sm">
               <Label htmlFor="wa-guide-instructions">Aturan tambahan</Label>
               <Counter id="wa-guide-instructions-count" value={form.instructions.length} max={limits.instructionsMaxChars} />
@@ -285,6 +288,7 @@ export function BotGuideCard() {
           <Separator />
 
           <KnowledgeFilesEditor
+            id="wa-guide-section-knowledge"
             files={form.knowledgeFiles}
             limits={limits}
             errors={errors}
@@ -306,7 +310,7 @@ export function BotGuideCard() {
 
           <Separator />
 
-          <fieldset className="space-y-4">
+          <fieldset id="wa-guide-section-faq" className="scroll-mt-6 space-y-4">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <legend className="text-sm font-medium">FAQ</legend>
               <span className="text-sm text-muted-foreground tabular-nums">
@@ -411,6 +415,7 @@ export function BotGuideCard() {
           <Separator />
 
           <PricingRulesEditor
+            id="wa-guide-section-pricing"
             rules={form.pricingRules}
             max={limits.pricingRulesMaxItems}
             errors={errors}

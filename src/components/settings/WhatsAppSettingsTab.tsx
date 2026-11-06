@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { BotBrainCard } from "./whatsapp/BotBrainCard";
 import { BotGuideCard } from "./whatsapp/BotGuideCard";
 import { BotSandboxCard } from "./whatsapp/BotSandboxCard";
 import { OwnerNumberCard } from "./whatsapp/OwnerNumberCard";
@@ -202,6 +203,8 @@ export function WhatsAppSettingsTab() {
       <ChannelCard data={data} />
 
       <OwnerNumberCard />
+
+      <BotBrainCard />
 
       <BotGuideCard />
 
