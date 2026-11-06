@@ -715,6 +715,7 @@ model WaBotGuideVersion {
   instructions  String   @db.Text
   faqs          Json // [{ question, answer }]
   pricingRules  Json     @default("[]") // docs/WHATSAPP_OWNER_COMMANDS.md §6
+  knowledgeFiles Json    @default("[]") // docs/WHATSAPP_BOT_KNOWLEDGE.md
   source        String   @default("PORTAL") // PORTAL | WHATSAPP
   publishedById String?
   publishedAt   DateTime @default(now())

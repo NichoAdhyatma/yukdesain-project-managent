@@ -294,6 +294,8 @@ export async function executeOwnerTool(name: string, rawInput: unknown, ctx: Own
       instructions: instructions ?? base.instructions,
       faqs: faqs ?? base.faqs,
       pricingRules: pricing_rules ?? base.pricingRules,
+      // File pengetahuan hanya diubah dari portal; usulan WhatsApp membawanya apa adanya.
+      knowledgeFiles: base.knowledgeFiles,
     });
     if (!parsed.success) {
       return fail(

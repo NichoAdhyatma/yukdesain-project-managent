@@ -13,7 +13,7 @@ import { GuideConflictError } from "../ai/bot-guide";
 import { OWNER_REPLIES, applyProposal, parseConfirmKeyword, proposalMessage } from "./proposals";
 
 const owner = { user: { id: "u_owner", name: "Rizal" }, target: "PUBLISH" as const };
-const empty = { instructions: "", faqs: [], pricingRules: [] };
+const empty = { instructions: "", faqs: [], pricingRules: [], knowledgeFiles: [] };
 const withDiscount = {
   ...empty,
   pricingRules: [

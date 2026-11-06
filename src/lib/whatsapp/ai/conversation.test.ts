@@ -63,7 +63,7 @@ beforeEach(() => {
   db.paymentAccount.findMany.mockResolvedValue([]);
   db.waConversation.findUniqueOrThrow.mockResolvedValue({ isSandbox: false });
   guides.getPublishedGuide.mockResolvedValue(null);
-  guides.getDraftGuide.mockResolvedValue({ instructions: "", faqs: [], pricingRules: [] });
+  guides.getDraftGuide.mockResolvedValue({ instructions: "", faqs: [], pricingRules: [], knowledgeFiles: [] });
   tools.findActiveIntake.mockResolvedValue(null);
   tools.executeTool.mockResolvedValue({ content: '{"ok":true}', isError: false });
 });
@@ -234,8 +234,8 @@ describe("runAiTurn", () => {
 });
 
 describe("runAiTurn — panduan owner", () => {
-  const published = { instructions: "Admin membalas jam 09.00-17.00 WIB.", faqs: [], pricingRules: [] };
-  const draft = { instructions: "", faqs: [{ question: "Bisa minta file mentah?", answer: "Bisa, file AI dan PDF ikut dikirim." }], pricingRules: [] };
+  const published = { instructions: "Admin membalas jam 09.00-17.00 WIB.", faqs: [], pricingRules: [], knowledgeFiles: [] };
+  const draft = { instructions: "", faqs: [{ question: "Bisa minta file mentah?", answer: "Bisa, file AI dan PDF ikut dikirim." }], pricingRules: [], knowledgeFiles: [] };
 
   beforeEach(() => {
     givenHistory([inbound("m_last", "halo")]);

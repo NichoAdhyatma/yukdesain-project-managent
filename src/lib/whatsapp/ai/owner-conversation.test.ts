@@ -16,6 +16,7 @@ const base = {
   pricingRules: [
     { id: "express", kind: "SURCHARGE" as const, name: "Express", condition: "butuh cepat", amountType: "PERCENT" as const, amount: 50, note: "" },
   ],
+  knowledgeFiles: [{ title: "Gaya komunikasi", whenToUse: "", content: "Sapa dengan kak." }],
 };
 
 function ctx() {
@@ -99,5 +100,13 @@ describe("buildOwnerState", () => {
     expect(text).toContain("6281****7890");
     expect(text).not.toContain("6281234567890");
     expect(text).toContain("balasan (reply) untuk pertanyaan id=q_1");
+  });
+});
+
+describe("propose_guide_change — file pengetahuan", () => {
+  it("usulan WhatsApp membawa file pengetahuan apa adanya", async () => {
+    const c = ctx();
+    await executeOwnerTool("propose_guide_change", { summary: "ubah jam", instructions: "Admin membalas 08.00-17.00." }, c);
+    expect(proposals.createProposal.mock.calls[0][0].guide.knowledgeFiles).toEqual(base.knowledgeFiles);
   });
 });

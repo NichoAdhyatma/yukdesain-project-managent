@@ -210,6 +210,13 @@ export const WA_BOT_GUIDE_LIMITS = {
   faqQuestionMaxChars: 200,
   faqAnswerMaxChars: 500,
   pricingRulesMaxItems: 20,
+  // File pengetahuan .md (docs/WHATSAPP_BOT_KNOWLEDGE.md §4): selalu ikut di prompt, jadi total dibatasi.
+  knowledgeFilesMaxItems: 8,
+  knowledgeFileMaxChars: 10_000,
+  knowledgeTotalMaxChars: 20_000,
+  knowledgeTitleMaxChars: 60,
+  knowledgeWhenToUseMaxChars: 160,
+  knowledgeUploadMaxBytes: 50_000,
 } as const;
 
 // Instruksi owner lewat WhatsApp (docs/WHATSAPP_OWNER_COMMANDS.md)

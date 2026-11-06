@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { WA_BOT_GUIDE_LIMITS } from "@/lib/constants";
-import { getDraftGuide, getPublishedGuide, listGuideVersions, sameGuide } from "./bot-guide";
+import { getDraftGuide, getPublishedGuide, isGuideEmpty, listGuideVersions, sameGuide } from "./bot-guide";
 
 // Bagian bersama route /api/settings/whatsapp/guide/* (owner). DTO eksplisit (AGENTS.md §36).
 
@@ -11,9 +11,7 @@ export async function guideDto() {
     draft,
     published: published && { version: published.version, publishedAt: published.publishedAt },
     // Belum pernah terbit: draft yang berisi dianggap perubahan; draft kosong tidak.
-    hasUnpublishedChanges: published
-      ? !sameGuide(draft, published.guide)
-      : draft.instructions !== "" || draft.faqs.length > 0,
+    hasUnpublishedChanges: published ? !sameGuide(draft, published.guide) : !isGuideEmpty(draft),
     versions,
     limits: WA_BOT_GUIDE_LIMITS,
   };

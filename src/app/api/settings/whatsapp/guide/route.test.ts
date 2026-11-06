@@ -23,7 +23,7 @@ import { POST as restore } from "./restore/route";
 const owner = { id: "u_owner", roles: ["OWNER"] };
 const json = (url: string, method: string, body: unknown) =>
   new Request(`http://x${url}`, { method, body: JSON.stringify(body) });
-const current = { instructions: "Admin membalas jam 09.00-17.00.", faqs: [] };
+const current = { instructions: "Admin membalas jam 09.00-17.00.", faqs: [], pricingRules: [], knowledgeFiles: [] };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -56,7 +56,7 @@ describe("GET", () => {
 
   it("belum pernah terbit dan draft kosong → tidak dianggap perubahan", async () => {
     guide.getPublishedGuide.mockResolvedValue(null);
-    guide.getDraftGuide.mockResolvedValue({ instructions: "", faqs: [] });
+    guide.getDraftGuide.mockResolvedValue({ instructions: "", faqs: [], pricingRules: [], knowledgeFiles: [] });
     const body = await (await GET()).json();
     expect(body).toMatchObject({ published: null, hasUnpublishedChanges: false });
   });
@@ -66,7 +66,7 @@ describe("PUT (simpan draft)", () => {
   it("valid → disimpan sudah dirapikan, versi aktif tidak berubah", async () => {
     const res = await PUT(json("/g", "PUT", { instructions: "  baru  ", faqs: [] }));
     expect(res.status).toBe(200);
-    expect(guide.saveDraftGuide).toHaveBeenCalledWith({ instructions: "baru", faqs: [], pricingRules: [] });
+    expect(guide.saveDraftGuide).toHaveBeenCalledWith({ instructions: "baru", faqs: [], pricingRules: [], knowledgeFiles: [] });
     expect(guide.publishDraftGuide).not.toHaveBeenCalled();
   });
 

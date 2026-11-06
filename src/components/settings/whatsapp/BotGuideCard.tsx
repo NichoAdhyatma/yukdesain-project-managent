@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { PricingRulesEditor, type FormRule } from "./PricingRulesEditor";
+import { KnowledgeFilesEditor, type FormKnowledgeFile, type KnowledgeLimits } from "./KnowledgeFilesEditor";
 
 // Panduan bot dari owner (docs/WHATSAPP_BOT_GUIDE.md): draft → Uji bot → terbitkan.
 
@@ -26,7 +27,13 @@ type GuideRule = {
   amount: number;
   note: string;
 };
-type Guide = { instructions: string; faqs: { question: string; answer: string }[]; pricingRules: GuideRule[] };
+type GuideKnowledgeFile = { title: string; whenToUse: string; content: string };
+type Guide = {
+  instructions: string;
+  faqs: { question: string; answer: string }[];
+  pricingRules: GuideRule[];
+  knowledgeFiles: GuideKnowledgeFile[];
+};
 type GuideResponse = {
   draft: Guide;
   published: { version: number; publishedAt: string } | null;
@@ -39,6 +46,7 @@ type GuideResponse = {
     instructionsLength: number;
     faqCount: number;
     pricingRuleCount: number;
+    knowledgeFileCount: number;
   }[];
   limits: {
     instructionsMaxChars: number;
@@ -46,12 +54,12 @@ type GuideResponse = {
     faqQuestionMaxChars: number;
     faqAnswerMaxChars: number;
     pricingRulesMaxItems: number;
-  };
+  } & KnowledgeLimits;
 };
 
 // FAQ di form butuh key stabil (urutan bisa berubah saat dihapus).
 type FormFaq = { key: number; question: string; answer: string };
-type FormState = { instructions: string; faqs: FormFaq[]; pricingRules: FormRule[] };
+type FormState = { instructions: string; faqs: FormFaq[]; pricingRules: FormRule[]; knowledgeFiles: FormKnowledgeFile[] };
 
 export const GUIDE_QUERY_KEY = ["settings", "whatsapp", "guide"];
 
@@ -94,6 +102,7 @@ export function BotGuideCard() {
     instructions: g.instructions,
     faqs: g.faqs.map((f) => ({ key: nextKey.current++, ...f })),
     pricingRules: (g.pricingRules ?? []).map((r) => ({ key: nextKey.current++, ...r })),
+    knowledgeFiles: (g.knowledgeFiles ?? []).map((f) => ({ key: nextKey.current++, ...f })),
   });
   // Urutan kunci sama dengan respons server, supaya perbandingan JSON (dirty) akurat.
   const toGuide = (f: FormState) => ({
@@ -108,9 +117,10 @@ export function BotGuideCard() {
       amount: r.amount,
       note: r.note.trim(),
     })),
+    knowledgeFiles: f.knowledgeFiles.map((k) => ({ title: k.title.trim(), whenToUse: k.whenToUse.trim(), content: k.content.trim() })),
   });
 
-  const [form, setForm] = useState<FormState>({ instructions: "", faqs: [], pricingRules: [] });
+  const [form, setForm] = useState<FormState>({ instructions: "", faqs: [], pricingRules: [], knowledgeFiles: [] });
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -230,7 +240,7 @@ export function BotGuideCard() {
           )}
         </div>
         <CardDescription>
-          Aturan tambahan dan jawaban FAQ yang dipakai bot saat membalas klien. Perubahan disimpan sebagai draft dan
+          Aturan tambahan, file pengetahuan, dan jawaban FAQ yang dipakai bot saat membalas klien. Perubahan disimpan sebagai draft dan
           bisa dicoba di Uji bot; klien baru mendapatkannya setelah diterbitkan.
         </CardDescription>
       </CardHeader>
@@ -271,6 +281,28 @@ export function BotGuideCard() {
               {errors.instructions ?? "Tulis seperti memberi arahan ke staf baru: kebiasaan studio, jam layanan, hal yang perlu ditanyakan."}
             </p>
           </div>
+
+          <Separator />
+
+          <KnowledgeFilesEditor
+            files={form.knowledgeFiles}
+            limits={limits}
+            errors={errors}
+            onChange={(key, patch, index) => {
+              setForm((f) => ({ ...f, knowledgeFiles: f.knowledgeFiles.map((k) => (k.key === key ? { ...k, ...patch } : k)) }));
+              for (const field of Object.keys(patch)) clearError(`knowledgeFiles.${index}.${field}`);
+              clearError("knowledgeFiles");
+            }}
+            onRemove={(key) => {
+              setForm((f) => ({ ...f, knowledgeFiles: f.knowledgeFiles.filter((k) => k.key !== key) }));
+              setErrors({});
+            }}
+            onAdd={(file) => {
+              const key = nextKey.current++;
+              setForm((f) => ({ ...f, knowledgeFiles: [...f.knowledgeFiles, { key, ...file }] }));
+              return key;
+            }}
+          />
 
           <Separator />
 
@@ -472,7 +504,7 @@ export function BotGuideCard() {
                           {formatDateTime(v.publishedAt)}
                           {v.publishedBy && ` oleh ${v.publishedBy}`}
                           {v.source === "WHATSAPP" && " lewat WhatsApp"} · {v.instructionsLength.toLocaleString("id-ID")} karakter
-                          aturan, {v.faqCount} FAQ, {v.pricingRuleCount} aturan harga
+                          aturan, {v.knowledgeFileCount ?? 0} file pengetahuan, {v.faqCount} FAQ, {v.pricingRuleCount} aturan harga
                         </p>
                       </div>
                       {!active && (
