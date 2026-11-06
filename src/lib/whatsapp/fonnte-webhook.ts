@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { normalizePhone } from "./phone";
 import { FONNTE_MEDIA_PREFIX } from "./media";
 import type { InboundMessage } from "./payload";
@@ -46,9 +46,15 @@ export function parseFonntePayload(body: FonntePayload, now = new Date()): Parse
 
   const seconds = Number(body.timestamp);
   const sentAt = Number.isFinite(seconds) && seconds > 0 ? new Date(seconds * 1000) : now;
-  const inboxId = text(body.inboxid).trim();
-  // Fonnte bisa mengirim ulang; id stabil untuk dedupe (kolom wamid unik).
-  const id = inboxId || createHash("sha256").update(`${waId}|${text(body.timestamp)}|${messageText}|${url}`).digest("hex").slice(0, 32);
+  // Fonnte bisa mengirim ulang, jadi id harus stabil untuk dedupe (kolom wamid unik). `inboxid` tidak bisa
+  // dipakai sendiri: Fonnte mengirim 0 untuk setiap pesan, sehingga semua pesan setelah yang pertama
+  // dianggap duplikat. Tanpa timestamp tidak ada pegangan dedupe, jadi id dibuat unik per kiriman.
+  const timestamp = text(body.timestamp).trim();
+  const salt = timestamp ? "" : `${now.getTime()}|${randomUUID()}`;
+  const id = createHash("sha256")
+    .update(`${waId}|${timestamp}|${text(body.inboxid).trim()}|${messageText}|${url}|${salt}`)
+    .digest("hex")
+    .slice(0, 32);
 
   const base = {
     wamid: `fonnte:in:${id}`,
