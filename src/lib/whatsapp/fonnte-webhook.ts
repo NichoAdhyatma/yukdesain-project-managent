@@ -14,14 +14,30 @@ const text = (v: unknown) => (typeof v === "string" ? v : v === undefined || v =
 
 export type ParsedFonnte =
   | { kind: "message"; device: string | null; message: InboundMessage }
-  | { kind: "ignored"; reason: "group" | "empty" | "invalid_sender" };
+  | { kind: "ignored"; reason: "group" | "empty" | "invalid_sender" | "lid" };
+
+// Akhiran JID WhatsApp yang bisa ikut terkirim di `sender` / `member`.
+const PERSONAL_JID = /@(s\.whatsapp\.net|c\.us)$/i;
+
+function jidKind(value: string): "group" | "lid" | "personal" | "other" {
+  if (/@g\.us$/i.test(value)) return "group";
+  if (/@lid$/i.test(value)) return "lid";
+  if (!value.includes("@") || PERSONAL_JID.test(value)) return "personal";
+  return "other";
+}
 
 export function parseFonntePayload(body: FonntePayload, now = new Date()): ParsedFonnte {
-  const sender = text(body.sender).trim();
-  // Pesan grup: sender berupa id grup, atau ada `member` (anggota grup yang menulis).
-  if (sender.includes("@") || text(body.member).trim()) return { kind: "ignored", reason: "group" };
-  const waId = normalizePhone(sender);
+  const rawSender = text(body.sender).trim();
+  const senderKind = jidKind(rawSender);
+  if (senderKind === "group") return { kind: "ignored", reason: "group" };
+  // Id privasi WhatsApp (@lid) tidak memuat nomor, jadi tidak bisa dicocokkan ke klien.
+  if (senderKind === "lid") return { kind: "ignored", reason: "lid" };
+  if (senderKind === "other") return { kind: "ignored", reason: "invalid_sender" };
+  const waId = normalizePhone(rawSender.replace(PERSONAL_JID, ""));
   if (!waId || waId.length < 10) return { kind: "ignored", reason: "invalid_sender" };
+  // Grup: `member` berisi anggota yang menulis. Di chat pribadi `member` kosong atau sama dengan pengirim.
+  const member = text(body.member).trim();
+  if (member && normalizePhone(member.replace(PERSONAL_JID, "")) !== waId) return { kind: "ignored", reason: "group" };
 
   const messageText = text(body.message);
   const url = text(body.url).trim();
@@ -55,4 +71,22 @@ export function parseFonntePayload(body: FonntePayload, now = new Date()): Parse
     };
   }
   return { kind: "message", device, message: { ...base, type: "text", body: messageText } };
+}
+
+/**
+ * Ringkasan bentuk payload untuk log saat pesan diabaikan: nama field dan format pengirim/perangkat,
+ * tanpa isi pesan dan tanpa nomor lengkap.
+ */
+export function describeFonntePayload(body: FonntePayload): string {
+  const shape = (v: unknown) => {
+    const s = text(v).trim();
+    if (!s) return "-";
+    const at = s.indexOf("@");
+    const head = at >= 0 ? s.slice(0, at) : s;
+    const suffix = at >= 0 ? s.slice(at) : "";
+    const digits = /^\+?\d+$/.test(head) ? `${head.replace(/\D/g, "").slice(0, 2)}…(${head.replace(/\D/g, "").length} digit)` : `teks(${head.length})`;
+    return `${digits}${suffix}`;
+  };
+  const keys = Object.keys(body).sort().join(",");
+  return `keys=[${keys}] sender=${shape(body.sender)} member=${shape(body.member)} device=${shape(body.device)}`;
 }

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 vi.mock("@/lib/storage", () => ({ getClient: () => ({}) }));
 
-import { parseFonntePayload } from "./fonnte-webhook";
+import { describeFonntePayload, parseFonntePayload } from "./fonnte-webhook";
 
 const now = new Date("2026-11-06T10:00:00Z");
 
@@ -43,6 +43,8 @@ describe("parseFonntePayload", () => {
     [{ sender: "6281234567890", member: "6289999", message: "halo" }, "group"],
     [{ sender: "6281234567890", message: "   " }, "empty"],
     [{ sender: "abc", message: "halo" }, "invalid_sender"],
+    [{ sender: "1234567890@lid", message: "halo" }, "lid"],
+    [{ sender: "6281234567890@g.us", message: "halo" }, "group"],
   ])("diabaikan: %j → %s", (body, reason) => {
     expect(parseFonntePayload(body, now)).toEqual({ kind: "ignored", reason });
   });
@@ -52,5 +54,23 @@ describe("parseFonntePayload", () => {
     const a = parseFonntePayload(body, now);
     const b = parseFonntePayload({ ...body }, now);
     expect(a.kind === "message" && b.kind === "message" && a.message.wamid === b.message.wamid).toBe(true);
+  });
+
+  it.each([
+    [{ sender: "6281234567890@s.whatsapp.net", message: "halo" }],
+    [{ sender: "6281234567890", member: "6281234567890", message: "halo" }],
+    [{ sender: "081234567890", member: "6281234567890@s.whatsapp.net", message: "halo" }],
+  ])("chat pribadi dengan format JID / member sama dengan pengirim: %j", (body) => {
+    const r = parseFonntePayload(body, now);
+    expect(r.kind === "message" && r.message.waId).toBe("6281234567890");
+  });
+});
+
+describe("describeFonntePayload", () => {
+  it("tanpa isi pesan dan tanpa nomor lengkap", () => {
+    const d = describeFonntePayload({ sender: "6281234567890@s.whatsapp.net", device: "6285100000000", message: "rahasia" });
+    expect(d).toBe("keys=[device,message,sender] sender=62…(13 digit)@s.whatsapp.net member=- device=62…(13 digit)");
+    expect(d).not.toContain("rahasia");
+    expect(d).not.toContain("1234567890");
   });
 });

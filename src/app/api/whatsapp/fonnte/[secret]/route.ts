@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { getFonnteEnv } from "@/lib/whatsapp/env";
 import { getChannel } from "@/lib/whatsapp/channel";
-import { parseFonntePayload, type FonntePayload } from "@/lib/whatsapp/fonnte-webhook";
+import { describeFonntePayload, parseFonntePayload, type FonntePayload } from "@/lib/whatsapp/fonnte-webhook";
 import { storeInboundMessage } from "@/lib/whatsapp/inbound";
 import { handleInboundMessage } from "@/lib/whatsapp/bot";
 import { expireOwnerQueries } from "@/lib/whatsapp/owner/queries";
@@ -45,16 +45,26 @@ export async function POST(request: Request, { params }: Params) {
   if (!secretMatches(secret, expected)) return new Response("Not found", { status: 404 });
 
   // Saluran Meta aktif → pesan Fonnte tidak dibalas (balasan akan lewat saluran yang salah).
-  if ((await getChannel()) !== "FONNTE") return NextResponse.json({ ok: true, ignored: "channel" });
+  if ((await getChannel()) !== "FONNTE") {
+    console.warn("[fonnte] pesan diabaikan (channel): saluran aktif bukan Fonnte");
+    return NextResponse.json({ ok: true, ignored: "channel" });
+  }
 
   const body = await readBody(request);
-  if (!body) return new Response("Invalid body", { status: 400 });
+  if (!body) {
+    console.warn(`[fonnte] body tidak terbaca (content-type: ${request.headers.get("content-type") ?? "-"})`);
+    return new Response("Invalid body", { status: 400 });
+  }
 
   const parsed = parseFonntePayload(body);
-  if (parsed.kind === "ignored") return NextResponse.json({ ok: true, ignored: parsed.reason });
+  if (parsed.kind === "ignored") {
+    console.warn(`[fonnte] pesan diabaikan (${parsed.reason}): ${describeFonntePayload(body)}`);
+    return NextResponse.json({ ok: true, ignored: parsed.reason });
+  }
 
   const settings = await prisma.studioSettings.findUnique({ where: { id: "default" }, select: { waFonnteDevice: true } });
   if (settings?.waFonnteDevice && parsed.device && parsed.device !== settings.waFonnteDevice) {
+    console.warn(`[fonnte] pesan diabaikan (device): ${describeFonntePayload(body)}`);
     return NextResponse.json({ ok: true, ignored: "device" });
   }
 
