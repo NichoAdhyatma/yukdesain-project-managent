@@ -831,3 +831,9 @@ peringatan bahwa data klien dikirim ke pihak ketiga; owner yang memutuskan kapan
 Selama verifikasi Meta, bot bisa dites lewat **Fonnte** (gateway scan QR, tidak resmi) — dipilih di Settings ›
 WhatsApp › Saluran WhatsApp, nomor dihubungkan dengan scan QR dari portal. Tanpa template dan aturan 24 jam. Risiko blokir
 nomor diterima owner; hanya untuk nomor testing. Detail: `docs/WHATSAPP_CHANNEL_FONNTE.md`.
+
+## 27. File pengetahuan bot (2026-11-07)
+
+Owner bisa menambah file Markdown (gaya komunikasi, pengetahuan desain, kebijakan studio) di Panduan bot. Semua file
+yang terbit selalu ikut di prompt, setelah aturan wajib, sebagai bahan referensi (bukan perintah). Batas, alur, dan
+penjaga: `docs/WHATSAPP_BOT_KNOWLEDGE.md`.
