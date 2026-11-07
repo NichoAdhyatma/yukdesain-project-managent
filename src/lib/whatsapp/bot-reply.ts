@@ -20,6 +20,9 @@ export const BOT_REPLIES = {
   tooManyImages: "Maaf kak, gambar untuk order ini sudah banyak sekali, jadi gambar ini tidak kami simpan. Kalau masih ada gambar penting, ketik *admin* untuk dibantu tim kami.",
   dailyLimit: "Kak, percakapan hari ini sudah panjang sekali. Kami teruskan ke admin supaya bisa dibantu langsung ya.",
   monthlyCap: "Pesan kakak sudah kami terima. Admin kami akan membalas secepatnya ya.",
+  ownerClientModeOn:
+    "Mode klien aktif ✅ Mulai sekarang chat dari nomor ini dilayani seperti klien, jadi bisa tes order. Order yang dibuat diberi label *Tes owner* di Order WA. Kirim *#owner* untuk kembali memberi instruksi ke bot.",
+  ownerClientModeOff: "Mode owner aktif ✅ Chat dari nomor ini kembali dianggap instruksi ke bot. Kirim *#klien* untuk tes order lagi.",
 } satisfies Record<string, string> & Record<MediaRejection, string>;
 
 // Status sebelum admin memberi harga: balasan tidak boleh memuat harga/durasi.

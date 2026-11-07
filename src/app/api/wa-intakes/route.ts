@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { WaIntakeStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { REAL_INTAKE, errorResponse, listInclude, toListItem } from "@/lib/whatsapp/intake-api";
+import { REAL_INTAKE, errorResponse, listInclude, ownerNumberSet, toListItem } from "@/lib/whatsapp/intake-api";
 import { expireOwnerQueries } from "@/lib/whatsapp/owner/queries";
 import { getChannel, usesServiceWindow } from "@/lib/whatsapp/channel";
 
@@ -23,6 +23,7 @@ export async function GET(request: Request) {
   // Label "menunggu owner" harus akurat; tidak ada cron, jadi dicek saat daftar dibuka.
   await expireOwnerQueries();
   const serviceWindow = usesServiceWindow(await getChannel());
+  const ownerNumbers = await ownerNumberSet();
   const where = statusParam && statusParam !== "all" ? { ...REAL_INTAKE, status: statusParam as WaIntakeStatus } : REAL_INTAKE;
 
   const [rows, total, grouped] = await Promise.all([
@@ -42,7 +43,7 @@ export async function GET(request: Request) {
   for (const g of grouped) counts[g.status] = g._count._all;
 
   return NextResponse.json({
-    items: rows.map((row) => toListItem(row, serviceWindow)),
+    items: rows.map((row) => toListItem(row, serviceWindow, ownerNumbers)),
     counts,
     page,
     pageSize,

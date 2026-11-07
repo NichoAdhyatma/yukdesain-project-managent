@@ -598,6 +598,7 @@ model WaConversation {
   isSandbox     Boolean            @default(false)
   blockedAt     DateTime? // nomor diblokir: pesan disimpan, bot diam (docs/WHATSAPP_SPAM_GUARD.md §5)
   blockedById   String?
+  ownerActsAsClient Boolean @default(false) // owner sedang tes sebagai klien (#klien / #owner)
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 

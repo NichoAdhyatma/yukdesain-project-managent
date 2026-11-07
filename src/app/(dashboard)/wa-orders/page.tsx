@@ -144,6 +144,7 @@ export default function WaOrdersPage() {
                           <div className="flex flex-wrap items-center gap-1.5">
                             <Badge variant={STATUS_BADGE[item.status].variant}>{STATUS_BADGE[item.status].label}</Badge>
                             {item.waitingForOwner && <WaitingForOwnerBadge />}
+                            {item.ownerTest && <Badge variant="secondary">Tes owner</Badge>}
                             {item.blocked && (
                               <Badge variant="destructive" className="gap-1">
                                 <Ban className="h-3 w-3" aria-hidden="true" />

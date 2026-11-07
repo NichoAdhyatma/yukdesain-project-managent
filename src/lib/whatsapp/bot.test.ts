@@ -275,6 +275,57 @@ describe("handleInboundMessage", () => {
     expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
   });
 
+  describe("owner tes sebagai klien (#klien / #owner)", () => {
+    const ownerCtx = { user: { id: "u_owner", name: "Rizal" }, target: "PUBLISH" as const };
+    const givenOwnerMessage = (body: string, ownerActsAsClient: boolean) =>
+      db.waMessage.findUniqueOrThrow.mockResolvedValue({
+        id: "msg_o",
+        wamid: "wamid.O",
+        type: "text",
+        body,
+        createdAt: new Date("2026-11-01T10:00:00Z"),
+        conversation: { id: "conv_o", waId: "6289700000000", mode: "BOT", isSandbox: false, ownerActsAsClient },
+      });
+    beforeEach(() => owner.resolveOwner.mockResolvedValue(ownerCtx));
+
+    it("#klien → mode klien aktif, chat kembali ke bot, konfirmasi dikirim", async () => {
+      givenOwnerMessage("#Klien", false);
+      await handleInboundMessage("msg_o");
+      expect(db.waConversation.update).toHaveBeenCalledWith({ where: { id: "conv_o" }, data: { ownerActsAsClient: true, mode: "BOT" } });
+      expect(sentBodies()).toEqual([BOT_REPLIES.ownerClientModeOn]);
+      expect(owner.handleOwnerMessage).not.toHaveBeenCalled();
+    });
+
+    it("mode klien: pesan owner dilayani alur klien (AI), bukan instruksi owner", async () => {
+      givenOwnerMessage("mau bikin logo", true);
+      await handleInboundMessage("msg_o");
+      expect(owner.handleOwnerMessage).not.toHaveBeenCalled();
+      expect(ai.runAiTurn).toHaveBeenCalled();
+    });
+
+    it("mode klien tetap jalan saat balas otomatis nonaktif", async () => {
+      givenOwnerMessage("mau bikin logo", true);
+      db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
+      await handleInboundMessage("msg_o");
+      expect(ai.runAiTurn).toHaveBeenCalled();
+    });
+
+    it("#owner dari mode klien → kembali ke instruksi", async () => {
+      givenOwnerMessage(" #owner ", true);
+      await handleInboundMessage("msg_o");
+      expect(db.waConversation.update).toHaveBeenCalledWith({ where: { id: "conv_o" }, data: { ownerActsAsClient: false } });
+      expect(sentBodies()).toEqual([BOT_REPLIES.ownerClientModeOff]);
+      expect(ai.runAiTurn).not.toHaveBeenCalled();
+    });
+
+    it("mode owner (default): instruksi owner seperti biasa", async () => {
+      givenOwnerMessage("tambah diskon 5 pcs", false);
+      await handleInboundMessage("msg_o");
+      expect(owner.handleOwnerMessage).toHaveBeenCalled();
+      expect(ai.runAiTurn).not.toHaveBeenCalled();
+    });
+  });
+
   describe("perlindungan spam (docs/WHATSAPP_SPAM_GUARD.md)", () => {
     it("nomor diblokir → tidak dibaca, tidak dibalas, tanpa AI", async () => {
       db.waMessage.findUniqueOrThrow.mockResolvedValue({

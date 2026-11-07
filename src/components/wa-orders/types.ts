@@ -14,6 +14,8 @@ export type WaIntakeListItem = {
   pendingProofs: number;
   conversationMode: "BOT" | "HUMAN";
   blocked: boolean;
+  /** Order dari nomor owner yang sedang tes sebagai klien (#klien). */
+  ownerTest: boolean;
   waitingForOwner: boolean;
   outsideServiceWindow: boolean;
   updatedAt: string;
@@ -90,6 +92,7 @@ export type WaIntakeDetail = {
     profileName: string | null;
     mode: "BOT" | "HUMAN";
     blockedAt: string | null;
+    ownerTest: boolean;
     lastInboundAt: string | null;
     outsideServiceWindow: boolean;
   };

@@ -46,16 +46,8 @@ export async function PUT(request: Request) {
         { status: 409 },
       );
     }
-    const isClient = await prisma.waIntake.findFirst({
-      where: { conversation: { waId: waNumber, isSandbox: false } },
-      select: { id: true },
-    });
-    if (isClient) {
-      return NextResponse.json(
-        { error: "CONFLICT", fields: { waNumber: "Nomor ini pernah order sebagai klien lewat bot. Pakai nomor lain." } },
-        { status: 409 },
-      );
-    }
+    // Nomor yang pernah order sebagai klien boleh dipakai: owner bisa tetap tes order dengan #klien
+    // (docs/WHATSAPP_OWNER_COMMANDS.md §9). Order lama tetap ada di Order WA.
   }
 
   const before = await prisma.user.findUniqueOrThrow({ where: { id: auth.user.id }, select: { waNumber: true } });

@@ -232,7 +232,12 @@ export function ChatHistory({ intake }: { intake: WaIntakeDetail }) {
   return (
     <Card className="flex max-h-[720px] flex-col">
       <CardHeader>
-        <CardTitle>Riwayat chat</CardTitle>
+        <CardTitle className="flex flex-wrap items-center gap-2">
+          Riwayat chat
+          {intake.conversation.ownerTest && (
+            <span className="rounded-md bg-secondary px-2 py-0.5 text-xs font-normal text-secondary-foreground">Tes owner</span>
+          )}
+        </CardTitle>
         <CardDescription>
           {intake.conversation.blockedAt
             ? "Nomor ini diblokir. Pesan tetap tersimpan, tetapi bot tidak membalas."
@@ -242,7 +247,8 @@ export function ChatHistory({ intake }: { intake: WaIntakeDetail }) {
         </CardDescription>
         <CardAction className="flex flex-wrap justify-end gap-2">
           {!intake.conversation.blockedAt && <ModeButton intake={intake} />}
-          <BlockButton intake={intake} />
+          {/* Nomor owner tidak bisa diblokir (server juga menolak). */}
+          {!intake.conversation.ownerTest && <BlockButton intake={intake} />}
         </CardAction>
       </CardHeader>
       <CardContent ref={listRef} className="min-h-0 flex-1 overflow-y-auto">

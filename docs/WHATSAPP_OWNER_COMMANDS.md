@@ -87,8 +87,8 @@ diskon Rp50.000, biaya express 50%). Bot tetap tidak boleh menyebut harga layana
 ## 9. Catatan implementasi
 
 - **`User.waNumber` tanpa `@unique`.** Constraint unik baru membuat `prisma db push` meminta `--accept-data-loss`, dan
-  skrip deploy tidak memakai flag itu (deploy akan gagal). Keunikan dicek di `PUT /api/settings/whatsapp/owner-number`
-  (juga menolak nomor yang pernah order sebagai klien).
+  skrip deploy tidak memakai flag itu (deploy akan gagal). Keunikan dicek di `PUT /api/settings/whatsapp/owner-number`.
+  Sejak 2026-11-07 nomor yang pernah order sebagai klien boleh didaftarkan (lihat §10).
 - **Penjaga usulan palsu.** Model kadang menulis sendiri teks yang meniru format usulan ("Balas *YA*…") tanpa memanggil
   tool, sehingga YA owner tidak menerapkan apa pun. Prompt melarangnya, dan server tidak mengirim balasan AI owner yang
   meminta YA/BATAL jika tidak ada usulan tersimpan (`looksLikeConfirmationRequest` → "usulannya belum tercatat").
@@ -104,3 +104,17 @@ diskon Rp50.000, biaya express 50%). Bot tetap tidak boleh menyebut harga layana
 - **Usulan dari WA diterapkan ke versi aktif**; draft portal ikut diperbarui hanya jika sebelumnya sama dengan versi aktif.
   Jika draft portal punya suntingan yang belum terbit, suntingan itu tidak ditimpa (portal menampilkan "Draft berbeda").
 - Diuji dengan model gateway (bukan Claude): alur dan penjaga bekerja; kualitas bahasa perlu diuji ulang dengan Claude.
+
+## 10. Owner tes sebagai klien (2026-11-07)
+
+Keputusan owner: owner bebas mencoba order dari nomor owner sendiri.
+
+- Nomor yang pernah order sebagai klien **boleh** didaftarkan sebagai nomor owner. Order lamanya tetap ada di Order WA.
+- Dari nomor owner, kirim **#klien** → chat dilayani seperti klien (bisa tes order, termasuk saat Balas otomatis
+  nonaktif). Kirim **#owner** → kembali memberi instruksi. Bot membalas konfirmasi di setiap pergantian.
+- Masuk mode klien juga mengembalikan chat ke bot jika tes sebelumnya berakhir di admin.
+- Order dari nomor owner diberi label **Tes owner** di Order WA (daftar dan detail). Nomor owner tidak bisa diblokir.
+- Selama mode klien, balasan ke pertanyaan luar katalog yang dikirim bot ke nomor ini juga diperlakukan sebagai chat
+  klien; kirim #owner dulu untuk menjawabnya.
+- Teknis: `WaConversation.ownerActsAsClient Boolean @default(false)` (additive); `ownerModeCommand` di `bot.ts`;
+  `ownerTest` di DTO Order WA (`ownerNumberSet` di `intake-api.ts`). Uji bot tidak terpengaruh (punya pilihan peran sendiri).
