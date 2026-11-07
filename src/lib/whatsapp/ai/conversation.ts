@@ -2,6 +2,7 @@ import { trimForAi } from "../spam-guard";
 import type Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
 import { getStudioSettings } from "@/lib/studio";
+import { getStudioOperations } from "@/lib/studio-operations";
 import { mimeFromStorageKey, readPrivateMedia } from "../media";
 import { aiWritableBriefFields, imageTargetFields, missingRequiredFields, type BriefDraft } from "./brief-schema";
 import { buildStateBlock, buildSystemPrompt } from "./system-prompt";
@@ -191,7 +192,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
   // STATE dinamis. Keduanya di system prompt: kanal operator yang terpisah dari teks klien
   // dan didukung semua model Claude.
   const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: buildSystemPrompt(studio.name, guide), cache_control: { type: "ephemeral" } },
+    { type: "text", text: buildSystemPrompt(studio.name, guide, await getStudioOperations()), cache_control: { type: "ephemeral" } },
     { type: "text", text: await buildState(params.conversationId, pendingImageIds) },
   ];
 

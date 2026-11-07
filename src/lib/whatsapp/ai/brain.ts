@@ -1,5 +1,6 @@
 import type { WaIntakeStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import { getStudioOperations } from "@/lib/studio-operations";
 import { describeRuleValue, getDraftGuide, getPublishedGuide, isGuideEmpty, sameGuide, type BotGuide } from "./bot-guide";
 import { buildSystemPrompt } from "./system-prompt";
 import { INTAKE_TOOLS } from "./tools";
@@ -107,11 +108,12 @@ export async function buildBrain(source: BrainSource) {
     getDraftGuide(),
     getPublishedGuide(),
   ]);
+  const ops = await getStudioOperations();
 
   const studioName = settings?.name ?? "YukDesain Studio";
   const guide = source === "draft" ? draft : (published?.guide ?? null);
-  const baseRules = buildSystemPrompt(studioName, null);
-  const promptText = buildSystemPrompt(studioName, guide);
+  const baseRules = buildSystemPrompt(studioName, null, ops);
+  const promptText = buildSystemPrompt(studioName, guide, ops);
   // Definisi tools ikut dikirim di setiap request, jadi dihitung dalam ukuran.
   const toolChars = JSON.stringify(INTAKE_TOOLS).length;
 

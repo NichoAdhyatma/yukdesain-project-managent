@@ -1,5 +1,5 @@
 import type { WaIntakeStatus } from "@prisma/client";
-import { DP_PERCENT } from "@/lib/constants";
+import { formatWorkingHours, type StudioOperations } from "@/lib/studio-operations";
 import { formatRupiah, formatTanggal } from "../format";
 import type { BriefDraft, BriefKey } from "./brief-schema";
 import { renderGuideSection, type BotGuide } from "./bot-guide";
@@ -8,7 +8,19 @@ import { renderGuideSection, type BotGuide } from "./bot-guide";
 // dinamis sebagai blok system kedua.
 // Aturan wajib: docs/WHATSAPP_AI_CHATBOT.md §5.1 dan §10.4.
 
-export function buildSystemPrompt(studioName: string, guide: BotGuide | null = null): string {
+/** Kebijakan dari Operasional studio (docs/STUDIO_OPERATIONS.md); berubah hanya saat owner menyimpan. */
+function renderPolicies(ops: StudioOperations): string {
+  const revision =
+    ops.revisionQuota > 0
+      ? `- Revisi gratis ${ops.revisionQuota}x per project, diajukan lewat link portal project (bukan lewat chat). Saat menjelaskan revisi, sampaikan apa adanya: "${ops.revisionNotice}". Permintaan revisi di atas ${ops.revisionQuota}x dialihkan ke admin (request_human_handoff).`
+      : "- Tidak ada revisi gratis. Permintaan revisi dialihkan ke admin (request_human_handoff).";
+  return `# Kebijakan studio
+- Pengerjaan dimulai setelah DP ${ops.dpPercent}% dari harga yang dikirim tim kami. ${ops.settlementNote}
+${revision}
+- Jam kerja admin: ${formatWorkingHours(ops)}. Kamu tetap melayani di luar jam itu; saat mengalihkan ke admin di luar jam kerja, sampaikan bahwa admin membalas di jam kerja.`;
+}
+
+export function buildSystemPrompt(studioName: string, guide: BotGuide | null, ops: StudioOperations): string {
   const guideSection = renderGuideSection(guide, studioName);
   const rules = `Kamu adalah asisten WhatsApp ${studioName}, studio desain grafis. Kamu melayani klien yang ingin memesan desain: memilih layanan, menggali brief, dan menjelaskan pembayaran DP order ini.
 
@@ -38,7 +50,7 @@ Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, 
 - Saat STATE berisi jawaban tim yang belum disampaikan, sampaikan ke klien dengan bahasamu sendiri (catatan internal jangan dikutip mentah). Jika bisa dan catatan menyebut layanan yang ada di list_services, lanjutkan order dengan layanan itu. Jika bisa tapi tidak ada layanan yang cocok, panggil request_human_handoff supaya admin melanjutkan. Jika tidak bisa, sampaikan dengan sopan dan tawarkan layanan lain yang ada.
 
 # Setelah ada harga (status QUOTED)
-Jelaskan layanan, harga, DP ${DP_PERCENT}%, deadline, dan rekening persis seperti di STATE, tanpa mengubah angka. Minta klien mengirim foto/screenshot bukti transfer DP.
+Jelaskan layanan, harga, DP (persen dan nominal), deadline, dan rekening persis seperti di STATE, tanpa mengubah angka. Minta klien mengirim foto/screenshot bukti transfer DP.
 Jika klien mengirim gambar yang terlihat seperti bukti transfer, panggil submit_payment_proof dengan messageId dari STATE, lalu sampaikan: "Bukti sudah kami terima, sedang dicek tim kami." Jika ragu gambar itu bukti transfer atau bukan, tanyakan dulu. Jangan mengomentari isi bukti transfer (nominal, penerima, tanggal) ke klien; pengecekan sepenuhnya oleh tim kami. Bukti dalam bentuk PDF atau dokumen belum bisa dibaca; minta screenshot.
 
 # Status project yang sudah berjalan
@@ -51,7 +63,8 @@ Jika klien mengirim gambar yang terlihat seperti bukti transfer, panggil submit_
 Bahasa Indonesia yang ramah dan santai, sapa dengan "kak". Jawaban pendek, cocok untuk chat WhatsApp. Format hanya *tebal* dan _miring_ ala WhatsApp; tanpa Markdown lain, tanpa tabel, tanpa heading.
 Jangan pernah menyebut hal internal ke klien: kode layanan (mis. SVC-01), nama field atau kunci brief (mis. brand_name), nama tool, messageId, atau kata "STATE". Sebut layanan dengan namanya saja.
 Jangan menjanjikan pekerjaan tambahan yang tidak diminta klien (mis. membuatkan slogan atau opsi tambahan).`;
-  return guideSection ? `${rules}\n\n${guideSection}` : rules;
+  const withPolicies = `${rules}\n\n${renderPolicies(ops)}`;
+  return guideSection ? `${withPolicies}\n\n${guideSection}` : withPolicies;
 }
 
 // Deskripsi field untuk AI, supaya pertanyaannya tepat sasaran.

@@ -1,4 +1,5 @@
 import { setHumanMode } from "../handoff";
+import { formatWorkingHours, getStudioOperations, isWithinWorkingHours } from "@/lib/studio-operations";
 import { notifyDpProof, notifyNeedsQuote } from "@/lib/notifications/owner-events";
 import type Anthropic from "@anthropic-ai/sdk";
 import { Prisma } from "@prisma/client";
@@ -585,9 +586,13 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
 
   async request_human_handoff(ctx) {
     await setHumanMode(ctx.conversationId, "bot_handoff");
+    const now = new Date();
+    const ops = await getStudioOperations();
     return ok({
       handedOff: true,
-      message: "Percakapan dialihkan ke admin. Beri tahu klien bahwa admin akan membalas secepatnya.",
+      message: isWithinWorkingHours(now, ops)
+        ? "Percakapan dialihkan ke admin. Beri tahu klien bahwa admin akan membalas secepatnya."
+        : `Percakapan dialihkan ke admin, tetapi sekarang di luar jam kerja. Beri tahu klien dengan bahasamu sendiri: ${ops.outsideHoursNote} Jam kerja: ${formatWorkingHours(ops)}.`,
     });
   },
 };

@@ -15,6 +15,10 @@ const media = vi.hoisted(() => ({ readPrivateMedia: vi.fn(), mimeFromStorageKey:
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/studio", () => ({ getStudioSettings: async () => ({ name: "YukDesain Studio" }) }));
+vi.mock("@/lib/studio-operations", async (orig) => {
+  const actual = await orig<typeof import("@/lib/studio-operations")>();
+  return { ...actual, getStudioOperations: async () => actual.OPERATIONS_DEFAULTS };
+});
 const aiConfig = vi.hoisted(() => ({
   model: "claude-haiku-5-5",
   extractionModel: "claude-sonnet-5-5",
