@@ -61,8 +61,13 @@ export function nextStatus(from: WaIntakeStatus, action: IntakeAction, actor: In
   return rule?.to ?? null;
 }
 
-export function computeDpAmount(agreedPrice: number): number {
-  return Math.ceil((agreedPrice * DP_PERCENT) / 100);
+export function computeDpAmount(agreedPrice: number, dpPercent: number): number {
+  return Math.ceil((agreedPrice * dpPercent) / 100);
+}
+
+/** Persen DP penawaran yang sudah dikirim (docs/STUDIO_OPERATIONS.md); order lama tanpa snapshot = 50%. */
+export function snapshotDpPercent(row: { dpPercent: number | null; dpAmount: number | null }): number | null {
+  return row.dpPercent ?? (row.dpAmount !== null ? DP_PERCENT : null);
 }
 
 /**

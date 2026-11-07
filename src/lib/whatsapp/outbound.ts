@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { DP_PERCENT, WA_TEMPLATES } from "@/lib/constants";
+import { WA_TEMPLATES } from "@/lib/constants";
 import {
   deliveryErrorCode,
   getChannel,
@@ -46,6 +46,7 @@ export function offerMessage(p: {
   serviceName: string;
   agreedPrice: number;
   dpAmount: number;
+  dpPercent: number;
   deadline: Date;
   accounts: { name: string; accountNumber: string; accountHolder: string }[];
 }): OutboundMessage {
@@ -59,7 +60,7 @@ export function offerMessage(p: {
     text: [
       `${greet(p.clientName)}, berikut penawaran untuk order *${p.serviceName}*:`,
       `• Harga: *${formatRupiah(p.agreedPrice)}*`,
-      `• DP ${DP_PERCENT}%: *${formatRupiah(p.dpAmount)}*`,
+      `• DP ${p.dpPercent}%: *${formatRupiah(p.dpAmount)}*`,
       `• Deadline: ${formatTanggal(p.deadline)}`,
       "",
       accounts,

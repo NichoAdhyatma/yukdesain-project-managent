@@ -106,7 +106,7 @@ export type StateInput = {
     missingRequired: BriefKey[];
     writableFields: BriefKey[];
     imageTargets: BriefKey[];
-    quote: null | { agreedPrice: number; dpAmount: number; deadline: Date };
+    quote: null | { agreedPrice: number; dpAmount: number; dpPercent: number; deadline: Date };
   };
   paymentAccounts: { name: string; accountNumber: string; accountHolder: string }[];
   // Aturan harga owner yang sudah dicatat untuk order ini (docs/WHATSAPP_OWNER_COMMANDS.md §6)
@@ -140,7 +140,7 @@ export function buildStateBlock(input: StateInput): string {
     }
     if (intake.quote && (intake.status === "QUOTED" || intake.status === "DP_REVIEW")) {
       lines.push(
-        `- Harga: ${rupiah(intake.quote.agreedPrice)}; DP ${DP_PERCENT}%: ${rupiah(intake.quote.dpAmount)}; deadline: ${tanggal(intake.quote.deadline)}`,
+        `- Harga: ${rupiah(intake.quote.agreedPrice)}; DP ${intake.quote.dpPercent}%: ${rupiah(intake.quote.dpAmount)}; deadline: ${tanggal(intake.quote.deadline)}`,
       );
       if (intake.status === "QUOTED") {
         lines.push(

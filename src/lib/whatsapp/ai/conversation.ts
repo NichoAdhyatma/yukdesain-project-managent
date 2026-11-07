@@ -6,7 +6,8 @@ import { mimeFromStorageKey, readPrivateMedia } from "../media";
 import { aiWritableBriefFields, imageTargetFields, missingRequiredFields, type BriefDraft } from "./brief-schema";
 import { buildStateBlock, buildSystemPrompt } from "./system-prompt";
 import { allowedPriceNumbers, getDraftGuide, getPublishedGuide } from "./bot-guide";
-import { ACTIVE_INTAKE_STATUSES } from "../intake";
+import { ACTIVE_INTAKE_STATUSES, snapshotDpPercent } from "../intake";
+import { DP_PERCENT } from "@/lib/constants";
 import { getAiConfig, getAnthropicClient } from "./ai-config";
 import { modelRequestOptions } from "./model-profile";
 import { INTAKE_TOOLS, executeTool, findActiveIntake } from "./tools";
@@ -94,6 +95,7 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       briefDraft: true,
       agreedPrice: true,
       dpAmount: true,
+      dpPercent: true,
       deadline: true,
       pricingRulesApplied: true,
       service: { select: { code: true, name: true } },
@@ -127,7 +129,12 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       imageTargets: code ? imageTargetFields(code) : [],
       quote:
         intake.agreedPrice !== null && intake.dpAmount !== null && intake.deadline
-          ? { agreedPrice: intake.agreedPrice, dpAmount: intake.dpAmount, deadline: intake.deadline }
+          ? {
+              agreedPrice: intake.agreedPrice,
+              dpAmount: intake.dpAmount,
+              dpPercent: snapshotDpPercent(intake) ?? DP_PERCENT,
+              deadline: intake.deadline,
+            }
           : null,
     },
     paymentAccounts,
