@@ -42,6 +42,19 @@ function signatureCheck(raw: string, signature: string | null, timestamp: string
 
 type Params = { params: Promise<{ secret: string }> };
 
+/** Tes URL dari dashboard Kirimi (bila memakai GET): cukup cek secret. */
+export async function GET(_request: Request, { params }: Params) {
+  let expected: string;
+  try {
+    expected = getKirimiEnv().KIRIMI_WEBHOOK_SECRET;
+  } catch {
+    return new Response("Not configured", { status: 503 });
+  }
+  const { secret } = await params;
+  if (!secretMatches(secret, expected)) return new Response("Not found", { status: 404 });
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(request: Request, { params }: Params) {
   let env: ReturnType<typeof getKirimiEnv>;
   try {
@@ -61,13 +74,16 @@ export async function POST(request: Request, { params }: Params) {
     body = null;
   }
   if (!body) {
-    console.warn(`[kirimi] body bukan JSON objek (content-type: ${request.headers.get("content-type") ?? "-"})`);
-    return new Response("Invalid body", { status: 400 });
+    // Tes URL dari dashboard Kirimi bisa tanpa body JSON; dijawab 200 supaya URL bisa disimpan.
+    console.info(`[kirimi] webhook tanpa body JSON (content-type: ${request.headers.get("content-type") ?? "-"}, ${raw.length} byte)`);
+    return NextResponse.json({ ok: true, ignored: "no_body" });
   }
 
   const eventHeader = request.headers.get("x-kirimi-event");
   const settings = await prisma.studioSettings.findUnique({ where: { id: "default" }, select: { waKirimiWebhookSecret: true } });
-  const signature = signatureCheck(raw, request.headers.get("x-kirimi-signature"), request.headers.get("x-kirimi-timestamp"), settings?.waKirimiWebhookSecret ?? null);
+  // Signing secret dashboard (HMAC-SHA256 dari timestamp.body); cadangan: secret langganan API.
+  const signingSecret = process.env.KIRIMI_SIGNING_SECRET?.trim() || settings?.waKirimiWebhookSecret || null;
+  const signature = signatureCheck(raw, request.headers.get("x-kirimi-signature"), request.headers.get("x-kirimi-timestamp"), signingSecret);
   // Bentuk data (tanpa isi pesan / nomor) untuk memastikan format Kirimi dari data asli.
   console.info(`[kirimi] webhook ${describeKirimiPayload(body, eventHeader)} signature=${signature}`);
 

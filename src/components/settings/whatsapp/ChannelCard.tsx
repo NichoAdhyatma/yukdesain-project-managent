@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { SettingsApiError, WHATSAPP_SETTINGS_KEY, putWhatsAppSettings, type WaChannelId, type WhatsAppSettings } from "./settings-api";
@@ -386,6 +387,8 @@ type KirimiStatus =
       expired: boolean;
       aiEnabled: boolean;
       webhookInstalled: boolean;
+      webhookUrl: string;
+      signingSecretSet: boolean;
     };
 
 const KIRIMI_KEY = ["settings", "whatsapp", "kirimi"];
@@ -393,6 +396,7 @@ const KIRIMI_KEY = ["settings", "whatsapp", "kirimi"];
 /** Status perangkat Kirimi + pasang webhook (docs/WHATSAPP_CHANNEL_KIRIMI.md). Scan QR di dashboard Kirimi. */
 function KirimiPanel() {
   const queryClient = useQueryClient();
+  const [showUrl, setShowUrl] = useState(false);
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery<KirimiStatus>({
     queryKey: KIRIMI_KEY,
     queryFn: async () => {
@@ -470,6 +474,50 @@ function KirimiPanel() {
           AI bawaan Kirimi aktif di perangkat ini. Matikan di dashboard Kirimi supaya klien tidak menerima dua balasan.
         </p>
       )}
+      <section aria-labelledby="wa-kirimi-url-title" className="space-y-2 rounded-lg border p-3">
+        <h4 id="wa-kirimi-url-title" className="font-medium">
+          Webhook URL untuk dashboard Kirimi
+        </h4>
+        <ol className="list-decimal space-y-0.5 pl-5 text-muted-foreground">
+          <li>Di dashboard Kirimi, buka perangkat {data.deviceId} › Webhook › Tambah URL.</li>
+          <li>Tempel URL di bawah, lalu centang Pesan Masuk, Pesan Terkirim, dan Pesan Gagal.</li>
+          <li>Simpan. Kirimi akan menguji URL ini dulu, lalu pesan masuk dikirim ke bot.</li>
+        </ol>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Input
+            readOnly
+            value={showUrl ? data.webhookUrl : `${data.webhookUrl.slice(0, data.webhookUrl.lastIndexOf("/") + 1)}${"•".repeat(12)}`}
+            aria-label="Webhook URL Kirimi"
+            className="font-mono text-xs"
+            onFocus={(e) => showUrl && e.currentTarget.select()}
+          />
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" className="max-md:h-11" onClick={() => setShowUrl((v) => !v)}>
+              {showUrl ? "Sembunyikan" : "Tampilkan"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="max-md:h-11"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(data.webhookUrl);
+                  toast("Webhook URL disalin", "success");
+                } catch {
+                  setShowUrl(true);
+                  toast("Tidak bisa menyalin otomatis. Salin manual dari kolom URL.", "error");
+                }
+              }}
+            >
+              Salin
+            </Button>
+          </div>
+        </div>
+        <p className="text-muted-foreground">
+          URL ini memuat kunci rahasia: jangan dibagikan. Signing secret dari dashboard{" "}
+          {data.signingSecretSet ? "sudah tersimpan di server." : "belum disimpan di server (opsional, untuk memastikan webhook benar dari Kirimi)."}
+        </p>
+      </section>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" className="max-md:h-11" disabled={!data.connected || install.isPending} onClick={() => install.mutate()}>
           {install.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
