@@ -62,3 +62,13 @@ Langkahnya:
 3. Kirim satu teks dan satu foto dari nomor lain ke nomor Kirimi.
 4. Periksa log `[kirimi] webhook` di VPS: jika pembaca belum cocok dengan bentuk asli, sesuaikan
    `kirimi-webhook.ts`; jika signature `cocok …`, verifikasi bisa dipaksa.
+
+## 8. Temuan 2026-11-07: pesan masuk lewat "Webhook URL" dashboard
+
+- Langganan lewat API (`/v1/webhook/subscribe`, push maupun poll) aktif dan alamatnya benar, tetapi `last_event_at`
+  tetap kosong: pesan masuk tidak terkirim lewat jalur itu. Dashboard perangkat menampilkan "Belum ada webhook".
+- Jalur yang dipakai: **Tambah URL** di tab Webhook perangkat (dashboard). Kirimi menguji URL sebelum menyimpan, jadi
+  webhook kita menjawab 200 untuk tes (GET atau body kosong; secret di URL tetap dicek).
+- Panel Perangkat Kirimi menampilkan URL lengkap (khusus owner, tersamar sampai "Tampilkan") dengan tombol Salin.
+- Dashboard menyebut signature = HMAC-SHA256 dari `timestamp.body` dengan **Signing secret** dashboard. Disimpan
+  opsional sebagai `KIRIMI_SIGNING_SECRET` (terminal tersembunyi); sementara masih dicatat sebagai diagnostik.

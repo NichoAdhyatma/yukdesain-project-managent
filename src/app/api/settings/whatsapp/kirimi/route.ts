@@ -16,7 +16,13 @@ function kirimiError(error: unknown) {
   throw error;
 }
 
-async function status() {
+/** URL webhook lengkap (memuat rahasia) untuk "Tambah URL" di dashboard Kirimi. Hanya untuk owner. */
+function webhookUrlFor(request: Request): string {
+  const base = getAppPublicUrl() ?? request.headers.get("origin") ?? new URL(request.url).origin;
+  return `${base.replace(/\/+$/, "")}/api/whatsapp/kirimi/${getKirimiEnv().KIRIMI_WEBHOOK_SECRET}`;
+}
+
+async function status(request: Request) {
   const [device, settings] = await Promise.all([
     kirimiDeviceStatus(),
     prisma.studioSettings.findUnique({ where: { id: "default" }, select: { waKirimiWebhookId: true } }),
@@ -32,15 +38,17 @@ async function status() {
     expired: device.expired,
     aiEnabled: device.aiEnabled,
     webhookInstalled: !!settings?.waKirimiWebhookId,
+    webhookUrl: webhookUrlFor(request),
+    signingSecretSet: !!process.env.KIRIMI_SIGNING_SECRET?.trim(),
   };
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await requireOwner();
   if (auth.error) return auth.error;
   if (!isKirimiConfigured()) return NextResponse.json({ configured: false });
   try {
-    return NextResponse.json(await status());
+    return NextResponse.json(await status(request));
   } catch (error) {
     return kirimiError(error);
   }
@@ -68,8 +76,7 @@ export async function POST(request: Request) {
       );
     }
     const base = getAppPublicUrl() ?? request.headers.get("origin") ?? new URL(request.url).origin;
-    const webhookUrl = `${base.replace(/\/+$/, "")}/api/whatsapp/kirimi/${getKirimiEnv().KIRIMI_WEBHOOK_SECRET}`;
-    const sub = await kirimiInstallWebhook(webhookUrl);
+    const sub = await kirimiInstallWebhook(webhookUrlFor(request));
     await prisma.studioSettings.upsert({
       where: { id: "default" },
       update: { waKirimiWebhookId: sub.id, waKirimiWebhookSecret: sub.secret },
@@ -84,7 +91,7 @@ export async function POST(request: Request) {
         newValue: { device: device.deviceId, host: new URL(base).host },
       },
     });
-    return NextResponse.json(await status());
+    return NextResponse.json(await status(request));
   } catch (error) {
     return kirimiError(error);
   }

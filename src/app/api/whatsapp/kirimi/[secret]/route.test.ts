@@ -18,7 +18,8 @@ vi.mock("next/server", async (orig) => ({
   after: (fn: () => Promise<void>) => afterFns.push(fn),
 }));
 
-import { POST } from "./route";
+import { createHmac } from "node:crypto";
+import { GET, POST } from "./route";
 
 const SECRET = "s".repeat(48);
 const ctx = (secret = SECRET) => ({ params: Promise.resolve({ secret }) });
@@ -76,5 +77,25 @@ describe("POST /api/whatsapp/kirimi/[secret]", () => {
   it("kredensial belum ada → 503", async () => {
     delete process.env.KIRIMI_SECRET;
     expect((await POST(req({}), ctx())).status).toBe(503);
+  });
+
+  it("tes URL dari dashboard: body kosong dan GET dijawab 200 (secret tetap dicek)", async () => {
+    const empty = await POST(new Request("http://x", { method: "POST", body: "" }), ctx());
+    expect(await empty.json()).toEqual({ ok: true, ignored: "no_body" });
+    expect((await GET(new Request("http://x"), ctx())).status).toBe(200);
+    expect((await GET(new Request("http://x"), ctx("salah"))).status).toBe(404);
+  });
+
+  it("signature HMAC-SHA256 dari timestamp.body dengan signing secret dashboard dikenali", async () => {
+    process.env.KIRIMI_SIGNING_SECRET = "dashboard-secret";
+    const raw = JSON.stringify({ from: "6281234567890", message: "x" });
+    const ts = "1793700000";
+    const sig = createHmac("sha256", "dashboard-secret").update(`${ts}.${raw}`).digest("hex");
+    await POST(
+      new Request("http://x", { method: "POST", body: raw, headers: { "content-type": "application/json", "x-kirimi-event": "message", "x-kirimi-timestamp": ts, "x-kirimi-signature": sig } }),
+      ctx(),
+    );
+    expect(vi.mocked(console.info).mock.calls.flat().join(" ")).toContain("signature=cocok hex(ts.body)");
+    delete process.env.KIRIMI_SIGNING_SECRET;
   });
 });
