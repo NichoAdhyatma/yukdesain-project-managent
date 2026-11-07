@@ -114,6 +114,18 @@ describe("PUT /api/settings/whatsapp", () => {
     expect(db.studioSettings.upsert.mock.calls[0][0].update).toEqual({ waBotEnabled: true });
   });
 
+  it("rem bulanan disimpan; di luar batas ditolak", async () => {
+    await put({ monthlyReplyCap: 1500 });
+    expect(db.studioSettings.upsert.mock.calls[0][0].update).toEqual({ waBotMonthlyReplyCap: 1500 });
+    for (const bad of [10, 1.5, 200_000]) {
+      db.studioSettings.upsert.mockClear();
+      const res = await put({ monthlyReplyCap: bad });
+      expect(res.status).toBe(400);
+      expect(Object.keys((await res.json()).fields)).toEqual(["monthlyReplyCap"]);
+      expect(db.studioSettings.upsert).not.toHaveBeenCalled();
+    }
+  });
+
   it("validasi: model non-Claude dan provider tidak dikenal ditolak per field", async () => {
     const res = await put({ aiModel: "gpt-5.5", aiProvider: "OPENAI" });
     expect(res.status).toBe(400);

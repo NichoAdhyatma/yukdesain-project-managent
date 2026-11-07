@@ -12,6 +12,8 @@ export type WhatsAppUsage = {
   warningThreshold: number;
   freeTier: number;
   nearLimit: boolean;
+  monthlyReplyCap: number;
+  brakeActive: boolean;
 };
 
 export type WaChannelId = "META" | "FONNTE";

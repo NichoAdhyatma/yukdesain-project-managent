@@ -13,6 +13,7 @@ vi.mock("@/lib/whatsapp/env", async (orig) => ({ ...(await orig<typeof import("@
 vi.mock("@/lib/whatsapp/channel", () => channel);
 vi.mock("@/lib/whatsapp/inbound", () => inbound);
 vi.mock("@/lib/whatsapp/bot", () => bot);
+vi.mock("@/lib/whatsapp/spam-guard", () => ({ waitForBurst: vi.fn(async () => undefined) }));
 vi.mock("@/lib/whatsapp/owner/queries", () => ({ expireOwnerQueries: vi.fn(async () => 0) }));
 vi.mock("next/server", async (orig) => ({
   ...(await orig<typeof import("next/server")>()),

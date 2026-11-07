@@ -1,3 +1,4 @@
+import { trimForAi } from "../spam-guard";
 import type Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
 import { getStudioSettings } from "@/lib/studio";
@@ -42,7 +43,8 @@ function describe(row: HistoryRow): string {
       : `[Gambar dari klien yang tidak bisa diproses]${caption}`;
   }
   if (row.type === "unsupported") return "[Pesan jenis lain (suara/video/dokumen) yang tidak didukung]";
-  return row.body;
+  // Teks panjang dipotong untuk AI; teks lengkap tetap tersimpan (docs/WHATSAPP_SPAM_GUARD.md §6).
+  return trimForAi(row.body);
 }
 
 /**

@@ -7,6 +7,7 @@ import { WA_CHANNELS, isChannelConfigured, type WaChannel } from "@/lib/whatsapp
 import { aiModelSchema, aiProviderSchema, modelOverrides, providerOf } from "@/lib/whatsapp/ai/ai-config";
 import { getModelProfile } from "@/lib/whatsapp/ai/model-profile";
 import { getMonthlyUsage } from "@/lib/whatsapp/rate-limit";
+import { WA_RATE_LIMITS } from "@/lib/constants";
 
 // Pengaturan bot WhatsApp (owner). API key tidak pernah dikirim ke browser.
 
@@ -18,6 +19,7 @@ const select = {
   waAiExtractionModel: true,
   waAiGatewayModel: true,
   waAiGatewayExtractionModel: true,
+  waBotMonthlyReplyCap: true,
 } as const;
 
 type Row = {
@@ -28,6 +30,7 @@ type Row = {
   waAiExtractionModel: string | null;
   waAiGatewayModel: string | null;
   waAiGatewayExtractionModel: string | null;
+  waBotMonthlyReplyCap: number;
 };
 
 async function toDto(row: Row | null) {
@@ -99,6 +102,13 @@ const updateSchema = z.object({
   aiExtractionModel: nullable(aiModelSchema),
   aiGatewayModel: nullable(aiModelSchema),
   aiGatewayExtractionModel: nullable(aiModelSchema),
+  // Rem bulanan balasan bot (docs/WHATSAPP_SPAM_GUARD.md §3)
+  monthlyReplyCap: z
+    .number()
+    .int("Harus bilangan bulat")
+    .min(50, "Minimal 50")
+    .max(WA_RATE_LIMITS.monthlyReplyCapMax, `Maksimal ${WA_RATE_LIMITS.monthlyReplyCapMax.toLocaleString("id-ID")}`)
+    .optional(),
 });
 
 export async function PUT(request: Request) {
@@ -150,6 +160,7 @@ export async function PUT(request: Request) {
     ...(input.aiExtractionModel !== undefined && { waAiExtractionModel: input.aiExtractionModel }),
     ...(input.aiGatewayModel !== undefined && { waAiGatewayModel: input.aiGatewayModel }),
     ...(input.aiGatewayExtractionModel !== undefined && { waAiGatewayExtractionModel: input.aiGatewayExtractionModel }),
+    ...(input.monthlyReplyCap !== undefined && { waBotMonthlyReplyCap: input.monthlyReplyCap }),
   };
 
   const before = await prisma.studioSettings.findUnique({ where: { id: "default" }, select });

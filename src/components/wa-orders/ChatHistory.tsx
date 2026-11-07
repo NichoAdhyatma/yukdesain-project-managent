@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { AlertCircle, Bot, Clock, Headset, Loader2, Send, UserRound } from "lucide-react";
+import { AlertCircle, Ban, Bot, Clock, Headset, Loader2, Send, UserRound } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -72,6 +73,53 @@ function ModeButton({ intake }: { intake: WaIntakeDetail }) {
       )}
       {human ? "Kembalikan ke bot" : "Ambil alih"}
     </Button>
+  );
+}
+
+/** Blokir / buka blokir nomor (docs/WHATSAPP_SPAM_GUARD.md §5). Blokir minta konfirmasi dulu. */
+function BlockButton({ intake }: { intake: WaIntakeDetail }) {
+  const blocked = !!intake.conversation.blockedAt;
+  const [confirming, setConfirming] = useState(false);
+  const action = useIntakeAction<{ blocked: boolean }>(intake.id, "/block", "POST", {
+    successMessage: blocked ? "Blokir nomor dibuka. Bot membalas lagi pesan berikutnya." : "Nomor diblokir. Bot tidak membalas nomor ini.",
+  });
+  return (
+    <>
+      <Button
+        variant={blocked ? "outline" : "ghost"}
+        size="sm"
+        className="max-md:h-11"
+        disabled={action.isPending}
+        onClick={() => (blocked ? action.mutate({ blocked: false }) : setConfirming(true))}
+      >
+        {action.isPending ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" /> : <Ban className="h-4 w-4" aria-hidden="true" />}
+        {blocked ? "Buka blokir" : "Blokir nomor"}
+      </Button>
+      <Dialog open={confirming} onOpenChange={(o) => !action.isPending && setConfirming(o)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Blokir nomor {intake.clientName ?? intake.conversation.profileName ?? "ini"}?</DialogTitle>
+            <DialogDescription>
+              Pesan dari nomor ini tetap tersimpan di sini, tetapi bot tidak membalas dan tidak memakai AI. Klien tidak
+              diberi tahu. Blokir bisa dibuka kapan saja.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirming(false)} disabled={action.isPending}>
+              Batal
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={action.isPending}
+              onClick={() => action.mutate({ blocked: true }, { onSettled: () => setConfirming(false) })}
+            >
+              {action.isPending && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              Blokir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -186,12 +234,15 @@ export function ChatHistory({ intake }: { intake: WaIntakeDetail }) {
       <CardHeader>
         <CardTitle>Riwayat chat</CardTitle>
         <CardDescription>
-          {human
-            ? "Ditangani admin. Bot tidak membalas sampai chat dikembalikan ke bot."
-            : "Bot sedang melayani klien. Ambil alih untuk membalas sendiri."}
+          {intake.conversation.blockedAt
+            ? "Nomor ini diblokir. Pesan tetap tersimpan, tetapi bot tidak membalas."
+            : human
+              ? "Ditangani admin. Bot tidak membalas sampai chat dikembalikan ke bot."
+              : "Bot sedang melayani klien. Ambil alih untuk membalas sendiri."}
         </CardDescription>
-        <CardAction>
-          <ModeButton intake={intake} />
+        <CardAction className="flex flex-wrap justify-end gap-2">
+          {!intake.conversation.blockedAt && <ModeButton intake={intake} />}
+          <BlockButton intake={intake} />
         </CardAction>
       </CardHeader>
       <CardContent ref={listRef} className="min-h-0 flex-1 overflow-y-auto">

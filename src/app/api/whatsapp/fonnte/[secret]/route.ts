@@ -6,6 +6,7 @@ import { getChannel } from "@/lib/whatsapp/channel";
 import { describeFonntePayload, parseFonntePayload, type FonntePayload } from "@/lib/whatsapp/fonnte-webhook";
 import { storeInboundMessage } from "@/lib/whatsapp/inbound";
 import { handleInboundMessage } from "@/lib/whatsapp/bot";
+import { waitForBurst } from "@/lib/whatsapp/spam-guard";
 import { expireOwnerQueries } from "@/lib/whatsapp/owner/queries";
 import { maskPhone } from "@/lib/whatsapp/phone";
 
@@ -80,6 +81,8 @@ export async function POST(request: Request, { params }: Params) {
     const messageId = id;
     after(async () => {
       await expireOwnerQueries().catch(() => undefined);
+      // Tunggu pesan susulan: pesan beruntun dibalas sekali (docs/WHATSAPP_SPAM_GUARD.md §2).
+      await waitForBurst();
       try {
         await handleInboundMessage(messageId);
       } catch (error) {

@@ -19,6 +19,7 @@ export const BOT_REPLIES = {
   tooManyMessages: "Kak, pesannya banyak sekali dalam waktu singkat. Kami balas lagi beberapa menit lagi ya.",
   tooManyImages: "Maaf kak, gambar untuk order ini sudah banyak sekali, jadi gambar ini tidak kami simpan. Kalau masih ada gambar penting, ketik *admin* untuk dibantu tim kami.",
   dailyLimit: "Kak, percakapan hari ini sudah panjang sekali. Kami teruskan ke admin supaya bisa dibantu langsung ya.",
+  monthlyCap: "Pesan kakak sudah kami terima. Admin kami akan membalas secepatnya ya.",
 } satisfies Record<string, string> & Record<MediaRejection, string>;
 
 // Status sebelum admin memberi harga: balasan tidak boleh memuat harga/durasi.

@@ -68,6 +68,7 @@ export const listInclude = {
       profileName: true,
       lastInboundAt: true,
       mode: true,
+      blockedAt: true,
       _count: { select: { ownerQueries: { where: { status: "PENDING" } } } },
     },
   },
@@ -90,6 +91,7 @@ export function toListItem(row: ListRow, serviceWindow = true) {
     deadline: row.deadline,
     pendingProofs: row._count.paymentProofs,
     conversationMode: row.conversation.mode,
+    blocked: !!row.conversation.blockedAt,
     // Pertanyaan luar katalog sedang menunggu jawaban owner (docs/WHATSAPP_OWNER_COMMANDS.md §5)
     waitingForOwner: row.conversation._count.ownerQueries > 0,
     // Pesan berikutnya ke klien akan memakai template (§12.1)
@@ -107,6 +109,7 @@ export const detailInclude = {
       waId: true,
       profileName: true,
       mode: true,
+      blockedAt: true,
       lastInboundAt: true,
       ownerQueries: {
         orderBy: { createdAt: "desc" },
@@ -235,6 +238,7 @@ export async function toDetail(row: DetailRow) {
       waId: conversation.waId,
       profileName: conversation.profileName,
       mode: conversation.mode,
+      blockedAt: conversation.blockedAt,
       lastInboundAt: conversation.lastInboundAt,
       outsideServiceWindow: serviceWindow && !isWithinServiceWindow(conversation.lastInboundAt),
     },

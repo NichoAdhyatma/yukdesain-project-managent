@@ -201,6 +201,11 @@ export const WA_RATE_LIMITS = {
   botRepliesPerDay: 80, // balasan bot per nomor per hari → mode HUMAN
   outboundMonthlyWarning: 800, // pesan keluar per bulan → banner peringatan
   outboundMonthlyFreeTier: 1000, // kuota gratis Meta per nomor per bulan (§5.3)
+  // docs/WHATSAPP_SPAM_GUARD.md
+  debounceMs: 5000, // tunggu pesan susulan sebelum membalas (gabung pesan beruntun)
+  inboundMaxCharsForAi: 2000, // teks klien yang lebih panjang dipotong saat dikirim ke AI
+  monthlyReplyCapDefault: 2000, // rem bulanan balasan bot (bisa diubah owner)
+  monthlyReplyCapMax: 100_000,
 } as const;
 
 // Panduan bot dari owner (docs/WHATSAPP_BOT_GUIDE.md §2)
