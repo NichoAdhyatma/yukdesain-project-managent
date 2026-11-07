@@ -241,6 +241,7 @@ model Project {
   // Pricing
   agreedPrice   Int           // in cents
   paidAmount    Int           @default(0)
+  revisionQuota Int           @default(3) // snapshot kuota revisi dari Operasional saat project dibuat
 
   // Dates
   projectDate   DateTime      @default(now())
@@ -575,6 +576,15 @@ model StudioSettings {
   waBotGuideDraft     Json?
   waBotMonthlyReplyCap  Int     @default(2000) // rem bulanan, docs/WHATSAPP_SPAM_GUARD.md §3
   waBotCapNotifiedMonth String? // "YYYY-MM" (WIB): owner sudah diberi tahu rem aktif bulan ini
+  // Operasional studio (docs/STUDIO_OPERATIONS.md): dibaca portal dan bot. Teks null = default di src/lib/studio-operations.ts
+  opsDpPercent         Int     @default(50)
+  opsRevisionQuota     Int     @default(3)
+  opsRevisionNotice    String?
+  opsSettlementNote    String?
+  opsWorkingDays       Int[]   @default([1, 2, 3, 4, 5, 6]) // 1 = Senin … 7 = Minggu
+  opsWorkingHoursStart String  @default("09:00") // WIB
+  opsWorkingHoursEnd   String  @default("17:00") // WIB
+  opsOutsideHoursNote  String?
   updatedAt DateTime @updatedAt
 
   @@map("studio_settings")
@@ -678,7 +688,8 @@ model WaIntake {
 
   // diisi admin
   agreedPrice Int?
-  dpAmount    Int? // = ceil(agreedPrice * DP_PERCENT / 100), dihitung server
+  dpAmount    Int? // = ceil(agreedPrice * dpPercent / 100), dihitung server
+  dpPercent   Int? // snapshot DP % dari Operasional saat harga disimpan; null = order lama (50)
   deadline    DateTime?
   quotedById  String?
   quotedAt    DateTime?
