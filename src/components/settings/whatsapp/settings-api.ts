@@ -16,7 +16,7 @@ export type WhatsAppUsage = {
   brakeActive: boolean;
 };
 
-export type WaChannelId = "META" | "FONNTE";
+export type WaChannelId = "META" | "FONNTE" | "KIRIMI";
 
 export type WhatsAppSettings = {
   botEnabled: boolean;

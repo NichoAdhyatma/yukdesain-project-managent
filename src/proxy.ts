@@ -17,6 +17,8 @@ const PUBLIC_PATHS = [
   "/api/whatsapp/webhook",
   // Fonnte webhook — authenticated by the secret in the URL, not session
   "/api/whatsapp/fonnte/",
+  // Kirimi webhook — authenticated by the secret in the URL, not session
+  "/api/whatsapp/kirimi/",
   // PWA: browser mengambil manifest tanpa cookie; service worker hanya menampilkan notifikasi
   "/manifest.webmanifest",
   "/sw.js",

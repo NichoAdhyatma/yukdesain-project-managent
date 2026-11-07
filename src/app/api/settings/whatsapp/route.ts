@@ -11,6 +11,18 @@ import { WA_RATE_LIMITS } from "@/lib/constants";
 
 // Pengaturan bot WhatsApp (owner). API key tidak pernah dikirim ke browser.
 
+const CHANNEL_LABELS: Record<WaChannel, string> = {
+  META: "Meta Cloud API (resmi)",
+  FONNTE: "Fonnte (tidak resmi, testing)",
+  KIRIMI: "Kirimi (tidak resmi, scan QR)",
+};
+
+const CHANNEL_ENV_HINT: Record<WaChannel, string> = {
+  META: "Env WhatsApp Cloud API belum lengkap di server",
+  FONNTE: "FONNTE_DEVICE_TOKEN, FONNTE_WEBHOOK_SECRET, atau bucket privat belum diisi di server",
+  KIRIMI: "KIRIMI_USER_CODE, KIRIMI_SECRET, KIRIMI_DEVICE_ID, KIRIMI_WEBHOOK_SECRET, atau bucket privat belum diisi di server",
+};
+
 const select = {
   waBotEnabled: true,
   waChannel: true,
@@ -51,7 +63,7 @@ async function toDto(row: Row | null) {
   });
   const active = providers.find((p) => p.id === provider)!;
   const effectiveModel = active.model || active.defaults.model;
-  const channel: WaChannel = row?.waChannel === "FONNTE" ? "FONNTE" : "META";
+  const channel: WaChannel = row?.waChannel === "FONNTE" || row?.waChannel === "KIRIMI" ? row.waChannel : "META";
   return {
     botEnabled: row?.waBotEnabled ?? false,
     // Saluran aktif siap menerima & mengirim (Meta: env Cloud API lengkap; Fonnte: token + bucket)
@@ -60,7 +72,7 @@ async function toDto(row: Row | null) {
       active: channel,
       options: WA_CHANNELS.map((id) => ({
         id,
-        label: id === "FONNTE" ? "Fonnte (tidak resmi, testing)" : "Meta Cloud API (resmi)",
+        label: CHANNEL_LABELS[id],
         configured: isChannelConfigured(id),
       })),
     },
@@ -96,7 +108,7 @@ const nullable = <T extends z.ZodType>(schema: T) =>
 
 const updateSchema = z.object({
   botEnabled: z.boolean().optional(),
-  channel: z.enum(["META", "FONNTE"]).optional(),
+  channel: z.enum(["META", "FONNTE", "KIRIMI"]).optional(),
   aiProvider: aiProviderSchema.optional(),
   aiModel: nullable(aiModelSchema),
   aiExtractionModel: nullable(aiModelSchema),
@@ -142,10 +154,7 @@ export async function PUT(request: Request) {
       {
         error: "VALIDATION_ERROR",
         fields: {
-          channel:
-            input.channel === "FONNTE"
-              ? "FONNTE_DEVICE_TOKEN, FONNTE_WEBHOOK_SECRET, atau bucket privat belum diisi di server"
-              : "Env WhatsApp Cloud API belum lengkap di server",
+          channel: CHANNEL_ENV_HINT[input.channel],
         },
       },
       { status: 400 },

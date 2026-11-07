@@ -568,6 +568,9 @@ model StudioSettings {
   // (docs/WHATSAPP_CHANNEL_FONNTE.md). waFonnteDevice = nomor perangkat Fonnte saat webhook dipasang.
   waChannel                  String  @default("META")
   waFonnteDevice             String?
+  // Kirimi (docs/WHATSAPP_CHANNEL_KIRIMI.md): langganan webhook push yang dipasang dari portal
+  waKirimiWebhookId          String?
+  waKirimiWebhookSecret      String?
   // Draft panduan bot dari owner ({ instructions, faqs }); versi terbit di WaBotGuideVersion
   waBotGuideDraft     Json?
   waBotMonthlyReplyCap  Int     @default(2000) // rem bulanan, docs/WHATSAPP_SPAM_GUARD.md §3

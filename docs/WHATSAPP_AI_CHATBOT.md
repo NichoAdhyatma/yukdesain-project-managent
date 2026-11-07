@@ -861,3 +861,9 @@ karakter dipotong untuk AI. Batas harian per nomor tetap 80. Detail: `docs/WHATS
 Owner menerima notifikasi web push (gratis, tanpa kuota pesan WhatsApp) untuk: perlu harga, bukti DP masuk, klien
 baru, dan chat menunggu admin. Order WA punya tab Inbox berisi semua chat, termasuk nomor tanpa order (balas,
 ambil alih, blokir). Detail dan langkah deploy: `docs/OWNER_NOTIFICATIONS_INBOX.md`.
+
+## 32. Saluran Kirimi (2026-11-07)
+
+Saluran ketiga (scan QR, tidak resmi) di samping Meta Cloud API dan Fonnte; dipilih di Settings › WhatsApp › Saluran.
+Perilaku sama dengan Fonnte (teks, tanpa aturan 24 jam). Detail dan langkah setelah deploy:
+`docs/WHATSAPP_CHANNEL_KIRIMI.md`.
