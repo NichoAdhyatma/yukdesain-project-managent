@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db";
-import { DP_PERCENT, WA_TEMPLATES } from "@/lib/constants";
+import { WA_TEMPLATES } from "@/lib/constants";
 import {
   deliveryErrorCode,
   getChannel,
@@ -22,7 +22,12 @@ export type OutboundMessage = {
   kind: "offer" | "dp_verified" | "dp_rejected" | "cancelled";
   text: string;
   template: { name: string; params: string[] };
+  /** false = isi template Meta tidak cocok dengan pesan ini (template penawaran tertulis "DP 50%"); jangan kirim lewat template */
+  templateMatchesText?: boolean;
 };
+
+// Isi template yd_penawaran_order yang disetujui Meta menulis DP 50% (docs/WHATSAPP_TEMPLATES.md).
+const OFFER_TEMPLATE_DP_PERCENT = 50;
 
 export type DeliveryResult =
   | { ok: true; via: "text" | "template"; messageId: string }
@@ -46,6 +51,7 @@ export function offerMessage(p: {
   serviceName: string;
   agreedPrice: number;
   dpAmount: number;
+  dpPercent: number;
   deadline: Date;
   accounts: { name: string; accountNumber: string; accountHolder: string }[];
 }): OutboundMessage {
@@ -56,10 +62,11 @@ export function offerMessage(p: {
     : "Info rekening pembayaran akan dikirim tim kami.";
   return {
     kind: "offer",
+    templateMatchesText: p.dpPercent === OFFER_TEMPLATE_DP_PERCENT,
     text: [
       `${greet(p.clientName)}, berikut penawaran untuk order *${p.serviceName}*:`,
       `• Harga: *${formatRupiah(p.agreedPrice)}*`,
-      `• DP ${DP_PERCENT}%: *${formatRupiah(p.dpAmount)}*`,
+      `• DP ${p.dpPercent}%: *${formatRupiah(p.dpAmount)}*`,
       `• Deadline: ${formatTanggal(p.deadline)}`,
       "",
       accounts,
@@ -141,6 +148,12 @@ export async function sendToClient(conversationId: string, message: OutboundMess
   if (!isChannelConfigured(channel)) {
     const saved = await store({ deliveryStatus: "failed", errorCode: "NOT_CONFIGURED" });
     return { ok: false, via: null, errorCode: "NOT_CONFIGURED", messageId: saved.id };
+  }
+  // Template penawaran tertulis DP 50%: dengan DP lain dari Operasional studio, lebih baik gagal (admin menghubungi
+  // klien manual) daripada klien menerima persen yang salah (docs/STUDIO_OPERATIONS.md §5).
+  if (via === "template" && message.templateMatchesText === false) {
+    const saved = await store({ deliveryStatus: "failed", errorCode: "TEMPLATE_DP_MISMATCH" });
+    return { ok: false, via, errorCode: "TEMPLATE_DP_MISMATCH", messageId: saved.id };
   }
 
   try {

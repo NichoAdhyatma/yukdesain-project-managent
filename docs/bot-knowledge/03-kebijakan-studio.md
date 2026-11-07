@@ -1,5 +1,8 @@
 # Kebijakan studio
 
+> Digantikan menu **Operasional studio** (2026-11-08): DP, pelunasan, kuota revisi, teks revisi, dan jam kerja desainer
+> kini dibaca bot dari sana. File ini boleh dihapus dari Panduan setelah Operasional diisi.
+
 Dipakai saat klien bertanya soal pembayaran, revisi, dan cara memantau project.
 
 ## Pembayaran

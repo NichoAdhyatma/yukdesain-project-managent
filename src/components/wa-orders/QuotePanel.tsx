@@ -8,7 +8,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { CurrencyInput } from "@/components/ui/currency-input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Label } from "@/components/ui/label";
-import { DP_PERCENT } from "@/lib/constants";
 import { formatRupiah } from "./labels";
 import { PricingRulesNotice } from "./OwnerNotes";
 import type { WaIntakeDetail } from "./types";
@@ -24,8 +23,9 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
     successMessage: requote ? "Penawaran direvisi" : "Harga disimpan",
   });
   const fields = quote.error?.fields ?? {};
-  // Hanya pratinjau; DP final dihitung server dengan rumus yang sama.
-  const dpPreview = price > 0 ? Math.ceil((price * DP_PERCENT) / 100) : null;
+  // Hanya pratinjau; DP final dihitung server dengan persen Operasional yang sama.
+  const dpPercent = intake.dpPercentForNewQuote;
+  const dpPreview = price > 0 ? Math.ceil((price * dpPercent) / 100) : null;
 
   return (
     <Card>
@@ -61,7 +61,7 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
             </div>
           </div>
           <p className="text-sm text-muted-foreground">
-            DP {DP_PERCENT}%: <span className="font-medium tabular-nums text-foreground">{formatRupiah(dpPreview)}</span>
+            DP {dpPercent}%: <span className="font-medium tabular-nums text-foreground">{formatRupiah(dpPreview)}</span>
           </p>
           <div className="flex justify-end">
             <Button type="submit" disabled={quote.isPending || price <= 0 || !deadline}>

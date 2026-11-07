@@ -45,6 +45,7 @@ vi.mock("@/lib/studio", () => ({
   getStudioSettings: async () => ({ name: "YukDesain Studio", email: "hello@x", phone: "0812", address: "Jakarta", logoUrl: "l", tagline: "t" }),
 }));
 const owners = vi.hoisted(() => ({ listOwnerNumbers: vi.fn() }));
+
 vi.mock("../owner/identity", () => owners);
 const queryStore = vi.hoisted(() => ({ findPendingQuery: vi.fn(), createOwnerQuery: vi.fn(), notifyOwners: vi.fn() }));
 vi.mock("../owner/query-store", () => queryStore);

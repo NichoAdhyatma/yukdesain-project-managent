@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@prisma/client";
 import { createProject, generateInvoiceNumber } from "./create-project";
 
+const ops = vi.hoisted(() => ({ getStudioOperations: vi.fn(async () => ({ revisionQuota: 5 })) }));
+vi.mock("@/lib/studio-operations", () => ops);
+
 vi.mock("@/lib/project-code", () => ({
   generateProjectCode: vi.fn(() => "PRJ-20261101-AAAAAA"),
 }));
@@ -44,6 +47,18 @@ const base = {
 };
 
 describe("createProject", () => {
+  it("kuota revisi di-snapshot dari Operasional saat project dibuat", async () => {
+    const db = makeDb();
+    await createProject(asDb(db), base);
+    expect(db.project.create.mock.calls[0][0].data).toMatchObject({ revisionQuota: 5 });
+  });
+
+  it("kuota revisi eksplisit dari pemanggil diutamakan", async () => {
+    const db = makeDb();
+    await createProject(asDb(db), { ...base, revisionQuota: 2 });
+    expect(db.project.create.mock.calls[0][0].data).toMatchObject({ revisionQuota: 2 });
+  });
+
   beforeEach(() => vi.clearAllMocks());
 
   it("menulis project dengan data yang sama seperti POST /api/projects lama", async () => {
@@ -59,6 +74,7 @@ describe("createProject", () => {
         ownerId: "owner_1",
         agreedPrice: 2500000,
         paidAmount: 1000000,
+        revisionQuota: 5,
         deadline: new Date("2026-12-01"),
         notes: "catatan",
         status: "DRAFT",

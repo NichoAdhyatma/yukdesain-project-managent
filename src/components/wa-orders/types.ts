@@ -80,7 +80,9 @@ export type WaIntakeDetail = {
     confirmedAt: string | null;
     editedByAdmin: boolean;
   };
-  quote: { agreedPrice: number | null; dpAmount: number | null; deadline: string | null; quotedAt: string | null };
+  quote: { agreedPrice: number | null; dpAmount: number | null; dpPercent: number | null; deadline: string | null; quotedAt: string | null };
+  /** DP % dari Operasional studio untuk penawaran yang akan disimpan */
+  dpPercentForNewQuote: number;
   pricingRulesApplied: PricingRuleApplied[];
   ownerQueries: OwnerQuery[];
   cancelReason: string | null;

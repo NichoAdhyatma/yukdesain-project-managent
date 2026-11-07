@@ -2,11 +2,13 @@ import { trimForAi } from "../spam-guard";
 import type Anthropic from "@anthropic-ai/sdk";
 import { prisma } from "@/lib/db";
 import { getStudioSettings } from "@/lib/studio";
+import { getStudioOperations } from "@/lib/studio-operations";
 import { mimeFromStorageKey, readPrivateMedia } from "../media";
 import { aiWritableBriefFields, imageTargetFields, missingRequiredFields, type BriefDraft } from "./brief-schema";
 import { buildStateBlock, buildSystemPrompt } from "./system-prompt";
 import { allowedPriceNumbers, getDraftGuide, getPublishedGuide } from "./bot-guide";
-import { ACTIVE_INTAKE_STATUSES } from "../intake";
+import { ACTIVE_INTAKE_STATUSES, snapshotDpPercent } from "../intake";
+import { DP_PERCENT } from "@/lib/constants";
 import { getAiConfig, getAnthropicClient } from "./ai-config";
 import { modelRequestOptions } from "./model-profile";
 import { INTAKE_TOOLS, executeTool, findActiveIntake } from "./tools";
@@ -94,6 +96,7 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       briefDraft: true,
       agreedPrice: true,
       dpAmount: true,
+      dpPercent: true,
       deadline: true,
       pricingRulesApplied: true,
       service: { select: { code: true, name: true } },
@@ -127,7 +130,12 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       imageTargets: code ? imageTargetFields(code) : [],
       quote:
         intake.agreedPrice !== null && intake.dpAmount !== null && intake.deadline
-          ? { agreedPrice: intake.agreedPrice, dpAmount: intake.dpAmount, deadline: intake.deadline }
+          ? {
+              agreedPrice: intake.agreedPrice,
+              dpAmount: intake.dpAmount,
+              dpPercent: snapshotDpPercent(intake) ?? DP_PERCENT,
+              deadline: intake.deadline,
+            }
           : null,
     },
     paymentAccounts,
@@ -184,7 +192,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
   // STATE dinamis. Keduanya di system prompt: kanal operator yang terpisah dari teks klien
   // dan didukung semua model Claude.
   const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: buildSystemPrompt(studio.name, guide), cache_control: { type: "ephemeral" } },
+    { type: "text", text: buildSystemPrompt(studio.name, guide, await getStudioOperations()), cache_control: { type: "ephemeral" } },
     { type: "text", text: await buildState(params.conversationId, pendingImageIds) },
   ];
 

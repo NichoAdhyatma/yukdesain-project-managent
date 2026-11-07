@@ -4,6 +4,7 @@ import {
   INTAKE_TRANSITIONS,
   IntakeError,
   computeDpAmount,
+  snapshotDpPercent,
   confirmBrief,
   nextStatus,
   transitionIntake,
@@ -64,12 +65,22 @@ describe("nextStatus", () => {
 
 describe("computeDpAmount", () => {
   it.each([
-    [2500000, 1250000],
-    [1500001, 750001],
-    [99, 50],
-    [0, 0],
-  ])("ceil(%i × 50%%) = %i", (price, dp) => {
-    expect(computeDpAmount(price)).toBe(dp);
+    [2500000, 50, 1250000],
+    [1500001, 50, 750001],
+    [99, 50, 50],
+    [0, 50, 0],
+    [1000001, 30, 300001],
+    [150000, 100, 150000],
+  ])("ceil(%i × %i persen) = %i", (price, percent, dp) => {
+    expect(computeDpAmount(price, percent)).toBe(dp);
+  });
+});
+
+describe("snapshotDpPercent (docs/STUDIO_OPERATIONS.md)", () => {
+  it("persen tersimpan dipakai; order lama yang sudah diberi harga = 50; belum diberi harga = null", () => {
+    expect(snapshotDpPercent({ dpPercent: 30, dpAmount: 45000 })).toBe(30);
+    expect(snapshotDpPercent({ dpPercent: null, dpAmount: 75000 })).toBe(50);
+    expect(snapshotDpPercent({ dpPercent: null, dpAmount: null })).toBeNull();
   });
 });
 

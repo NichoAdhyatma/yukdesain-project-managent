@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { computeDpAmount, transitionIntake } from "@/lib/whatsapp/intake";
+import { getStudioOperations } from "@/lib/studio-operations";
 import { offerMessage, sendToClient } from "@/lib/whatsapp/outbound";
 import {
   errorResponse,
@@ -52,7 +53,9 @@ export async function POST(request: Request, { params }: Params) {
   if (!intake) return errorResponse("NOT_FOUND", "Order WA tidak ditemukan");
   if (!intake.service) return errorResponse("UNPROCESSABLE_ENTITY", "Layanan order belum dipilih");
 
-  const dpAmount = computeDpAmount(agreedPrice);
+  // Penawaran baru memakai DP dari Operasional saat ini dan menyimpannya (docs/STUDIO_OPERATIONS.md).
+  const { dpPercent } = await getStudioOperations();
+  const dpAmount = computeDpAmount(agreedPrice, dpPercent);
   const deadlineDate = new Date(deadline);
 
   try {
@@ -62,14 +65,14 @@ export async function POST(request: Request, { params }: Params) {
         from: intake.status,
         action: "quote",
         actor: "ADMIN",
-        data: { agreedPrice, dpAmount, deadline: deadlineDate, quotedById: auth.user.id, quotedAt: new Date() },
+        data: { agreedPrice, dpAmount, dpPercent, deadline: deadlineDate, quotedById: auth.user.id, quotedAt: new Date() },
       });
       await logIntakeActivity(tx, {
         intakeId: id,
         actorId: auth.user.id,
         action: intake.status === "QUOTED" ? "WA_QUOTE_REVISED" : "WA_QUOTED",
         previousValue: { agreedPrice: intake.agreedPrice, deadline: intake.deadline },
-        newValue: { agreedPrice, dpAmount, deadline: deadlineDate },
+        newValue: { agreedPrice, dpAmount, dpPercent, deadline: deadlineDate },
       });
     });
   } catch (error) {
@@ -89,6 +92,7 @@ export async function POST(request: Request, { params }: Params) {
       serviceName: intake.service.name,
       agreedPrice,
       dpAmount,
+      dpPercent,
       deadline: deadlineDate,
       accounts,
     }),

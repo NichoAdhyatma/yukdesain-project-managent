@@ -29,6 +29,7 @@ const offer = offerMessage({
   serviceName: "Logo Minimalis",
   agreedPrice: 1500000,
   dpAmount: 750000,
+  dpPercent: 50,
   deadline: new Date("2026-11-15T00:00:00Z"),
   accounts: [{ name: "BCA", accountNumber: "1234567890", accountHolder: "YukDesain Studio" }],
 });
@@ -68,6 +69,8 @@ describe("isi pesan", () => {
   it("penawaran: harga, DP, deadline, rekening; parameter template sesuai urutan", () => {
     expect(offer.text).toContain("*Rp1.500.000*");
     expect(offer.text).toContain("DP 50%: *Rp750.000*");
+    const thirty = offerMessage({ clientName: "Sari", serviceName: "Logo", agreedPrice: 150000, dpAmount: 45000, dpPercent: 30, deadline: new Date(), accounts: [] });
+    expect(thirty.text).toContain("• DP 30%: *Rp45.000*");
     expect(offer.text).toContain("15 November 2026");
     expect(offer.text).toContain("• BCA 1234567890 a.n. YukDesain Studio");
     expect(offer.template).toEqual({
@@ -82,6 +85,7 @@ describe("isi pesan", () => {
       serviceName: "Logo Minimalis",
       agreedPrice: 1,
       dpAmount: 1,
+      dpPercent: 50,
       deadline: new Date(),
       accounts: [],
     });
@@ -126,6 +130,20 @@ describe("sendToClient", () => {
     await expect(sendToClient("conv_1", offer)).resolves.toMatchObject({ ok: true, via: "template" });
     expect(api.sendTemplate).toHaveBeenCalledWith("6281234567890", "yd_penawaran_order", "id", offer.template.params);
     expect(db.waMessage.create.mock.calls[0][0].data).toMatchObject({ type: "template", wamid: "wamid.TPL" });
+  });
+
+  it("lewat 24 jam dengan DP selain 50% → tidak dikirim lewat template (isi template Meta tertulis DP 50%)", async () => {
+    conversation(30);
+    const thirty = offerMessage({ clientName: "Sari", serviceName: "Logo", agreedPrice: 150000, dpAmount: 45000, dpPercent: 30, deadline: new Date(), accounts: [] });
+    await expect(sendToClient("conv_1", thirty)).resolves.toMatchObject({ ok: false, via: "template", errorCode: "TEMPLATE_DP_MISMATCH" });
+    expect(api.sendTemplate).not.toHaveBeenCalled();
+    expect(db.waMessage.create.mock.calls[0][0].data).toMatchObject({ deliveryStatus: "failed", errorCode: "TEMPLATE_DP_MISMATCH" });
+  });
+
+  it("dalam 24 jam dengan DP 30% → teks bebas tetap terkirim", async () => {
+    conversation(2);
+    const thirty = offerMessage({ clientName: "Sari", serviceName: "Logo", agreedPrice: 150000, dpAmount: 45000, dpPercent: 30, deadline: new Date(), accounts: [] });
+    await expect(sendToClient("conv_1", thirty)).resolves.toMatchObject({ ok: true, via: "text" });
   });
 
   it("klien belum pernah chat → template", async () => {

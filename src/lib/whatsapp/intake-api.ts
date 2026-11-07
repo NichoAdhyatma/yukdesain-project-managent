@@ -3,7 +3,7 @@ import type { Prisma, WaIntakeStatus } from "@prisma/client";
 import type { z } from "zod";
 import { prisma } from "@/lib/db";
 import { briefResponsesToEntries } from "@/lib/brief/responses";
-import { IntakeError, type IntakeErrorCode } from "./intake";
+import { IntakeError, snapshotDpPercent, type IntakeErrorCode } from "./intake";
 import { isWithinServiceWindow } from "./outbound";
 import { getChannel, usesServiceWindow } from "./channel";
 import { getPrivateMediaUrl } from "./media";
@@ -11,6 +11,7 @@ import { maskPhone } from "./phone";
 import { listOwnerNumbers } from "./owner/identity";
 import { getAppPublicUrl } from "./env";
 import { isPhoneReplyWamid } from "./phone-takeover";
+import { getStudioOperations } from "@/lib/studio-operations";
 
 // Bagian bersama route /api/wa-intakes/* (owner). DTO dibangun eksplisit (AGENTS.md §36).
 
@@ -223,9 +224,12 @@ export async function toDetail(row: DetailRow) {
     quote: {
       agreedPrice: row.agreedPrice,
       dpAmount: row.dpAmount,
+      // Persen DP penawaran yang sudah dikirim; penawaran baru memakai dpPercentForNewQuote
+      dpPercent: snapshotDpPercent(row),
       deadline: row.deadline,
       quotedAt: row.quotedAt,
     },
+    dpPercentForNewQuote: (await getStudioOperations()).dpPercent,
     // Aturan harga owner yang dijanjikan bot: diterapkan admin saat mengisi harga (§6)
     pricingRulesApplied: Array.isArray(row.pricingRulesApplied)
       ? (row.pricingRulesApplied as {

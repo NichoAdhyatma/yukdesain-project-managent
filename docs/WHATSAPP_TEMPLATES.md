@@ -18,6 +18,10 @@ Aturan pengajuan:
 
 ## 1. `yd_penawaran_order`
 
+> Catatan 2026-11-08: isi template ini menulis DP 50%. Bila DP di Operasional studio bukan 50%, penawaran di luar 24 jam
+> tidak dikirim lewat template (`TEMPLATE_DP_MISMATCH`, docs/STUDIO_OPERATIONS.md §5).
+
+
 Dikirim saat admin menyimpan harga + deadline.
 
 **Body:**

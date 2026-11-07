@@ -10,10 +10,15 @@ const guides = vi.hoisted(() => ({ getDraftGuide: vi.fn(), getPublishedGuide: vi
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/storage", () => ({ getClient: () => ({}) }));
 vi.mock("./bot-guide", async (orig) => ({ ...(await orig<typeof import("./bot-guide")>()), ...guides }));
+vi.mock("@/lib/studio-operations", async (orig) => {
+  const actual = await orig<typeof import("@/lib/studio-operations")>();
+  return { ...actual, getStudioOperations: async () => actual.OPERATIONS_DEFAULTS };
+});
 
 import { BRAIN_FLOW, CAPABILITY_LABELS, buildBrain, splitBaseRules } from "./brain";
 import { buildSystemPrompt } from "./system-prompt";
 import { INTAKE_TOOLS } from "./tools";
+import { OPERATIONS_DEFAULTS } from "@/lib/studio-operations";
 
 const empty = { instructions: "", faqs: [], pricingRules: [], knowledgeFiles: [] };
 const published = { ...empty, instructions: "Admin membalas 09.00-17.00." };
@@ -41,7 +46,7 @@ describe("label tampilan tetap sinkron dengan bot", () => {
   });
 
   it("aturan dasar dipecah per heading, paragraf pembuka jadi Peran", () => {
-    const sections = splitBaseRules(buildSystemPrompt("YukDesain Studio"));
+    const sections = splitBaseRules(buildSystemPrompt("YukDesain Studio", null, OPERATIONS_DEFAULTS));
     expect(sections.map((s) => s.title)).toEqual([
       "Peran",
       "Topik",
@@ -51,6 +56,7 @@ describe("label tampilan tetap sinkron dengan bot", () => {
       "Setelah ada harga (status QUOTED)",
       "Status project yang sudah berjalan",
       "Gaya",
+      "Kebijakan studio",
     ]);
     expect(sections.every((s) => s.text.length > 0)).toBe(true);
   });
@@ -59,7 +65,7 @@ describe("label tampilan tetap sinkron dengan bot", () => {
 describe("buildBrain", () => {
   it("versi terbit: prompt = yang dipakai bot untuk klien, draft ditandai berbeda", async () => {
     const brain = await buildBrain("published");
-    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", published));
+    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", published, OPERATIONS_DEFAULTS));
     expect(brain.guide.knowledgeFiles).toEqual([]);
     expect(brain.draftDiffers).toBe(true);
     expect(brain.guide.changed).toEqual({ instructions: false, knowledgeFiles: true, faqs: false, pricingRules: false });
@@ -68,7 +74,7 @@ describe("buildBrain", () => {
 
   it("draft: prompt = yang dipakai Uji bot", async () => {
     const brain = await buildBrain("draft");
-    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", draft));
+    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", draft, OPERATIONS_DEFAULTS));
     expect(brain.prompt.text).toContain("Sapa dengan kak.");
     expect(brain.guide.knowledgeFiles).toHaveLength(1);
   });
@@ -85,7 +91,7 @@ describe("buildBrain", () => {
     guides.getPublishedGuide.mockResolvedValue(null);
     const brain = await buildBrain("published");
     expect(brain.published).toBeNull();
-    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", null));
+    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", null, OPERATIONS_DEFAULTS));
     expect(brain.draftDiffers).toBe(true);
   });
 });

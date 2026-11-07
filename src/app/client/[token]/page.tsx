@@ -38,6 +38,7 @@ import { ReceiptPDF } from "@/components/invoice/ReceiptPDF";
 import { ImageViewer } from "@/components/ui/image-viewer";
 import { SubmitProgressOverlay } from "@/components/ui/submit-progress-overlay";
 import { revisionQuotaRemaining } from "@/lib/revisions/quota";
+import { REVISION_NOTICE } from "@/lib/constants";
 import type { ClientLinkDto, ClientPaymentAccountDto } from "@/lib/client-portal/link-dto";
 
 type BriefResponseItem = {
@@ -72,8 +73,6 @@ const eventConfig: Record<TimelineEvent["type"], { icon: React.ElementType; colo
   final_submitted: { icon: Star, color: "text-amber-600", bgColor: "bg-amber-100", bgColorDark: "dark:bg-amber-900" },
   final_approved: { icon: CheckCircle2, color: "text-emerald-600", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900" },
 };
-
-const MAX_REVISION_QUOTA = 3;
 
 // ── Status Config ──────────────────────────────────────────────────────────────
 
@@ -301,7 +300,7 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
           <>
             <div className="flex items-baseline gap-1 mb-2">
               <span className="text-2xl font-bold text-foreground">{remainingQuota}</span>
-              <span className="text-sm text-muted-foreground">/ {MAX_REVISION_QUOTA}x tersisa</span>
+              <span className="text-sm text-muted-foreground">/ {project.revisionQuota}x tersisa</span>
             </div>
             <p className="text-xs text-muted-foreground">Ajukan revisi jika perlu perubahan</p>
           </>
@@ -1292,10 +1291,13 @@ function RevisionForm({
   setFiles,
   onSubmit,
   onBeforeSubmit,
+  notice,
 }: {
   isOpen: boolean;
   setOpen: (v: boolean) => void;
   isSubmitting: boolean;
+  /** Peringatan revisi dari Operasional studio */
+  notice: string;
   description: string;
   setDescription: (v: string) => void;
   files: Array<{ id: string; file: File; preview?: string }>;
@@ -1316,7 +1318,7 @@ function RevisionForm({
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-xs text-amber-950 dark:text-amber-300 leading-relaxed">
-              Isi revisi se-detail mungkin. Pengajuan tidak lengkap tetap terhitung 1x.
+              {notice}
             </p>
           </div>
         </div>
@@ -1392,6 +1394,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const [activeTab, setActiveTab] = useState<"brief" | "invoice" | "payment">("brief");
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
+  const [revisionNotice, setRevisionNotice] = useState<string>(REVISION_NOTICE);
   const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
 
   useEffect(() => {
@@ -1412,6 +1415,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
       const data = await res.json();
       setLink(data.link);
       setPaymentAccounts(data.paymentAccounts || []);
+      if (typeof data.revisionNotice === "string" && data.revisionNotice) setRevisionNotice(data.revisionNotice);
     } catch {
       setError("Terjadi kesalahan");
     } finally {
@@ -1754,7 +1758,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
 
   // Tracking view
   const revisions = project?.revisions || [];
-  const remainingQuota = revisionQuotaRemaining(revisions.length);
+  const remainingQuota = revisionQuotaRemaining(revisions.length, project.revisionQuota);
   const isQuotaExhausted = remainingQuota === 0;
   const latestInvoice = project?.invoices?.[0];
   const statusCfg = projectStatusConfig[project.status] || projectStatusConfig.DRAFT;
@@ -1931,6 +1935,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             setFiles={setRevisionFiles}
             onSubmit={handleSubmitRevision}
             onBeforeSubmit={() => setIsSubmittingRevision(true)}
+            notice={revisionNotice}
           />
         </div>
 

@@ -1,5 +1,6 @@
 import type { PaymentStatus, Prisma, ProjectStatus } from "@prisma/client";
 import { generateProjectCode } from "@/lib/project-code";
+import { getStudioOperations } from "@/lib/studio-operations";
 
 // Diekstrak dari POST /api/projects supaya alur WhatsApp (approve-intake) memakai
 // logika yang sama persis. Menerima `db` berupa prisma atau transaction client.
@@ -46,6 +47,8 @@ export type CreateProjectInput = {
   // Opsional, hanya dipakai alur WA. Alur lama tidak mengirimnya → perilaku tetap.
   paymentStatus?: PaymentStatus;
   payment?: { method?: string | null; reference?: string | null; notes?: string | null };
+  // Kuota revisi gratis; kosong = nilai Operasional studio saat ini (snapshot, docs/STUDIO_OPERATIONS.md)
+  revisionQuota?: number;
 };
 
 /**
@@ -56,6 +59,7 @@ export async function createProject(db: Db, input: CreateProjectInput) {
   const { client, serviceId, ownerId, agreedPrice, paidAmount, deadline, notes } = input;
 
   const projectNumber = await generateUniqueProjectNumber(db);
+  const revisionQuota = input.revisionQuota ?? (await getStudioOperations()).revisionQuota;
 
   const project = await db.project.create({
     data: {
@@ -66,6 +70,7 @@ export async function createProject(db: Db, input: CreateProjectInput) {
       ownerId,
       agreedPrice: Math.round(agreedPrice || 0),
       paidAmount: Math.round(paidAmount || 0),
+      revisionQuota,
       deadline: new Date(deadline),
       notes,
       status: input.status ?? "DRAFT",

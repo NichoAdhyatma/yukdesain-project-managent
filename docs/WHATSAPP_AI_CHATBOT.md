@@ -37,7 +37,7 @@ Prinsip yang tetap berlaku:
 |---|---|
 | Provider | WhatsApp Cloud API (Meta), resmi |
 | Harga | **Admin** yang menentukan setelah brief dikonfirmasi klien. Bot tidak pernah menyebut atau memperkirakan harga sebelum admin mengisinya. |
-| DP | **50% dari harga** (konstanta `DP_PERCENT = 50` di `src/lib/constants/`) |
+| DP | **Persen dari harga yang diatur di Operasional studio** (default 50%, `docs/STUDIO_OPERATIONS.md`). Disimpan per order saat admin menyimpan harga, jadi penawaran yang sudah dikirim tidak berubah. |
 | Deadline | **Admin** yang menentukan, bersamaan dengan harga |
 | Validasi DP | **Admin** lewat checklist. Hasil baca AI hanya bantuan, bukan keputusan. |
 | Alur lama (form link) | Tetap ada sebagai alternatif |

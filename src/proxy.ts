@@ -44,6 +44,7 @@ const OWNER_ONLY_API = [
   "/api/wa-conversations",
   "/api/notifications",
   "/api/settings/whatsapp",
+  "/api/settings/operations",
 ];
 
 // /api/client-links/[token]/* is the public client portal.
