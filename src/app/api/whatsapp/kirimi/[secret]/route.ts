@@ -1,0 +1,106 @@
+import { NextResponse, after } from "next/server";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { prisma } from "@/lib/db";
+import { getKirimiEnv } from "@/lib/whatsapp/env";
+import { getChannel } from "@/lib/whatsapp/channel";
+import { describeKirimiPayload, parseKirimiPayload, type KirimiPayload } from "@/lib/whatsapp/kirimi-webhook";
+import { storeInboundMessage } from "@/lib/whatsapp/inbound";
+import { handleInboundMessage } from "@/lib/whatsapp/bot";
+import { expireOwnerQueries } from "@/lib/whatsapp/owner/queries";
+import { waitForBurst } from "@/lib/whatsapp/spam-guard";
+import { maskPhone } from "@/lib/whatsapp/phone";
+
+// Webhook pesan masuk Kirimi (docs/WHATSAPP_CHANNEL_KIRIMI.md). URL memuat KIRIMI_WEBHOOK_SECRET; device_id
+// dicocokkan dengan KIRIMI_DEVICE_ID. X-Kirimi-Signature dicek sebagai diagnostik sampai cara hitungnya dipastikan.
+
+export const maxDuration = 60;
+
+function secretMatches(given: string, expected: string): boolean {
+  const a = Buffer.from(given);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+/** Cocokkan signature dengan beberapa bentuk HMAC-SHA256 yang umum; hanya untuk log (belum dipaksa). */
+function signatureCheck(raw: string, signature: string | null, timestamp: string | null, secret: string | null): string {
+  if (!signature) return "tanpa signature";
+  if (!secret) return "secret langganan belum tersimpan";
+  const sig = signature.replace(/^sha256=/i, "").trim();
+  const candidates: [string, string][] = [
+    ["hex(body)", createHmac("sha256", secret).update(raw).digest("hex")],
+    ["base64(body)", createHmac("sha256", secret).update(raw).digest("base64")],
+    ...(timestamp
+      ? ([
+          ["hex(ts.body)", createHmac("sha256", secret).update(`${timestamp}.${raw}`).digest("hex")],
+          ["hex(ts+body)", createHmac("sha256", secret).update(`${timestamp}${raw}`).digest("hex")],
+        ] as [string, string][])
+      : []),
+  ];
+  const hit = candidates.find(([, v]) => v.length === sig.length && timingSafeEqual(Buffer.from(v), Buffer.from(sig)));
+  return hit ? `cocok ${hit[0]}` : "tidak cocok";
+}
+
+type Params = { params: Promise<{ secret: string }> };
+
+export async function POST(request: Request, { params }: Params) {
+  let env: ReturnType<typeof getKirimiEnv>;
+  try {
+    env = getKirimiEnv();
+  } catch {
+    return new Response("Not configured", { status: 503 });
+  }
+  const { secret } = await params;
+  if (!secretMatches(secret, env.KIRIMI_WEBHOOK_SECRET)) return new Response("Not found", { status: 404 });
+
+  const raw = await request.text();
+  let body: KirimiPayload | null = null;
+  try {
+    const parsedJson = JSON.parse(raw) as unknown;
+    body = parsedJson && typeof parsedJson === "object" && !Array.isArray(parsedJson) ? (parsedJson as KirimiPayload) : null;
+  } catch {
+    body = null;
+  }
+  if (!body) {
+    console.warn(`[kirimi] body bukan JSON objek (content-type: ${request.headers.get("content-type") ?? "-"})`);
+    return new Response("Invalid body", { status: 400 });
+  }
+
+  const eventHeader = request.headers.get("x-kirimi-event");
+  const settings = await prisma.studioSettings.findUnique({ where: { id: "default" }, select: { waKirimiWebhookSecret: true } });
+  const signature = signatureCheck(raw, request.headers.get("x-kirimi-signature"), request.headers.get("x-kirimi-timestamp"), settings?.waKirimiWebhookSecret ?? null);
+  // Bentuk data (tanpa isi pesan / nomor) untuk memastikan format Kirimi dari data asli.
+  console.info(`[kirimi] webhook ${describeKirimiPayload(body, eventHeader)} signature=${signature}`);
+
+  // Saluran lain aktif → pesan Kirimi tidak dibalas (balasan akan lewat saluran yang salah).
+  if ((await getChannel()) !== "KIRIMI") return NextResponse.json({ ok: true, ignored: "channel" });
+
+  const parsed = parseKirimiPayload(body, eventHeader);
+  if (parsed.kind === "ignored") return NextResponse.json({ ok: true, ignored: parsed.reason });
+  if (parsed.device && parsed.device !== env.KIRIMI_DEVICE_ID) {
+    console.warn("[kirimi] pesan diabaikan: device_id berbeda");
+    return NextResponse.json({ ok: true, ignored: "device" });
+  }
+
+  let id: string | null;
+  try {
+    id = await storeInboundMessage(parsed.message);
+  } catch (error) {
+    console.error("[kirimi] gagal menyimpan pesan masuk:", (error as Error).name);
+    return new Response("Error", { status: 500 });
+  }
+
+  if (id) {
+    const messageId = id;
+    after(async () => {
+      await expireOwnerQueries().catch(() => undefined);
+      // Tunggu pesan susulan: pesan beruntun dibalas sekali (docs/WHATSAPP_SPAM_GUARD.md §2).
+      await waitForBurst();
+      try {
+        await handleInboundMessage(messageId);
+      } catch (error) {
+        console.error(`[kirimi] gagal memproses pesan dari ${maskPhone(parsed.message.waId)}:`, (error as Error).name);
+      }
+    });
+  }
+  return NextResponse.json({ ok: true });
+}

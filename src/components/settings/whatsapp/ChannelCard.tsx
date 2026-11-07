@@ -32,6 +32,7 @@ const FONNTE_KEY = ["settings", "whatsapp", "fonnte"];
 const ENV_HINT: Record<WaChannelId, string> = {
   META: "token, Phone Number ID, App Secret, verify token, bucket privat",
   FONNTE: "FONNTE_DEVICE_TOKEN, FONNTE_WEBHOOK_SECRET, bucket privat",
+  KIRIMI: "KIRIMI_USER_CODE, KIRIMI_SECRET, KIRIMI_DEVICE_ID, KIRIMI_WEBHOOK_SECRET, bucket privat",
 };
 
 async function fonnteAction(action: "qr" | "disconnect" | "install-webhook") {
@@ -269,17 +270,17 @@ export function ChannelCard({ data }: { data: WhatsAppSettings }) {
       <CardHeader>
         <div className="flex flex-wrap items-center gap-2">
           <CardTitle>Saluran WhatsApp</CardTitle>
-          <Badge variant={data.channel.active === "FONNTE" ? "outline" : "secondary"}>Aktif: {activeLabel}</Badge>
+          <Badge variant={data.channel.active === "META" ? "secondary" : "outline"}>Aktif: {activeLabel}</Badge>
         </div>
         <CardDescription>
-          Jalur kirim dan terima pesan bot. Fonnte dipakai sementara untuk testing selama nomor di Meta belum disetujui;
-          semua fitur bot tetap sama.
+          Jalur kirim dan terima pesan bot. Fonnte dan Kirimi (scan QR) dipakai sementara selama nomor di Meta belum
+          disetujui; semua fitur bot tetap sama.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
         <fieldset className="space-y-2">
           <legend className="mb-2 text-sm font-medium">Saluran</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             {data.channel.options.map((o) => (
               <label
                 key={o.id}
@@ -324,6 +325,17 @@ export function ChannelCard({ data }: { data: WhatsAppSettings }) {
           </p>
         )}
 
+        {channel === "KIRIMI" && (
+          <p role="note" className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <span>
+              Kirimi (jalur scan QR) bukan jalur resmi Meta: sambungan bisa putus dan nomor bisa dibatasi WhatsApp, dan isi
+              chat lewat server Kirimi. Pakai nomor khusus. Tanpa template dan aturan 24 jam. Scan QR dilakukan di
+              dashboard Kirimi.
+            </span>
+          </p>
+        )}
+
         {dirty && (
           <div className="flex justify-end">
             <Button onClick={() => save.mutate()} disabled={save.isPending}>
@@ -331,6 +343,18 @@ export function ChannelCard({ data }: { data: WhatsAppSettings }) {
               Simpan saluran
             </Button>
           </div>
+        )}
+
+        {(channel === "KIRIMI" || data.channel.active === "KIRIMI") && (
+          <>
+            <Separator />
+            <section aria-labelledby="wa-kirimi-title" className="space-y-3">
+              <h3 id="wa-kirimi-title" className="text-sm font-medium">
+                Perangkat Kirimi
+              </h3>
+              <KirimiPanel />
+            </section>
+          </>
         )}
 
         {(channel === "FONNTE" || data.channel.active === "FONNTE") && (
@@ -346,5 +370,116 @@ export function ChannelCard({ data }: { data: WhatsAppSettings }) {
         )}
       </CardContent>
     </Card>
+  );
+}
+
+type KirimiStatus =
+  | { configured: false }
+  | {
+      configured: true;
+      deviceId: string;
+      name: string | null;
+      connected: boolean;
+      numberMasked: string | null;
+      packageName: string | null;
+      expiresAt: string | null;
+      expired: boolean;
+      aiEnabled: boolean;
+      webhookInstalled: boolean;
+    };
+
+const KIRIMI_KEY = ["settings", "whatsapp", "kirimi"];
+
+/** Status perangkat Kirimi + pasang webhook (docs/WHATSAPP_CHANNEL_KIRIMI.md). Scan QR di dashboard Kirimi. */
+function KirimiPanel() {
+  const queryClient = useQueryClient();
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery<KirimiStatus>({
+    queryKey: KIRIMI_KEY,
+    queryFn: async () => {
+      const res = await fetch("/api/settings/whatsapp/kirimi");
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message ?? "Status Kirimi tidak bisa dimuat");
+      return body;
+    },
+  });
+  const install = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/settings/whatsapp/kirimi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "install-webhook" }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message ?? "Gagal memasang webhook");
+      return body as KirimiStatus;
+    },
+    onSuccess: (next) => {
+      queryClient.setQueryData(KIRIMI_KEY, next);
+      toast("Webhook Kirimi terpasang. Pesan masuk akan dibalas bot jika saluran Kirimi aktif.", "success");
+    },
+    onError: (e) => toast(e.message, "error"),
+  });
+
+  if (isLoading) return <div className="h-16 animate-pulse rounded-lg bg-muted" aria-busy="true" />;
+  if (isError || !data) {
+    return (
+      <div className="space-y-2 text-sm">
+        <p className="text-destructive">{(error as Error | null)?.message ?? "Status Kirimi tidak bisa dimuat."}</p>
+        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isRefetching}>
+          {isRefetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          Coba lagi
+        </Button>
+      </div>
+    );
+  }
+  if (!data.configured) {
+    return <p className="text-sm text-muted-foreground">Kredensial Kirimi belum diisi di server.</p>;
+  }
+  const expires = data.expiresAt
+    ? new Date(data.expiresAt).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Jakarta" })
+    : null;
+  return (
+    <div className="space-y-3 text-sm">
+      <dl className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+        <div>
+          <dt className="text-muted-foreground">Status</dt>
+          <dd className={data.connected ? "font-medium" : "font-medium text-destructive"}>
+            {data.connected ? `Terhubung${data.numberMasked ? `: ${data.numberMasked}` : ""}` : "Tidak terhubung (scan QR di dashboard Kirimi)"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Paket</dt>
+          <dd>
+            {data.packageName ?? "-"}
+            {expires && ` · aktif sampai ${expires}`}
+            {data.expired && " · kedaluwarsa"}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Webhook</dt>
+          <dd>{data.webhookInstalled ? "Terpasang" : "Belum dipasang"}</dd>
+        </div>
+        <div>
+          <dt className="text-muted-foreground">Perangkat</dt>
+          <dd className="tabular-nums">{data.deviceId}</dd>
+        </div>
+      </dl>
+      {data.aiEnabled && (
+        <p role="note" className="flex gap-2 text-amber-700 dark:text-amber-300">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          AI bawaan Kirimi aktif di perangkat ini. Matikan di dashboard Kirimi supaya klien tidak menerima dua balasan.
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" className="max-md:h-11" disabled={!data.connected || install.isPending} onClick={() => install.mutate()}>
+          {install.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+          {data.webhookInstalled ? "Pasang ulang webhook" : "Pasang webhook"}
+        </Button>
+        <Button variant="ghost" className="max-md:h-11" disabled={isRefetching} onClick={() => refetch()}>
+          {isRefetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+          Muat ulang status
+        </Button>
+      </div>
+    </div>
   );
 }

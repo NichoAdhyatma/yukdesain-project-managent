@@ -157,6 +157,30 @@ export function isFonnteConfigured(): boolean {
   return fonnteEnvSchema.safeParse(normalize(process.env, Object.keys(fonnteEnvSchema.shape))).success;
 }
 
+// Kirimi: gateway WhatsApp scan QR, saluran ketiga (docs/WHATSAPP_CHANNEL_KIRIMI.md).
+// Kredensial dan secret webhook hanya di env, tidak pernah ke browser.
+const kirimiEnvSchema = z.object({
+  KIRIMI_USER_CODE: nonEmpty,
+  KIRIMI_SECRET: nonEmpty,
+  KIRIMI_DEVICE_ID: nonEmpty,
+  KIRIMI_WEBHOOK_SECRET: z.string().trim().min(16, "minimal 16 karakter"),
+});
+
+export type KirimiEnv = z.infer<typeof kirimiEnvSchema>;
+
+export function getKirimiEnv(): KirimiEnv {
+  const result = kirimiEnvSchema.safeParse(normalize(process.env, Object.keys(kirimiEnvSchema.shape)));
+  if (!result.success) {
+    const issues = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
+    throw new Error(`Konfigurasi Kirimi tidak valid — ${issues}`);
+  }
+  return result.data;
+}
+
+export function isKirimiConfigured(): boolean {
+  return kirimiEnvSchema.safeParse(normalize(process.env, Object.keys(kirimiEnvSchema.shape))).success;
+}
+
 /** Bucket privat untuk media WA & bukti transfer; dipakai kedua saluran. */
 export function getPrivateBucket(): string {
   const bucket = process.env.STORAGE_PRIVATE_BUCKET?.trim();
