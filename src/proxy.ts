@@ -17,6 +17,9 @@ const PUBLIC_PATHS = [
   "/api/whatsapp/webhook",
   // Fonnte webhook — authenticated by the secret in the URL, not session
   "/api/whatsapp/fonnte/",
+  // PWA: browser mengambil manifest tanpa cookie; service worker hanya menampilkan notifikasi
+  "/manifest.webmanifest",
+  "/sw.js",
 ];
 
 // API endpoints that expose owner-scoped data. Derived from the owner-only
@@ -36,6 +39,8 @@ const OWNER_ONLY_API = [
   "/api/projects",
   "/api/settings/payment-accounts",
   "/api/wa-intakes",
+  "/api/wa-conversations",
+  "/api/notifications",
   "/api/settings/whatsapp",
 ];
 

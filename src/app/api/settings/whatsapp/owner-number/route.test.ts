@@ -47,12 +47,15 @@ describe("/api/settings/whatsapp/owner-number", () => {
     expect((await put({ waNumber: "123" })).status).toBe(400);
   });
 
-  it("dipakai owner lain atau pernah order sebagai klien → 409", async () => {
+  it("dipakai owner lain → 409", async () => {
     db.user.findFirst.mockResolvedValue({ id: "u_lain" });
     expect((await put({ waNumber: "081234567890" })).status).toBe(409);
-    db.user.findFirst.mockResolvedValue(null);
-    db.waIntake.findFirst.mockResolvedValue({ id: "in_1" });
-    expect((await put({ waNumber: "081234567890" })).status).toBe(409);
     expect(db.user.update).not.toHaveBeenCalled();
+  });
+
+  it("nomor yang pernah order sebagai klien tetap boleh (owner bisa tes order dengan #klien)", async () => {
+    db.waIntake.findFirst.mockResolvedValue({ id: "in_1" });
+    expect((await put({ waNumber: "081234567890" })).status).toBe(200);
+    expect(db.user.update).toHaveBeenCalled();
   });
 });

@@ -15,7 +15,7 @@ const db = vi.hoisted(() => {
     paymentProof: { findFirst: vi.fn(), count: vi.fn(), create: vi.fn() },
     paymentAccount: { findMany: vi.fn() },
     waLookupAttempt: { count: vi.fn(), create: vi.fn() },
-    waConversation: { update: vi.fn(), findUniqueOrThrow: vi.fn() },
+    waConversation: { update: vi.fn(), updateMany: vi.fn(), findUniqueOrThrow: vi.fn() },
     waOwnerQuery: { update: vi.fn() },
     $queryRaw: vi.fn(),
     $transaction: vi.fn(),
@@ -25,6 +25,7 @@ const db = vi.hoisted(() => {
 });
 const storage = vi.hoisted(() => ({ copyToPublicBucket: vi.fn() }));
 
+vi.mock("@/lib/notifications/owner-events", () => ({ notifyNeedsQuote: vi.fn(), notifyDpProof: vi.fn(), notifyNeedsAdmin: vi.fn() }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/storage", () => storage);
 vi.mock("../env", () => ({ getWhatsAppEnv: () => ({ STORAGE_PRIVATE_BUCKET: "private-bucket" }), getPrivateBucket: () => "private-bucket" }));
@@ -75,6 +76,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   db.$transaction.mockImplementation(async (fn: (tx: typeof db) => unknown) => fn(db));
   db.waIntake.updateMany.mockResolvedValue({ count: 1 });
+  db.waConversation.updateMany.mockResolvedValue({ count: 1 });
 });
 
 describe("definisi tool", () => {
@@ -287,7 +289,7 @@ describe("tool lain", () => {
 
   it("request_human_handoff → mode HUMAN", async () => {
     await run("request_human_handoff", { reason: "minta diskon" });
-    expect(db.waConversation.update).toHaveBeenCalledWith({ where: { id: "conv_1" }, data: { mode: "HUMAN" } });
+    expect(db.waConversation.updateMany).toHaveBeenCalledWith({ where: { id: "conv_1", mode: "BOT" }, data: { mode: "HUMAN" } });
   });
 });
 
@@ -385,7 +387,7 @@ describe("submit_payment_proof", () => {
     });
     const r = await run("submit_payment_proof", { message_id: "msg_bukti" });
     expect(r.data.handedOff).toBe(true);
-    expect(db.waConversation.update).toHaveBeenCalledWith({ where: { id: "conv_1" }, data: { mode: "HUMAN" } });
+    expect(db.waConversation.updateMany).toHaveBeenCalledWith({ where: { id: "conv_1", mode: "BOT" }, data: { mode: "HUMAN" } });
     expect(db.paymentProof.create).not.toHaveBeenCalled();
   });
 });

@@ -1,3 +1,5 @@
+import { setHumanMode } from "../handoff";
+import { notifyDpProof, notifyNeedsQuote } from "@/lib/notifications/owner-events";
 import type Anthropic from "@anthropic-ai/sdk";
 import { Prisma } from "@prisma/client";
 import { createHash, randomBytes } from "node:crypto";
@@ -374,6 +376,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
   async confirm_brief(ctx, input) {
     const intake = await requireActiveIntake(ctx);
     const status = await confirmBrief(prisma, { intakeId: intake.id, summary: input.summary });
+    if (status === "AWAITING_QUOTE") void notifyNeedsQuote(ctx.conversationId);
     return ok({ status, message: "Brief tersimpan. Beri tahu klien bahwa tim akan mengirim harga dan estimasi." });
   },
 
@@ -398,7 +401,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     if (quote.agreedPrice === null || quote.dpAmount === null) return fail("Harga order belum lengkap");
 
     if (quote._count.paymentProofs >= WA_MAX_PAYMENT_PROOFS_PER_INTAKE) {
-      await prisma.waConversation.update({ where: { id: ctx.conversationId }, data: { mode: "HUMAN" } });
+      await setHumanMode(ctx.conversationId, "proof_limit");
       return ok({
         handedOff: true,
         message: "Batas pengiriman bukti tercapai. Beri tahu klien bahwa admin akan membantu langsung.",
@@ -465,6 +468,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
       });
       await transitionIntake(tx, { intakeId: intake.id, from: "QUOTED", action: "submit_proof", actor: "AI" });
     });
+    void notifyDpProof(ctx.conversationId);
 
     // Flag hanya untuk admin; tidak dikirim ke model maupun klien.
     return ok({
@@ -580,7 +584,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
   },
 
   async request_human_handoff(ctx) {
-    await prisma.waConversation.update({ where: { id: ctx.conversationId }, data: { mode: "HUMAN" } });
+    await setHumanMode(ctx.conversationId, "bot_handoff");
     return ok({
       handedOff: true,
       message: "Percakapan dialihkan ke admin. Beri tahu klien bahwa admin akan membalas secepatnya.",

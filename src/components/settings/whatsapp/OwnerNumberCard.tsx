@@ -90,7 +90,8 @@ export function OwnerNumberCard() {
         <CardDescription>
           Chat dari nomor ini ke nomor bot dianggap instruksi owner: bot merangkumnya jadi aturan dan meminta Anda
           membalas YA sebelum berlaku. Bot juga mengirim pertanyaan klien di luar katalog ke nomor ini. Gunakan nomor
-          pribadi Anda, bukan nomor bot.
+          pribadi Anda, bukan nomor bot. Untuk mencoba order seperti klien dari nomor ini, kirim <strong>#klien</strong>;
+          kirim <strong>#owner</strong> untuk kembali memberi instruksi.
         </CardDescription>
       </CardHeader>
       <CardContent>

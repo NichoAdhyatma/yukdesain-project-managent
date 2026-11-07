@@ -855,3 +855,9 @@ tinggal Saluran, Balas otomatis, Nomor owner, dan Pemakaian. Detail dan langkah 
 Pesan beruntun digabung (jeda 5 detik), rem bulanan balasan bot (default 2.000, diatur di Settings › WhatsApp ›
 Pemakaian), basa-basi setelah brief dikonfirmasi tidak dibalas, blokir nomor dari Order WA, dan teks klien > 2.000
 karakter dipotong untuk AI. Batas harian per nomor tetap 80. Detail: `docs/WHATSAPP_SPAM_GUARD.md`.
+
+## 31. Notifikasi owner dan Inbox (2026-11-07)
+
+Owner menerima notifikasi web push (gratis, tanpa kuota pesan WhatsApp) untuk: perlu harga, bukti DP masuk, klien
+baru, dan chat menunggu admin. Order WA punya tab Inbox berisi semua chat, termasuk nomor tanpa order (balas,
+ambil alih, blokir). Detail dan langkah deploy: `docs/OWNER_NOTIFICATIONS_INBOX.md`.

@@ -8,6 +8,7 @@ import { isWithinServiceWindow } from "./outbound";
 import { getChannel, usesServiceWindow } from "./channel";
 import { getPrivateMediaUrl } from "./media";
 import { maskPhone } from "./phone";
+import { listOwnerNumbers } from "./owner/identity";
 import { getAppPublicUrl } from "./env";
 
 // Bagian bersama route /api/wa-intakes/* (owner). DTO dibangun eksplisit (AGENTS.md §36).
@@ -79,7 +80,12 @@ export const listInclude = {
 type ListRow = Prisma.WaIntakeGetPayload<{ include: typeof listInclude }>;
 
 /** `serviceWindow` = saluran aktif memakai aturan 24 jam (Meta); Fonnte tidak. */
-export function toListItem(row: ListRow, serviceWindow = true) {
+/** Nomor owner aktif: order dari nomor ini adalah tes owner (#klien, docs/WHATSAPP_OWNER_COMMANDS.md §9). */
+export async function ownerNumberSet(): Promise<Set<string>> {
+  return new Set((await listOwnerNumbers()).map((o) => o.waNumber));
+}
+
+export function toListItem(row: ListRow, serviceWindow = true, ownerNumbers: ReadonlySet<string> = new Set()) {
   return {
     id: row.id,
     status: row.status,
@@ -92,6 +98,7 @@ export function toListItem(row: ListRow, serviceWindow = true) {
     pendingProofs: row._count.paymentProofs,
     conversationMode: row.conversation.mode,
     blocked: !!row.conversation.blockedAt,
+    ownerTest: ownerNumbers.has(row.conversation.waId),
     // Pertanyaan luar katalog sedang menunggu jawaban owner (docs/WHATSAPP_OWNER_COMMANDS.md §5)
     waitingForOwner: row.conversation._count.ownerQueries > 0,
     // Pesan berikutnya ke klien akan memakai template (§12.1)
@@ -166,6 +173,7 @@ async function signedUrl(key: string | null): Promise<string | null> {
 export async function toDetail(row: DetailRow) {
   const { conversation } = row;
   const serviceWindow = usesServiceWindow(await getChannel());
+  const ownerTest = (await ownerNumberSet()).has(conversation.waId);
   const messages = await Promise.all(
     [...conversation.messages].reverse().map(async (m) => ({
       id: m.id,
@@ -239,6 +247,7 @@ export async function toDetail(row: DetailRow) {
       profileName: conversation.profileName,
       mode: conversation.mode,
       blockedAt: conversation.blockedAt,
+      ownerTest,
       lastInboundAt: conversation.lastInboundAt,
       outsideServiceWindow: serviceWindow && !isWithinServiceWindow(conversation.lastInboundAt),
     },

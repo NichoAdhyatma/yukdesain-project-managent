@@ -4,6 +4,7 @@ import { deliveryErrorCode, sendTextOnChannel } from "./channel";
 import { maskPhone } from "./phone";
 import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
+import { setHumanMode } from "./handoff";
 import { clampReply, sanitizeReply, stripPriceMentions } from "./ai/reply-guard";
 
 // Bagian bersama bot: kirim/simpan balasan dan satu giliran AI → balasan ke klien.
@@ -20,6 +21,9 @@ export const BOT_REPLIES = {
   tooManyImages: "Maaf kak, gambar untuk order ini sudah banyak sekali, jadi gambar ini tidak kami simpan. Kalau masih ada gambar penting, ketik *admin* untuk dibantu tim kami.",
   dailyLimit: "Kak, percakapan hari ini sudah panjang sekali. Kami teruskan ke admin supaya bisa dibantu langsung ya.",
   monthlyCap: "Pesan kakak sudah kami terima. Admin kami akan membalas secepatnya ya.",
+  ownerClientModeOn:
+    "Mode klien aktif ✅ Mulai sekarang chat dari nomor ini dilayani seperti klien, jadi bisa tes order. Order yang dibuat diberi label *Tes owner* di Order WA. Kirim *#owner* untuk kembali memberi instruksi ke bot.",
+  ownerClientModeOff: "Mode owner aktif ✅ Chat dari nomor ini kembali dianggap instruksi ke bot. Kirim *#klien* untuk tes order lagi.",
 } satisfies Record<string, string> & Record<MediaRejection, string>;
 
 // Status sebelum admin memberi harga: balasan tidak boleh memuat harga/durasi.
@@ -57,9 +61,7 @@ export async function sendBotText(
   }
 }
 
-export async function setHumanMode(conversationId: string) {
-  await prisma.waConversation.update({ where: { id: conversationId }, data: { mode: "HUMAN" } });
-}
+export { setHumanMode } from "./handoff";
 
 /** Ada pesan masuk yang lebih baru? Giliran pesan itu yang membalas (termasuk konteks pesan ini). */
 export async function isSuperseded(conversationId: string, createdAt: Date): Promise<boolean> {
@@ -97,7 +99,7 @@ export async function replyWithAi(
             ? "refusal"
             : (error as Error).name;
       console.error(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)}: ${reason}`);
-      await setHumanMode(conversation.id);
+      await setHumanMode(conversation.id, "ai_failed");
       await sendBotText(conversation, BOT_REPLIES.busy);
       return false;
     }
@@ -116,7 +118,7 @@ export async function replyWithAi(
 
   if (!turn || !sanitized || sanitized.rejected) {
     console.error(`[whatsapp] balasan AI rusak untuk ${maskPhone(conversation.waId)}, dialihkan ke admin`);
-    await setHumanMode(conversation.id);
+    await setHumanMode(conversation.id, "ai_failed");
     await sendBotText(conversation, BOT_REPLIES.busy);
     return false;
   }

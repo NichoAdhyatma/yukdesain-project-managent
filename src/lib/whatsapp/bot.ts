@@ -6,6 +6,7 @@ import { botReplyLimitReached, checkInboundRate, imageLimitExceeded } from "./ra
 import { BOT_REPLIES, isSuperseded, replyWithAi, sendBotText, setHumanMode } from "./bot-reply";
 import { resolveOwner } from "./owner/identity";
 import { handleOwnerMessage } from "./owner/handle";
+import { notifyNewClient } from "@/lib/notifications/owner-events";
 import { SMALL_TALK_SILENT_STATUSES, getMonthlyBrake, isSmallTalk, notifyOwnersBrakeOnce } from "./spam-guard";
 
 export { BOT_REPLIES, sendBotText } from "./bot-reply";
@@ -25,7 +26,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
       body: true,
       createdAt: true,
       contextWamid: true,
-      conversation: { select: { id: true, waId: true, mode: true, isSandbox: true, blockedAt: true } },
+      conversation: { select: { id: true, waId: true, mode: true, isSandbox: true, blockedAt: true, ownerActsAsClient: true } },
     },
   });
   const { conversation } = message;
@@ -36,15 +37,36 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   // Nomor owner (atau Uji bot sebagai owner): instruksi ke bot, bukan chat klien
   // (docs/WHATSAPP_OWNER_COMMANDS.md §3).
   const owner = await resolveOwner(conversation);
+  // Owner tes sebagai klien (#klien) memakai alur klien; #owner kembali ke instruksi (docs/WHATSAPP_OWNER_COMMANDS.md §9).
+  const ownerTesting = !!owner && !conversation.isSandbox && conversation.ownerActsAsClient;
   if (owner) {
-    if (message.wamid) await markAsReadOnChannel(message.wamid).catch(() => undefined);
-    await handleOwnerMessage(message, conversation, owner);
-    return;
+    const command = !conversation.isSandbox && message.type === "text" ? ownerModeCommand(message.body) : null;
+    if (command) {
+      if (message.wamid) await markAsReadOnChannel(message.wamid).catch(() => undefined);
+      await prisma.waConversation.update({
+        where: { id: conversation.id },
+        // Masuk mode klien juga mengembalikan chat ke bot, kalau tes sebelumnya berakhir di admin.
+        data: command === "client" ? { ownerActsAsClient: true, mode: "BOT" } : { ownerActsAsClient: false },
+      });
+      await sendBotText(conversation, command === "client" ? BOT_REPLIES.ownerClientModeOn : BOT_REPLIES.ownerClientModeOff);
+      return;
+    }
+    if (!ownerTesting) {
+      if (message.wamid) await markAsReadOnChannel(message.wamid).catch(() => undefined);
+      await handleOwnerMessage(message, conversation, owner);
+      return;
+    }
   }
 
-  // Saklar dibaca langsung tanpa cache: mematikan bot harus langsung berlaku. Uji bot tetap
-  // jalan saat bot nonaktif, supaya owner bisa mencoba sebelum menyalakannya.
-  if (!conversation.isSandbox) {
+  // Nomor yang pertama kali menghubungi bot → notifikasi owner, juga saat bot nonaktif (docs/OWNER_NOTIFICATIONS_INBOX.md).
+  if (!conversation.isSandbox && !ownerTesting) {
+    const inbound = await prisma.waMessage.count({ where: { conversationId: conversation.id, direction: "INBOUND" } });
+    if (inbound === 1) void notifyNewClient(conversation.id);
+  }
+
+  // Saklar dibaca langsung tanpa cache: mematikan bot harus langsung berlaku. Uji bot dan owner yang
+  // sedang tes sebagai klien tetap jalan saat bot nonaktif, supaya owner bisa mencoba sebelum menyalakannya.
+  if (!conversation.isSandbox && !ownerTesting) {
     const settings = await prisma.studioSettings.findUnique({
       where: { id: "default" },
       select: { waBotEnabled: true },
@@ -57,7 +79,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   if (!conversation.isSandbox) {
     const brake = await getMonthlyBrake();
     if (brake.active) {
-      await setHumanMode(conversation.id);
+      await setHumanMode(conversation.id, "monthly_brake");
       await sendBotText(conversation, BOT_REPLIES.monthlyCap);
       await notifyOwnersBrakeOnce(brake).catch((error) =>
         console.error("[whatsapp] info rem bulanan gagal:", (error as Error).name),
@@ -80,7 +102,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   if (rate === "ignore") return;
 
   if (message.type === "text" && HANDOFF_KEYWORDS.has(message.body.trim().toLowerCase())) {
-    await setHumanMode(conversation.id);
+    await setHumanMode(conversation.id, "client_asked");
     await sendBotText(conversation, BOT_REPLIES.handoff);
     return;
   }
@@ -115,7 +137,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
 
   // Batas biaya: percakapan yang sangat panjang dialihkan ke admin (§17).
   if (await botReplyLimitReached(conversation.id)) {
-    await setHumanMode(conversation.id);
+    await setHumanMode(conversation.id, "daily_limit");
     await sendBotText(conversation, BOT_REPLIES.dailyLimit);
     return;
   }
@@ -129,4 +151,12 @@ async function briefAlreadyConfirmed(conversationId: string): Promise<boolean> {
     (await findActiveIntake(conversationId)) ??
     (await prisma.waIntake.findFirst({ where: { conversationId }, orderBy: { createdAt: "desc" }, select: { status: true } }));
   return !!latest && SMALL_TALK_SILENT_STATUSES.has(latest.status);
+}
+
+/** "#klien" → owner tes sebagai klien, "#owner" → kembali memberi instruksi. */
+export function ownerModeCommand(text: string): "client" | "owner" | null {
+  const t = text.trim().toLowerCase();
+  if (t === "#klien" || t === "#client") return "client";
+  if (t === "#owner") return "owner";
+  return null;
 }
