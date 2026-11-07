@@ -65,6 +65,7 @@ const detailSelect = {
   paymentStatus: true,
   finalSubmittedAt: true,
   finalApprovedAt: true,
+  revisionQuota: true,
   brief: { select: { id: true } },
   updates: {
     orderBy: { createdAt: "desc" },
@@ -99,7 +100,7 @@ function toDetail(p: Prisma.ProjectGetPayload<{ select: typeof detailSelect }>, 
       : null,
     briefSubmitted: !!p.brief,
     revisionCount: p._count.revisions,
-    revisionQuotaRemaining: revisionQuotaRemaining(p._count.revisions),
+    revisionQuotaRemaining: revisionQuotaRemaining(p._count.revisions, p.revisionQuota),
     finalSubmitted: !!p.finalSubmittedAt,
     finalApproved: !!p.finalApprovedAt,
     // Invoice hanya saat project selesai (§14)

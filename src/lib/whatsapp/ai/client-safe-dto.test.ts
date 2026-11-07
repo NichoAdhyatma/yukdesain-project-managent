@@ -25,6 +25,7 @@ const leakyRow = {
   brief: { id: "brief_1" },
   updates: [{ progress: 80, description: "Finalisasi warna logo", createdAt: new Date("2026-11-18T03:00:00Z"), authorId: "u_designer" }],
   _count: { revisions: 1 },
+  revisionQuota: 3,
   invoices: [{ invoiceNumber: "STRUK-2026-007", total: 2500000, status: "PARTIALLY_PAID", id: "inv_internal" }],
   clientLinks: [{ token: "abcdef0123456789" }],
   // ↓ tidak boleh muncul
@@ -64,6 +65,13 @@ describe("getProjectDetailByCode", () => {
     });
     const json = JSON.stringify(dto);
     for (const f of FORBIDDEN) expect(json).not.toContain(f);
+  });
+
+  it("sisa revisi dihitung dari kuota project itu sendiri, bukan nilai Operasional saat ini", async () => {
+    db.project.findUnique.mockResolvedValue({ ...leakyRow, revisionQuota: 5, _count: { revisions: 3 } });
+    expect((await getProjectDetailByCode("PRJ-20261101-ABC123"))?.revisionQuotaRemaining).toBe(2);
+    db.project.findUnique.mockResolvedValue({ ...leakyRow, revisionQuota: 3, _count: { revisions: 3 } });
+    expect((await getProjectDetailByCode("PRJ-20261101-ABC123"))?.revisionQuotaRemaining).toBe(0);
   });
 
   it("query tidak meminta field internal sama sekali", async () => {

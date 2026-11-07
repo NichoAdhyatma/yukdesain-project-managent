@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
-
-const MAX_REVISION_QUOTA = 3;
+import { revisionQuotaRemaining, revisionsUsed } from "@/lib/revisions/quota";
 
 export async function GET(
   request: Request,
@@ -16,21 +15,24 @@ export async function GET(
 
     const { id } = await params;
 
-    const revisions = await prisma.revision.findMany({
-      where: { projectId: id },
-      orderBy: { requestedAt: "desc" },
-    });
+    const [revisions, project] = await Promise.all([
+      prisma.revision.findMany({ where: { projectId: id }, orderBy: { requestedAt: "desc" } }),
+      prisma.project.findUnique({ where: { id }, select: { revisionQuota: true } }),
+    ]);
+    if (!project) {
+      return NextResponse.json({ error: "Project not found" }, { status: 404 });
+    }
 
-    // Calculate remaining quota
+    // Kuota milik project (snapshot Operasional studio, docs/STUDIO_OPERATIONS.md)
     const usedRevisions = revisions.length;
-    const remainingQuota = Math.max(0, MAX_REVISION_QUOTA - usedRevisions);
+    const remainingQuota = revisionQuotaRemaining(usedRevisions, project.revisionQuota);
 
     return NextResponse.json({
       revisions,
       quota: {
         used: usedRevisions,
         remaining: remainingQuota,
-        max: MAX_REVISION_QUOTA,
+        max: project.revisionQuota,
       },
     });
   } catch (error) {
@@ -72,17 +74,18 @@ export async function POST(
     }
 
     // Check quota
-    const usedRevisions = project.revisions.length;
-    if (usedRevisions >= MAX_REVISION_QUOTA) {
+    // revisions memuat 1 baris terakhir saja: jumlah terpakai = nomor revisi terakhir
+    const usedRevisions = revisionsUsed(project.revisions[0]?.number ?? null);
+    if (usedRevisions >= project.revisionQuota) {
       return NextResponse.json(
-        { error: "Revision quota exceeded", quota: { used: usedRevisions, remaining: 0, max: MAX_REVISION_QUOTA } },
+        { error: "Revision quota exceeded", quota: { used: usedRevisions, remaining: 0, max: project.revisionQuota } },
         { status: 403 }
       );
     }
 
     // Create revision
     const nextNumber = usedRevisions + 1;
-    const remainingQuota = MAX_REVISION_QUOTA - nextNumber;
+    const remainingQuota = project.revisionQuota - nextNumber;
 
     const revision = await prisma.revision.create({
       data: {
@@ -114,7 +117,7 @@ export async function POST(
       quota: {
         used: nextNumber,
         remaining: remainingQuota,
-        max: MAX_REVISION_QUOTA,
+        max: project.revisionQuota,
       },
     }, { status: 201 });
   } catch (error) {

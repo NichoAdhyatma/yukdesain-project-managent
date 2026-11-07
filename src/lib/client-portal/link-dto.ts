@@ -24,6 +24,7 @@ export const clientLinkSelect = {
       paymentStatus: true,
       finalSubmittedAt: true,
       finalApprovedAt: true,
+      revisionQuota: true,
       service: { select: { code: true, name: true } },
       brief: { select: { submittedAt: true, responses: true } },
       invoices: {
@@ -98,6 +99,8 @@ export type ClientProjectDto = {
   paymentStatus: string;
   finalSubmittedAt: string | null;
   finalApprovedAt: string | null;
+  /** Kuota revisi gratis project ini (snapshot Operasional studio) */
+  revisionQuota: number;
   service: { code: string; name: string };
   brief: { submittedAt: string; responses: BriefResponses } | null;
   invoices: Array<{
@@ -175,6 +178,7 @@ export function toClientLinkDto(link: ClientLinkRow): ClientLinkDto {
       paymentStatus: p.paymentStatus,
       finalSubmittedAt: isoOrNull(p.finalSubmittedAt),
       finalApprovedAt: isoOrNull(p.finalApprovedAt),
+      revisionQuota: p.revisionQuota,
       service: { code: p.service.code, name: p.service.name },
       brief: p.brief
         ? { submittedAt: iso(p.brief.submittedAt), responses: p.brief.responses as unknown as BriefResponses }

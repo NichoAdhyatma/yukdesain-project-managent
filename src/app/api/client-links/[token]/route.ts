@@ -6,6 +6,7 @@ import {
   toClientLinkDto,
   toClientPaymentAccountDto,
 } from "@/lib/client-portal/link-dto";
+import { getStudioOperations } from "@/lib/studio-operations";
 
 const linkExpired = () =>
   NextResponse.json({ error: "Link has expired", code: "LINK_EXPIRED" }, { status: 410 });
@@ -50,8 +51,11 @@ export async function GET(
     });
 
     // ACTIVE, LOCKED and SUBMITTED links all return tracking data
+    // Peringatan revisi dari Operasional studio (docs/STUDIO_OPERATIONS.md)
+    const { revisionNotice } = await getStudioOperations();
     return NextResponse.json({
       link: toClientLinkDto(link),
+      revisionNotice,
       paymentAccounts: paymentAccounts.map(toClientPaymentAccountDto),
     });
   } catch (error) {

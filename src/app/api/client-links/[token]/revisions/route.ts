@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-
-const MAX_REVISION_QUOTA = 3;
+import { revisionsUsed } from "@/lib/revisions/quota";
 
 export async function POST(
   request: Request,
@@ -39,9 +38,9 @@ export async function POST(
     }
 
     const project = link.project;
-    const latestRevision = project.revisions[0];
-    const maxRevisionNumber = latestRevision?.number ?? 0;
-    const usedRevisions = latestRevision ? 1 : 0;
+    // Kuota milik project (snapshot Operasional studio, docs/STUDIO_OPERATIONS.md)
+    const maxRevisions = project.revisionQuota;
+    const usedRevisions = revisionsUsed(project.revisions[0]?.number ?? null);
 
     // Block if already final approved
     if (project.finalApprovedAt) {
@@ -52,9 +51,9 @@ export async function POST(
     }
 
     // Check quota
-    if (usedRevisions >= MAX_REVISION_QUOTA) {
+    if (usedRevisions >= maxRevisions) {
       return NextResponse.json(
-        { error: "Revision quota exceeded", quota: { used: usedRevisions, remaining: 0, max: MAX_REVISION_QUOTA } },
+        { error: "Revision quota exceeded", quota: { used: usedRevisions, remaining: 0, max: maxRevisions } },
         { status: 403 }
       );
     }
@@ -80,8 +79,8 @@ export async function POST(
     }
 
     // Create revision
-    const nextNumber = maxRevisionNumber + 1;
-    const remainingQuota = MAX_REVISION_QUOTA - nextNumber;
+    const nextNumber = usedRevisions + 1;
+    const remainingQuota = maxRevisions - nextNumber;
 
     const revision = await prisma.revision.create({
       data: {
@@ -101,7 +100,7 @@ export async function POST(
       quota: {
         used: nextNumber,
         remaining: remainingQuota,
-        max: MAX_REVISION_QUOTA,
+        max: maxRevisions,
       },
     }, { status: 201 });
   } catch (error) {

@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db", () => ({ prisma: mocks.db }));
+vi.mock("@/lib/studio-operations", () => ({
+  getStudioOperations: vi.fn(async () => ({ revisionNotice: "Isi revisi selengkap mungkin ya kak." })),
+}));
 
 import { GET } from "./route";
 
@@ -63,6 +66,7 @@ function rawLink(status: string, expiresAt: Date | null = null) {
       notes: SECRETS.notes,
       finalSubmittedAt: null,
       finalApprovedAt: null,
+      revisionQuota: 3,
       createdAt: new Date("2026-10-01T00:00:00.000Z"),
       updatedAt: new Date("2026-10-02T00:00:00.000Z"),
       client: {
@@ -240,6 +244,7 @@ describe("GET /api/client-links/[token]", () => {
           paymentStatus: "DP",
           finalSubmittedAt: null,
           finalApprovedAt: null,
+          revisionQuota: 3,
           service: { code: "SVC-01", name: "Logo Design" },
           brief: { submittedAt: submittedAt.toISOString(), responses: { brandName: "Kopi Budi" } },
           invoices: [
@@ -275,6 +280,7 @@ describe("GET /api/client-links/[token]", () => {
           ],
         },
       },
+      revisionNotice: "Isi revisi selengkap mungkin ya kak.",
       paymentAccounts: [
         {
           id: "acc_1",

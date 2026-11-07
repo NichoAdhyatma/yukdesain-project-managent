@@ -13,6 +13,8 @@ const db = vi.hoisted(() => {
 });
 const session = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
 const outbound = vi.hoisted(() => ({ sendToClient: vi.fn() }));
+const ops = vi.hoisted(() => ({ dpPercent: 50 }));
+vi.mock("@/lib/studio-operations", () => ({ getStudioOperations: async () => ({ dpPercent: ops.dpPercent }) }));
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/auth/session", () => session);
@@ -74,6 +76,17 @@ describe("POST quote", () => {
     expect(convId).toBe("conv_1");
     expect(message.template.params).toEqual(["Sari", "Logo Minimalis", "Rp1.500.001", "Rp750.001", expect.any(String)]);
     expect(await res.json()).toMatchObject({ delivery: { ok: true }, warnings: [] });
+  });
+
+  it("DP mengikuti Operasional studio dan persennya disimpan di order (docs/STUDIO_OPERATIONS.md)", async () => {
+    ops.dpPercent = 30;
+    intake("AWAITING_QUOTE");
+    const res = await quote(req({ agreedPrice: 1500001, deadline: tomorrow }), ctx);
+    ops.dpPercent = 50;
+    expect(res.status).toBe(200);
+    expect(db.waIntake.updateMany.mock.calls[0][0].data).toMatchObject({ dpAmount: 450001, dpPercent: 30 });
+    const [, message] = outbound.sendToClient.mock.calls[0];
+    expect(message.text).toContain("• DP 30%: *Rp450.001*");
   });
 
   it("revisi harga saat QUOTED dicatat sebagai WA_QUOTE_REVISED", async () => {
