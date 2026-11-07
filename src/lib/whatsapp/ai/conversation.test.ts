@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
+import { OPERATIONS_DEFAULTS } from "@/lib/studio-operations";
 
 const create = vi.hoisted(() => vi.fn());
 const db = vi.hoisted(() => ({
@@ -259,7 +260,8 @@ describe("runAiTurn", () => {
     expect(system[0].text).toContain("- Logo Minimalis (SVC-01): mulai Rp150.000 (termasuk 3 konsep)");
     expect(system[0].text).not.toContain("tanya media pemakaian");
     expect(stateOf()).toContain("Catatan internal untuk kamu (jangan dikutip ke klien): tanya media pemakaian");
-    expect(result.catalogPriceNumbers).toEqual(["150000", "3"]);
+    expect(result.guardExtras.catalogGroups).toEqual([["150000", "termasuk 3 konsep"]]);
+    expect(result.guardExtras.policyNumbers).toContain(OPERATIONS_DEFAULTS.revisionNotice);
   });
 });
 

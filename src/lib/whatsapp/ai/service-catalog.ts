@@ -59,12 +59,11 @@ export async function getBotServiceCatalog(): Promise<BotService[]> {
   return services.filter((s) => getBriefConfig(s.code));
 }
 
-const digitsOf = (s: string) => (s.match(/\d[\d.,]*/g) ?? []).map((n) => n.replace(/[.,]/g, ""));
-
 /**
- * Angka katalog untuk penjaga harga: harga mulai dan semua angka di catatan harga ("termasuk 3 konsep").
- * Penjaga memakainya hanya untuk kalimat harga, bukan lama pengerjaan (reply-guard `catalogNumbers`).
+ * Angka katalog untuk penjaga harga, satu kelompok per layanan yang punya harga mulai: harga mulai + teks catatan
+ * harga (dinormalkan penjaga lewat amountsOf). Kalimat bot hanya lolos bila semua angkanya dari satu kelompok
+ * (reply-guard `catalogGroups`), jadi harga layanan lain tidak bisa dicampur menjadi total.
  */
-export function servicePriceNumbers(services: Pick<BotService, "startingPrice" | "priceNote">[]): string[] {
-  return services.flatMap((s) => [...(s.startingPrice ? [String(s.startingPrice)] : []), ...digitsOf(s.priceNote ?? "")]);
+export function servicePriceGroups(services: Pick<BotService, "startingPrice" | "priceNote">[]): string[][] {
+  return services.filter((s) => s.startingPrice).map((s) => [String(s.startingPrice), ...(s.priceNote ? [s.priceNote] : [])]);
 }

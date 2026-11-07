@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({ service: { findMany: vi.fn() } }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 
-import { getBotServiceCatalog, serviceBotFieldsSchema, servicePriceNumbers, type BotService } from "./service-catalog";
+import { getBotServiceCatalog, serviceBotFieldsSchema, servicePriceGroups, type BotService } from "./service-catalog";
 
 const svc = (over: Partial<BotService>): BotService => ({
   code: "SVC-01",
@@ -50,8 +50,11 @@ describe("getBotServiceCatalog", () => {
   });
 });
 
-describe("servicePriceNumbers", () => {
-  it("harga mulai dan semua angka di catatan harga (penjaga memakainya hanya untuk kalimat harga)", () => {
-    expect(servicePriceNumbers([svc({ startingPrice: 150000, priceNote: "A3 mulai Rp200.000" }), svc({})])).toEqual(["150000", "3", "200000"]);
+describe("servicePriceGroups", () => {
+  it("satu kelompok per layanan berharga: harga mulai + teks catatan harga", () => {
+    expect(servicePriceGroups([svc({ startingPrice: 150000, priceNote: "A3 mulai Rp200.000" }), svc({}), svc({ startingPrice: 300000 })])).toEqual([
+      ["150000", "A3 mulai Rp200.000"],
+      ["300000"],
+    ]);
   });
 });

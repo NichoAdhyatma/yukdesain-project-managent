@@ -124,7 +124,7 @@ export async function replyWithAi(
   }
 
   const safe = PRE_QUOTE_STATUSES.has(turn.intakeStatus)
-    ? stripPriceMentions(sanitized.text, turn.briefText, turn.allowedPriceNumbers, turn.catalogPriceNumbers).text
+    ? stripPriceMentions(sanitized.text, turn.briefText, turn.allowedPriceNumbers, turn.guardExtras).text
     : sanitized.text;
   const sent = await sendBotText(conversation, clampReply(safe));
   if (sent) {
