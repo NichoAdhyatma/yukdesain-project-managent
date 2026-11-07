@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { getPublicUrl } from "@/lib/storage";
+
+type StoredAttachment = { storageKey: string };
+
+/** URL publik dihitung di server: env storage tidak tersedia di browser. */
+function withUrl<T extends StoredAttachment>(attachment: T): T & { url: string } {
+  return { ...attachment, url: getPublicUrl(attachment.storageKey) };
+}
 
 export async function GET() {
   try {
@@ -32,6 +40,7 @@ export async function GET() {
             },
             revisions: {
               orderBy: { requestedAt: "desc" },
+              include: { attachments: { orderBy: { createdAt: "asc" } } },
             },
           },
         },
@@ -39,7 +48,19 @@ export async function GET() {
       orderBy: { assignedAt: "desc" },
     });
 
-    return NextResponse.json({ projects: projects.map((a) => a.project) });
+    return NextResponse.json({
+      projects: projects.map(({ project }) => ({
+        ...project,
+        updates: project.updates.map((u) => ({
+          ...u,
+          attachment: u.attachment ? withUrl(u.attachment) : null,
+        })),
+        revisions: project.revisions.map((r) => ({
+          ...r,
+          attachments: r.attachments.map(withUrl),
+        })),
+      })),
+    });
   } catch (error) {
     console.error("Error fetching designer projects:", error);
     return NextResponse.json({ error: "Failed to fetch projects" }, { status: 500 });
