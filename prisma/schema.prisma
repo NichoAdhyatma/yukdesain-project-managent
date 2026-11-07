@@ -158,9 +158,29 @@ model User {
   // Unik dicek di API (bukan @unique): db push di deploy tidak memakai --accept-data-loss.
   waNumber           String?
   waOwnerProposals   WaOwnerProposal[]
+  // Notifikasi web push (docs/OWNER_NOTIFICATIONS_INBOX.md): kejadian yang dimatikan user; null = semua aktif
+  notifyPrefs        Json?
+  pushSubscriptions  WebPushSubscription[]
 
   @@index([waNumber])
   @@map("users")
+}
+
+// Langganan web push per perangkat/browser (docs/OWNER_NOTIFICATIONS_INBOX.md §2).
+model WebPushSubscription {
+  id         String   @id @default(cuid())
+  userId     String
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastUsedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("web_push_subscriptions")
 }
 
 // ============================================

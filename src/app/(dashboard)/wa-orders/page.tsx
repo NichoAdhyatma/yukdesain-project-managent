@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { WaInbox } from "@/components/wa-orders/WaInbox";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { Ban, ChevronLeft, ChevronRight, Clock, Loader2, RotateCcw, UserRound } from "lucide-react";
@@ -23,7 +25,7 @@ const EMPTY_TEXT: Record<WaIntakeStatus, string> = {
   CANCELLED: "Tidak ada order yang dibatalkan.",
 };
 
-export default function WaOrdersPage() {
+function OrderList() {
   const [status, setStatus] = useState<WaIntakeStatus>("DP_REVIEW");
   const [page, setPage] = useState(1);
 
@@ -49,15 +51,7 @@ export default function WaOrdersPage() {
   });
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="border-b p-6">
-        <h1 className="text-2xl font-semibold">Order WhatsApp</h1>
-        <p className="text-sm text-muted-foreground">
-          Brief dari asisten WhatsApp. Harga, deadline, dan validasi DP diputuskan di sini.
-        </p>
-      </div>
-
-      <div className="flex-1 space-y-4 overflow-auto p-6">
+    <div className="space-y-4">
         {settings?.usage && <UsageWarning usage={settings.usage} />}
 
         <div role="group" aria-label="Filter status order" className="flex flex-wrap gap-2">
@@ -206,7 +200,56 @@ export default function WaOrdersPage() {
             </Button>
           </div>
         )}
+    </div>
+  );
+}
+
+// Tab Order (daftar order) dan Inbox (semua chat, docs/OWNER_NOTIFICATIONS_INBOX.md §3). Tab ada di URL (?tab=inbox).
+export default function WaOrdersPage() {
+  return (
+    <Suspense>
+      <WaOrdersContent />
+    </Suspense>
+  );
+}
+
+function WaOrdersContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get("tab") === "inbox" ? "inbox" : "orders";
+  const tabs = [
+    { id: "orders", label: "Order" },
+    { id: "inbox", label: "Inbox" },
+  ] as const;
+  return (
+    <div className="flex h-full flex-col">
+      <div className="space-y-4 border-b p-6">
+        <div>
+          <h1 className="text-2xl font-semibold">Order WhatsApp</h1>
+          <p className="text-sm text-muted-foreground">
+            {tab === "inbox"
+              ? "Semua chat WhatsApp, termasuk nomor yang belum punya order."
+              : "Brief dari asisten WhatsApp. Harga, deadline, dan validasi DP diputuskan di sini."}
+          </p>
+        </div>
+        <div role="group" aria-label="Tampilan Order WhatsApp" className="inline-flex rounded-lg border p-0.5">
+          {tabs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              aria-pressed={tab === t.id}
+              onClick={() => router.replace(t.id === "inbox" ? "/wa-orders?tab=inbox" : "/wa-orders", { scroll: false })}
+              className={cn(
+                "min-h-9 rounded-md px-4 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50 max-md:min-h-11",
+                tab === t.id ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted",
+              )}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
+      <div className="flex-1 overflow-auto p-6">{tab === "inbox" ? <WaInbox /> : <OrderList />}</div>
     </div>
   );
 }

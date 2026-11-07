@@ -6,6 +6,7 @@ import { botReplyLimitReached, checkInboundRate, imageLimitExceeded } from "./ra
 import { BOT_REPLIES, isSuperseded, replyWithAi, sendBotText, setHumanMode } from "./bot-reply";
 import { resolveOwner } from "./owner/identity";
 import { handleOwnerMessage } from "./owner/handle";
+import { notifyNewClient } from "@/lib/notifications/owner-events";
 import { SMALL_TALK_SILENT_STATUSES, getMonthlyBrake, isSmallTalk, notifyOwnersBrakeOnce } from "./spam-guard";
 
 export { BOT_REPLIES, sendBotText } from "./bot-reply";
@@ -57,6 +58,12 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
     }
   }
 
+  // Nomor yang pertama kali menghubungi bot → notifikasi owner, juga saat bot nonaktif (docs/OWNER_NOTIFICATIONS_INBOX.md).
+  if (!conversation.isSandbox && !ownerTesting) {
+    const inbound = await prisma.waMessage.count({ where: { conversationId: conversation.id, direction: "INBOUND" } });
+    if (inbound === 1) void notifyNewClient(conversation.id);
+  }
+
   // Saklar dibaca langsung tanpa cache: mematikan bot harus langsung berlaku. Uji bot dan owner yang
   // sedang tes sebagai klien tetap jalan saat bot nonaktif, supaya owner bisa mencoba sebelum menyalakannya.
   if (!conversation.isSandbox && !ownerTesting) {
@@ -72,7 +79,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   if (!conversation.isSandbox) {
     const brake = await getMonthlyBrake();
     if (brake.active) {
-      await setHumanMode(conversation.id);
+      await setHumanMode(conversation.id, "monthly_brake");
       await sendBotText(conversation, BOT_REPLIES.monthlyCap);
       await notifyOwnersBrakeOnce(brake).catch((error) =>
         console.error("[whatsapp] info rem bulanan gagal:", (error as Error).name),
@@ -95,7 +102,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   if (rate === "ignore") return;
 
   if (message.type === "text" && HANDOFF_KEYWORDS.has(message.body.trim().toLowerCase())) {
-    await setHumanMode(conversation.id);
+    await setHumanMode(conversation.id, "client_asked");
     await sendBotText(conversation, BOT_REPLIES.handoff);
     return;
   }
@@ -130,7 +137,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
 
   // Batas biaya: percakapan yang sangat panjang dialihkan ke admin (§17).
   if (await botReplyLimitReached(conversation.id)) {
-    await setHumanMode(conversation.id);
+    await setHumanMode(conversation.id, "daily_limit");
     await sendBotText(conversation, BOT_REPLIES.dailyLimit);
     return;
   }

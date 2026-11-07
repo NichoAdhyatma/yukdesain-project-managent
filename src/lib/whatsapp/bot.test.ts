@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   waMessage: { findUniqueOrThrow: vi.fn(), create: vi.fn(), count: vi.fn() },
-  waConversation: { update: vi.fn() },
+  waConversation: { update: vi.fn(), updateMany: vi.fn() },
   waIntake: { findFirst: vi.fn() },
   studioSettings: { findUnique: vi.fn() },
   waOwnerQuery: { updateMany: vi.fn() },
@@ -19,6 +19,8 @@ const limits = vi.hoisted(() => ({
 const tools = vi.hoisted(() => ({ findActiveIntake: vi.fn() }));
 const guard = vi.hoisted(() => ({ getMonthlyBrake: vi.fn(), notifyOwnersBrakeOnce: vi.fn() }));
 
+const notify = vi.hoisted(() => ({ notifyNewClient: vi.fn(), notifyNeedsAdmin: vi.fn(), notifyNeedsQuote: vi.fn(), notifyDpProof: vi.fn() }));
+vi.mock("@/lib/notifications/owner-events", () => notify);
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("./client-api", async (orig) => ({
   ...(await orig<typeof import("./client-api")>()),
@@ -57,7 +59,7 @@ const aiReply = (reply: string | null, intakeStatus: string | null = "COLLECTING
 
 const sentBodies = () => api.sendText.mock.calls.map(([, body]) => body);
 const humanModeSet = () =>
-  db.waConversation.update.mock.calls.some(([arg]) => arg.data?.mode === "HUMAN");
+  db.waConversation.updateMany.mock.calls.some(([arg]) => arg.data?.mode === "HUMAN");
 
 describe("handleInboundMessage", () => {
   beforeEach(() => {
@@ -69,6 +71,7 @@ describe("handleInboundMessage", () => {
     api.sendText.mockResolvedValue("wamid.OUT");
     api.markAsRead.mockResolvedValue(undefined);
     guard.getMonthlyBrake.mockResolvedValue({ cap: 2000, used: 10, active: false, month: "2026-11" });
+    db.waConversation.updateMany.mockResolvedValue({ count: 1 });
     guard.notifyOwnersBrakeOnce.mockResolvedValue(undefined);
     aiReply("Halo kak, mau desain apa?");
     limits.checkInboundRate.mockResolvedValue("ok");
@@ -194,7 +197,8 @@ describe("handleInboundMessage", () => {
 
   it("pesan baru masuk selama AI berpikir → balasan tidak dikirim", async () => {
     givenMessage("text");
-    db.waMessage.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    // 1: jumlah pesan masuk (cek klien baru), 2: belum ada pesan lebih baru, 3: ada pesan baru setelah AI selesai
+    db.waMessage.count.mockResolvedValueOnce(3).mockResolvedValueOnce(0).mockResolvedValueOnce(1);
     await handleInboundMessage("msg_1");
     expect(ai.runAiTurn).toHaveBeenCalled();
     expect(api.sendText).not.toHaveBeenCalled();
@@ -273,6 +277,41 @@ describe("handleInboundMessage", () => {
     await handleInboundMessage("msg_1");
     expect(ai.runAiTurn).toHaveBeenCalledTimes(2);
     expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
+  });
+
+  describe("notifikasi owner (docs/OWNER_NOTIFICATIONS_INBOX.md)", () => {
+    it("pesan pertama dari nomor baru → notifikasi klien baru, juga saat bot nonaktif", async () => {
+      givenMessage("text");
+      db.waMessage.count.mockResolvedValue(1);
+      db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
+      await handleInboundMessage("msg_1");
+      expect(notify.notifyNewClient).toHaveBeenCalledWith("conv_1");
+    });
+
+    it("bukan pesan pertama → tanpa notifikasi klien baru", async () => {
+      givenMessage("text");
+      db.waMessage.count.mockResolvedValue(4);
+      await handleInboundMessage("msg_1");
+      expect(notify.notifyNewClient).not.toHaveBeenCalled();
+    });
+
+    it("klien minta admin → notifikasi menunggu admin (hanya jika chat baru pindah dari bot)", async () => {
+      givenMessage("text", "admin");
+      await handleInboundMessage("msg_1");
+      expect(notify.notifyNeedsAdmin).toHaveBeenCalledWith("conv_1", "client_asked");
+      vi.clearAllMocks();
+      db.waConversation.updateMany.mockResolvedValue({ count: 0 });
+      givenMessage("text", "admin");
+      await handleInboundMessage("msg_1");
+      expect(notify.notifyNeedsAdmin).not.toHaveBeenCalled();
+    });
+
+    it("AI gagal → notifikasi menunggu admin", async () => {
+      givenMessage("text");
+      ai.runAiTurn.mockRejectedValue(new Error("boom"));
+      await handleInboundMessage("msg_1");
+      expect(notify.notifyNeedsAdmin).toHaveBeenCalledWith("conv_1", "ai_failed");
+    });
   });
 
   describe("owner tes sebagai klien (#klien / #owner)", () => {

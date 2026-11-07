@@ -4,6 +4,7 @@ import { deliveryErrorCode, sendTextOnChannel } from "./channel";
 import { maskPhone } from "./phone";
 import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
+import { setHumanMode } from "./handoff";
 import { clampReply, sanitizeReply, stripPriceMentions } from "./ai/reply-guard";
 
 // Bagian bersama bot: kirim/simpan balasan dan satu giliran AI → balasan ke klien.
@@ -60,9 +61,7 @@ export async function sendBotText(
   }
 }
 
-export async function setHumanMode(conversationId: string) {
-  await prisma.waConversation.update({ where: { id: conversationId }, data: { mode: "HUMAN" } });
-}
+export { setHumanMode } from "./handoff";
 
 /** Ada pesan masuk yang lebih baru? Giliran pesan itu yang membalas (termasuk konteks pesan ini). */
 export async function isSuperseded(conversationId: string, createdAt: Date): Promise<boolean> {
@@ -100,7 +99,7 @@ export async function replyWithAi(
             ? "refusal"
             : (error as Error).name;
       console.error(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)}: ${reason}`);
-      await setHumanMode(conversation.id);
+      await setHumanMode(conversation.id, "ai_failed");
       await sendBotText(conversation, BOT_REPLIES.busy);
       return false;
     }
@@ -119,7 +118,7 @@ export async function replyWithAi(
 
   if (!turn || !sanitized || sanitized.rejected) {
     console.error(`[whatsapp] balasan AI rusak untuk ${maskPhone(conversation.waId)}, dialihkan ke admin`);
-    await setHumanMode(conversation.id);
+    await setHumanMode(conversation.id, "ai_failed");
     await sendBotText(conversation, BOT_REPLIES.busy);
     return false;
   }

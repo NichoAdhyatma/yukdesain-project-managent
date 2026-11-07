@@ -24,7 +24,7 @@ export async function relayOwnerAnswer(queryId: string): Promise<boolean> {
   const { conversation } = query;
   if (conversation.mode === "HUMAN") return false;
   if (!conversation.isSandbox && usesServiceWindow(await getChannel()) && !isWithinServiceWindow(conversation.lastInboundAt)) {
-    await setHumanMode(conversation.id);
+    await setHumanMode(conversation.id, "owner_timeout");
     return false;
   }
   const anchor = await prisma.waMessage.findFirst({
@@ -44,7 +44,7 @@ export async function expireOwnerQueries(now = new Date()): Promise<number> {
   });
   for (const q of stale) {
     const { count } = await prisma.waOwnerQuery.updateMany({ where: { id: q.id, status: "PENDING" }, data: { status: "EXPIRED" } });
-    if (count === 1 && !q.conversation.isSandbox) await setHumanMode(q.conversationId);
+    if (count === 1 && !q.conversation.isSandbox) await setHumanMode(q.conversationId, "owner_timeout");
   }
   return stale.length;
 }

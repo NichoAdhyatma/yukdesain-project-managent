@@ -1,0 +1,92 @@
+# Notifikasi Owner (Web Push) dan Inbox Chat WhatsApp
+
+Supaya owner/admin cepat bertindak tanpa harus membuka portal terus. Disetujui dan diimplementasikan 2026-11-07
+(checkpoint 053). Ikon: logo studio dari Settings › General (keputusan owner).
+
+## 1. Keputusan owner (2026-11-07)
+
+1. **Saluran: notifikasi web push** (seperti notifikasi aplikasi di HP/laptop). **Bukan lewat WhatsApp**, karena pesan
+   ke owner memakai kuota pesan Meta dan di luar 24 jam harus template berbayar.
+2. **Kejadian yang dinotifikasi** (keempatnya):
+   - Brief lengkap → **Perlu harga**
+   - **Bukti DP masuk** → perlu dicek
+   - **Klien baru** mulai chat (nomor yang pertama kali menghubungi bot)
+   - **Chat dialihkan ke admin** (klien ketik "admin", AI gagal/"sibuk", batas harian, rem bulanan)
+3. **Inbox baru** berisi semua chat WhatsApp, termasuk nomor yang belum punya order.
+
+## 2. Notifikasi web push
+
+**Mengaktifkan** (sekali per perangkat): Settings › Notifications › **Aktifkan di perangkat ini** → browser meminta izin
+→ selesai. Bisa di laptop (Chrome/Edge/Firefox/Safari) dan HP:
+- **Android (Chrome)**: langsung bisa.
+- **iPhone/iPad**: buka portal di Safari → Bagikan → **Tambah ke Layar Utama**, buka dari ikon itu, lalu aktifkan.
+  (Batasan Apple: web push di iOS hanya untuk web yang dipasang di Layar Utama, iOS 16.4+.)
+
+**Isi notifikasi** (tanpa nomor lengkap dan tanpa isi bukti transfer):
+
+| Kejadian | Contoh |
+|---|---|
+| Perlu harga | "Perlu harga: Nico · Logo Minimalis" |
+| Bukti DP masuk | "Bukti DP masuk: Nico · Logo Minimalis" |
+| Klien baru | "Klien baru chat: Sari (6281****7890)" |
+| Dialihkan ke admin | "Chat menunggu admin: Sari · klien minta admin" |
+
+Klik notifikasi → membuka order atau chat yang bersangkutan di portal.
+
+**Pengaturan** (per user, per kejadian): di Settings › Notifications, keempat kejadian bisa dinyalakan/dimatikan.
+Tab Notifications yang sekarang (Order Baru, Brief Submitted, Pembayaran) masih berupa tampilan tanpa fungsi; diganti
+dengan pengaturan yang benar-benar dipakai ini.
+
+**Tidak dikirim** untuk: Uji bot, order tes owner (#klien), nomor yang diblokir. Penerima: user OWNER yang sudah
+mengaktifkan notifikasi di perangkatnya (bisa beberapa perangkat).
+
+**Biaya**: gratis (memakai layanan push bawaan browser: Google, Apple, Mozilla).
+
+## 3. Inbox chat
+
+Menu **Order WA** mendapat dua tab: **Order** (daftar yang sekarang) dan **Inbox**.
+
+- **Inbox**: semua percakapan WhatsApp (bukan Uji bot), terbaru di atas: nama/nomor tersamar, potongan pesan terakhir,
+  waktu, status (**Bot** / **Admin** / **Diblokir**), label **Tes owner**, dan tautan ke order aktif jika ada.
+- Filter: Semua · Menunggu admin · Belum ada order · Diblokir. Pencarian nama/nomor.
+- Klik percakapan → riwayat chat lengkap dengan tombol yang sama seperti di order: balas manual, ambil alih /
+  kembalikan ke bot, blokir / buka blokir. Jadi nomor spam yang **belum punya order** kini juga bisa diblokir.
+- Diperbarui otomatis setiap ±20 detik saat terbuka.
+
+## 4. Perubahan teknis (ringkas)
+
+| Bagian | Perubahan |
+|---|---|
+| Dependensi | `web-push` (kirim push dari server, standar VAPID) |
+| Env (rahasia, di VPS) | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (mailto studio); dibuat di server, tidak lewat chat |
+| Schema (additive) | model `WebPushSubscription` (userId, endpoint unik, kunci p256dh/auth, perangkat, dibuat/terakhir dipakai); `User.notifyPrefs Json?` |
+| PWA | `public/sw.js` (service worker: tampilkan notifikasi + buka tautan), `manifest.webmanifest` (nama, warna, ikon) |
+| API | `POST/DELETE /api/notifications/subscription`, `GET/PUT /api/notifications/prefs`; `GET /api/wa-conversations` (Inbox) dan `GET /api/wa-conversations/[id]` + aksi balas / mode / blokir per percakapan |
+| Pemicu | konfirmasi brief, bukti DP disimpan, percakapan baru dibuat, chat pindah ke mode admin → `notifyOwners(event)`; langganan yang ditolak layanan push (kedaluwarsa) dihapus otomatis |
+| UI | Settings › Notifications (aktifkan perangkat, uji notifikasi, toggle per kejadian); tab Inbox di Order WA |
+
+## 5. Yang perlu dipastikan owner
+
+- **Ikon aplikasi** untuk notifikasi dan ikon di Layar Utama HP: memakai **logo studio** yang sudah ada di Settings ›
+  General (atau owner mengirim file logo persegi, minimal 512×512 px). Tidak dibuat ikon baru tanpa persetujuan.
+
+## 6. Catatan implementasi
+
+- Kirim: `src/lib/notifications/push.ts` (`notifyOwnersPush`, `sendTestPush`, prefs `User.notifyPrefs.disabled`),
+  kejadian: `src/lib/notifications/owner-events.ts`. Notifikasi tidak ditunggu (`void`) supaya balasan bot tidak tertunda.
+- Pemicu: `confirm_brief` (status Perlu harga) dan `submit_payment_proof` di `ai/tools.ts`; pesan masuk pertama sebuah
+  nomor di `bot.ts` (juga saat Balas otomatis nonaktif); `setHumanMode(conversationId, reason)` di
+  `src/lib/whatsapp/handoff.ts`, hanya saat chat berpindah dari bot (`updateMany` mode BOT → HUMAN).
+- PWA: `src/app/manifest.ts` (dinamis, logo studio) dan `public/sw.js` (tanpa cache offline). Keduanya ada di
+  `PUBLIC_PATHS` proxy karena browser mengambil manifest tanpa cookie.
+- Inbox: `src/lib/whatsapp/inbox.ts`, `GET /api/wa-conversations` (+`[id]`, `mode`, `block`, `messages`); aktivitas
+  dicatat dengan `entityType: "WaConversation"`. Tab di `/wa-orders?tab=inbox&chat=<id>` (tautan dari notifikasi).
+- API baru masuk `OWNER_ONLY_API` di proxy, dan setiap route memakai `requireOwner`.
+
+## 7. Langkah deploy
+
+1. Deploy seperti biasa (`db push` menambah tabel `web_push_subscriptions` dan kolom `notifyPrefs`, tanpa hapus data).
+2. Buat kunci VAPID **sekali** di VPS dan simpan ke `.env` (jangan lewat chat), lalu restart:
+   `npx web-push generate-vapid-keys` → isi `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT="mailto:…"`.
+   Kunci jangan diganti setelah dipakai: semua perangkat harus mengaktifkan ulang.
+3. Owner: Settings › Notifications › **Aktifkan di perangkat ini** → **Kirim notifikasi uji**.

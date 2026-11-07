@@ -16,7 +16,8 @@ import { WhatsAppText } from "./WhatsAppText";
 // Batas teks bebas Cloud API, sama dengan validasi server (MANUAL_REPLY_MAX_LENGTH).
 const MAX_LENGTH = 4096;
 
-type Message = WaIntakeDetail["messages"][number];
+export type ChatMessage = WaIntakeDetail["messages"][number];
+type Message = ChatMessage;
 
 function SenderLabel({ m }: { m: Message }) {
   if (m.direction === "INBOUND") {
@@ -252,52 +253,7 @@ export function ChatHistory({ intake }: { intake: WaIntakeDetail }) {
         </CardAction>
       </CardHeader>
       <CardContent ref={listRef} className="min-h-0 flex-1 overflow-y-auto">
-        {messages.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Belum ada pesan.</p>
-        ) : (
-          <ol className="space-y-3">
-            {messages.map((m) => {
-              const outbound = m.direction === "OUTBOUND";
-              const failed = m.deliveryStatus === "failed";
-              return (
-                <li key={m.id} className={cn("flex", outbound ? "justify-end" : "justify-start")}>
-                  <div
-                    className={cn(
-                      "max-w-[85%] rounded-lg border px-3 py-2 text-sm",
-                      outbound ? "bg-muted" : "bg-background",
-                      failed && "border-destructive/60",
-                    )}
-                  >
-                    <p className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
-                      <SenderLabel m={m} />
-                      <span aria-hidden="true">·</span>
-                      <time dateTime={m.createdAt}>{formatDateTime(m.createdAt)}</time>
-                    </p>
-                    {m.type === "image" ? (
-                      m.imageUrl ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- presigned URL privat berumur pendek, tidak lewat optimizer
-                        <img src={m.imageUrl} alt={m.body || "Gambar dari klien"} className="max-h-48 rounded border" />
-                      ) : (
-                        <p className="italic text-muted-foreground">[gambar tidak tersedia]</p>
-                      )
-                    ) : null}
-                    {m.type === "unsupported" ? (
-                      <p className="italic text-muted-foreground">[pesan suara/video/dokumen]</p>
-                    ) : (
-                      m.body && <WhatsAppText text={m.body} className="mt-1 whitespace-pre-wrap break-words" />
-                    )}
-                    {failed && (
-                      <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
-                        <AlertCircle className="h-3 w-3" aria-hidden="true" />
-                        Gagal terkirim{m.errorCode ? ` (${m.errorCode})` : ""}
-                      </p>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
-        )}
+        <MessageList messages={messages} />
       </CardContent>
       {human && (
         // Tanpa latar muted bawaan: teks bantuan abu-abu tetap ≥4.5:1 di atas putih.
@@ -306,5 +262,59 @@ export function ChatHistory({ intake }: { intake: WaIntakeDetail }) {
         </CardFooter>
       )}
     </Card>
+  );
+}
+
+/** Riwayat pesan (terlama di atas). Dipakai detail Order WA dan Inbox. */
+export function MessageList({ messages }: { messages: Message[] }) {
+  return (
+    <>
+    {messages.length === 0 ? (
+      <p className="text-sm text-muted-foreground">Belum ada pesan.</p>
+    ) : (
+      <ol className="space-y-3">
+        {messages.map((m) => {
+          const outbound = m.direction === "OUTBOUND";
+          const failed = m.deliveryStatus === "failed";
+          return (
+            <li key={m.id} className={cn("flex", outbound ? "justify-end" : "justify-start")}>
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-lg border px-3 py-2 text-sm",
+                  outbound ? "bg-muted" : "bg-background",
+                  failed && "border-destructive/60",
+                )}
+              >
+                <p className="mb-1 flex items-center gap-1 text-xs text-muted-foreground">
+                  <SenderLabel m={m} />
+                  <span aria-hidden="true">·</span>
+                  <time dateTime={m.createdAt}>{formatDateTime(m.createdAt)}</time>
+                </p>
+                {m.type === "image" ? (
+                  m.imageUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- presigned URL privat berumur pendek, tidak lewat optimizer
+                    <img src={m.imageUrl} alt={m.body || "Gambar dari klien"} className="max-h-48 rounded border" />
+                  ) : (
+                    <p className="italic text-muted-foreground">[gambar tidak tersedia]</p>
+                  )
+                ) : null}
+                {m.type === "unsupported" ? (
+                  <p className="italic text-muted-foreground">[pesan suara/video/dokumen]</p>
+                ) : (
+                  m.body && <WhatsAppText text={m.body} className="mt-1 whitespace-pre-wrap break-words" />
+                )}
+                {failed && (
+                  <p className="mt-1 flex items-center gap-1 text-xs text-destructive">
+                    <AlertCircle className="h-3 w-3" aria-hidden="true" />
+                    Gagal terkirim{m.errorCode ? ` (${m.errorCode})` : ""}
+                  </p>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ol>
+    )}
+    </>
   );
 }

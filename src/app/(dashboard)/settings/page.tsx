@@ -15,6 +15,7 @@ import { STUDIO_DEFAULTS } from "@/lib/constants";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { WhatsAppSettingsTab } from "@/components/settings/WhatsAppSettingsTab";
+import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import {
   User,
   Bell,
@@ -108,11 +109,6 @@ function SettingsContent() {
   const [studioPhone, setStudioPhone] = useState<string>(STUDIO_DEFAULTS.phone);
   const [studioAddress, setStudioAddress] = useState<string>(STUDIO_DEFAULTS.address);
 
-  // Notification settings
-  const [notifyNewOrder, setNotifyNewOrder] = useState(true);
-  const [notifyNewBrief, setNotifyNewBrief] = useState(true);
-  const [notifyPayment, setNotifyPayment] = useState(true);
-  const [notifyDeadline, setNotifyDeadline] = useState(true);
 
   // System settings
   const [darkMode, setDarkMode] = useState(false);
@@ -508,67 +504,7 @@ function SettingsContent() {
 
           {/* Notification Settings */}
           <TabsContent value="notifications" className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Notification Preferences</CardTitle>
-                <CardDescription>
-                  Atur notifikasi yang ingin Anda terima
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Order Baru</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Notifikasi saat ada order baru
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifyNewOrder}
-                    onCheckedChange={setNotifyNewOrder}
-                  />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Brief Submitted</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Notifikasi saat client submit brief
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifyNewBrief}
-                    onCheckedChange={setNotifyNewBrief}
-                  />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Pembayaran</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Notifikasi untuk update pembayaran
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifyPayment}
-                    onCheckedChange={setNotifyPayment}
-                  />
-                </div>
-                <Separator />
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Deadline Reminder</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Reminder H-3 sebelum deadline
-                    </p>
-                  </div>
-                  <Switch
-                    checked={notifyDeadline}
-                    onCheckedChange={setNotifyDeadline}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+            <NotificationSettings />
           </TabsContent>
 
           {/* Appearance Settings */}
