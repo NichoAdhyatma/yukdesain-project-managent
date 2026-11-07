@@ -17,6 +17,7 @@ function renderPolicies(ops: StudioOperations): string {
   return `# Kebijakan studio
 - Pengerjaan dimulai setelah DP ${ops.dpPercent}% dari harga yang dikirim tim kami. ${ops.settlementNote}
 ${revision}
+- Untuk project yang sudah berjalan, kuota dan sisa revisi mengikuti data project dari tool (revisionQuota, revisionQuotaRemaining).
 - Jam kerja tim desain: ${formatWorkingHours(ops)}. Sebutkan saat klien menanyakan progres, revisi, atau kapan desainnya dikerjakan. Kamu tetap melayani chat di luar jam itu.`;
 }
 

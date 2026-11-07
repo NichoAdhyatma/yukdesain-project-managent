@@ -53,6 +53,8 @@ describe("renderGuideSection", () => {
     const text = renderGuideSection(guide, "YukDesain Studio");
     expect(text).toContain("# Panduan dari pemilik YukDesain Studio");
     expect(text).toContain("Batas yang tidak boleh dilanggar");
+    // Angka di Operasional studio menang atas Panduan lama (mis. file "DP 50%, 3 kali revisi")
+    expect(text).toContain('"Batas yang tidak boleh dilanggar", "Topik", dan "Kebijakan studio" di atas');
     expect(text).toContain("## Aturan tambahan\nAdmin membalas jam 09.00-17.00 WIB.");
     expect(text).toContain("- Pertanyaan: Ada file mentah?\n  Jawaban: Ada, AI dan PDF.");
   });

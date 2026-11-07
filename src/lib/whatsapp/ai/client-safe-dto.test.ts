@@ -57,6 +57,7 @@ describe("getProjectDetailByCode", () => {
       progress: { percent: 80, note: "Finalisasi warna logo", updatedAt: "2026-11-18" },
       briefSubmitted: true,
       revisionCount: 1,
+      revisionQuota: 3,
       revisionQuotaRemaining: 2,
       finalSubmitted: true,
       finalApproved: false,

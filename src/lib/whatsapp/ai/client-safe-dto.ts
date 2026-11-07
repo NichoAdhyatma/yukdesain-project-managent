@@ -81,6 +81,8 @@ export type ProjectDetailDto = ProjectSummaryDto & {
   progress: { percent: number | null; note: string; updatedAt: string } | null;
   briefSubmitted: boolean;
   revisionCount: number;
+  /** Kuota revisi gratis project ini (snapshot saat project dibuat) */
+  revisionQuota: number;
   revisionQuotaRemaining: number;
   finalSubmitted: boolean;
   finalApproved: boolean;
@@ -100,6 +102,7 @@ function toDetail(p: Prisma.ProjectGetPayload<{ select: typeof detailSelect }>, 
       : null,
     briefSubmitted: !!p.brief,
     revisionCount: p._count.revisions,
+    revisionQuota: p.revisionQuota,
     revisionQuotaRemaining: revisionQuotaRemaining(p._count.revisions, p.revisionQuota),
     finalSubmitted: !!p.finalSubmittedAt,
     finalApproved: !!p.finalApprovedAt,

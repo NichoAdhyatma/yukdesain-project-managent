@@ -40,6 +40,12 @@ describe("buildSystemPrompt: blok Kebijakan dari Operasional studio", () => {
     expect(prompt).not.toContain("DP 50%");
   });
 
+  it("project berjalan mengikuti kuota project dari tool, bukan angka Operasional saat ini", () => {
+    expect(buildSystemPrompt("YukDesain", null, ops)).toContain(
+      "Untuk project yang sudah berjalan, kuota dan sisa revisi mengikuti data project dari tool (revisionQuota, revisionQuotaRemaining).",
+    );
+  });
+
   it("kuota 0 → tanpa revisi gratis, revisi dialihkan ke admin", () => {
     const prompt = buildSystemPrompt("YukDesain", null, { ...ops, revisionQuota: 0 });
     expect(prompt).toContain("Tidak ada revisi gratis");

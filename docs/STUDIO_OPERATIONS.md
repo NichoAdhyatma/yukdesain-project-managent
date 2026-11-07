@@ -40,3 +40,14 @@ Jam kerja tidak membuat bot diam dan tidak mengubah pesan pengalihan ke admin.
 2. Jalankan sekali: `prisma/sql/2026-11-08-menu-operasional.sql` (menu + izin OWNER). Jangan memakai `prisma/seed.ts`.
 3. Buka Operasional, periksa nilai default, simpan bila perlu.
 4. Setelah itu file `03-kebijakan-studio.md` di Panduan bot boleh dihapus (isinya sudah tercakup).
+
+## 5. Batasan: template penawaran Meta
+
+Isi template `yd_penawaran_order` yang disetujui Meta tertulis **DP 50%** (`docs/WHATSAPP_TEMPLATES.md`). Template hanya
+dipakai di saluran Meta untuk penawaran yang dikirim lebih dari 24 jam setelah pesan terakhir klien. Bila DP di
+Operasional bukan 50%, penawaran itu **tidak dikirim** lewat template dan tercatat gagal (`TEMPLATE_DP_MISMATCH`);
+Order WA meminta admin menghubungi klien manual. Saluran Kirimi dan Fonnte selalu mengirim teks, jadi tidak terdampak.
+Untuk menghapus batasan ini, ajukan versi template baru yang menerima persen DP sebagai parameter.
+
+Cache Operasional berlaku per proses (60 detik). Portal berjalan sebagai satu proses di VPS, jadi nilai baru langsung
+terbaca setelah disimpan.

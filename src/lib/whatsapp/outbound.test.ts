@@ -132,6 +132,20 @@ describe("sendToClient", () => {
     expect(db.waMessage.create.mock.calls[0][0].data).toMatchObject({ type: "template", wamid: "wamid.TPL" });
   });
 
+  it("lewat 24 jam dengan DP selain 50% → tidak dikirim lewat template (isi template Meta tertulis DP 50%)", async () => {
+    conversation(30);
+    const thirty = offerMessage({ clientName: "Sari", serviceName: "Logo", agreedPrice: 150000, dpAmount: 45000, dpPercent: 30, deadline: new Date(), accounts: [] });
+    await expect(sendToClient("conv_1", thirty)).resolves.toMatchObject({ ok: false, via: "template", errorCode: "TEMPLATE_DP_MISMATCH" });
+    expect(api.sendTemplate).not.toHaveBeenCalled();
+    expect(db.waMessage.create.mock.calls[0][0].data).toMatchObject({ deliveryStatus: "failed", errorCode: "TEMPLATE_DP_MISMATCH" });
+  });
+
+  it("dalam 24 jam dengan DP 30% → teks bebas tetap terkirim", async () => {
+    conversation(2);
+    const thirty = offerMessage({ clientName: "Sari", serviceName: "Logo", agreedPrice: 150000, dpAmount: 45000, dpPercent: 30, deadline: new Date(), accounts: [] });
+    await expect(sendToClient("conv_1", thirty)).resolves.toMatchObject({ ok: true, via: "text" });
+  });
+
   it("klien belum pernah chat → template", async () => {
     conversation(null);
     await expect(sendToClient("conv_1", offer)).resolves.toMatchObject({ via: "template" });

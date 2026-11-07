@@ -63,6 +63,8 @@ export function formatRelative(d: string, now = Date.now()): string {
 /** Kode error kirim WhatsApp → kalimat untuk admin. */
 export function deliveryErrorText(code: string): string {
   if (code === "NOT_CONFIGURED") return "Pengaturan WhatsApp di server belum lengkap.";
+  if (code === "TEMPLATE_DP_MISMATCH")
+    return "Klien sudah lebih dari 24 jam tidak membalas, dan template penawaran Meta masih tertulis DP 50%. Hubungi klien manual.";
   if (code === "132001") return "Template belum disetujui Meta.";
   if (code === "131047") return "Klien sudah lebih dari 24 jam tidak membalas dan template gagal dikirim.";
   return `Kode error ${code}.`;
