@@ -59,3 +59,9 @@ export async function putWhatsAppSettings(body: Record<string, unknown>): Promis
   if (!res.ok) throw new SettingsApiError(data.error ?? "Gagal menyimpan", data.fields);
   return data;
 }
+
+export async function fetchWhatsAppSettings(): Promise<WhatsAppSettings> {
+  const res = await fetch("/api/settings/whatsapp");
+  if (!res.ok) throw new Error("Gagal memuat pengaturan WhatsApp");
+  return res.json();
+}

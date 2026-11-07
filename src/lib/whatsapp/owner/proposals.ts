@@ -95,7 +95,7 @@ export const OWNER_REPLIES = {
   conflict: "Panduan sudah berubah sejak usulan ini dibuat (mungkin diubah dari portal). Kirim ulang instruksinya ya.",
   textOnly: "Untuk instruksi ke bot, kirim dalam bentuk teks ya.",
   notRecorded: "Maaf, usulannya belum tercatat di sistem. Kirim ulang instruksinya ya.",
-  busy: "Maaf, bot sedang tidak bisa memproses instruksi. Coba lagi sebentar lagi, atau ubah panduan dari Settings › WhatsApp di portal.",
+  busy: "Maaf, bot sedang tidak bisa memproses instruksi. Coba lagi sebentar lagi, atau ubah panduan dari menu Bot AI di portal.",
 };
 
 export async function cancelProposal(proposal: { id: string }): Promise<string> {
@@ -111,7 +111,7 @@ export async function applyProposal(
 
   if (proposal.target === "DRAFT") {
     await saveDraftGuide(proposal.guide);
-    return "Tersimpan ke draft panduan. Coba sebagai klien di Uji bot, lalu terbitkan dari Settings › WhatsApp.";
+    return "Tersimpan ke draft panduan. Coba sebagai klien di Uji bot, lalu terbitkan dari menu Bot AI › Panduan.";
   }
 
   try {

@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownView } from "@/components/ui/markdown-view";
 import { cn } from "@/lib/utils";
 
 // File pengetahuan .md di Panduan bot (docs/WHATSAPP_BOT_KNOWLEDGE.md). Selalu ikut di prompt bot,
@@ -65,6 +66,14 @@ export function KnowledgeFilesEditor({ id, files, limits, errors, onChange, onRe
   const [openKeys, setOpenKeys] = useState<Set<number>>(new Set());
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<FormKnowledgeFile | null>(null);
+  const [previewKeys, setPreviewKeys] = useState<Set<number>>(new Set());
+  const setPreview = (key: number, preview: boolean) =>
+    setPreviewKeys((s) => {
+      const next = new Set(s);
+      if (preview) next.add(key);
+      else next.delete(key);
+      return next;
+    });
 
   const total = files.reduce((sum, f) => sum + f.content.trim().length, 0);
   const overTotal = total > limits.knowledgeTotalMaxChars;
@@ -261,8 +270,13 @@ export function KnowledgeFilesEditor({ id, files, limits, errors, onChange, onRe
                       </div>
                     </div>
                     <div className="space-y-1.5">
-                      <div className="flex items-baseline justify-between gap-2 text-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
                         <Label htmlFor={`${ids}-content-${file.key}`}>Isi (Markdown)</Label>
+                        <EditPreviewToggle
+                          preview={previewKeys.has(file.key)}
+                          onChange={(preview) => setPreview(file.key, preview)}
+                          label={label}
+                        />
                         <span
                           id={`${ids}-content-count-${file.key}`}
                           className={cn(
@@ -273,6 +287,20 @@ export function KnowledgeFilesEditor({ id, files, limits, errors, onChange, onRe
                           {fmt(file.content.length)} / {fmt(limits.knowledgeFileMaxChars)}
                         </span>
                       </div>
+                      {previewKeys.has(file.key) ? (
+                        <div
+                          className="max-h-[28rem] min-h-40 overflow-y-auto rounded-lg border bg-muted/30 p-3"
+                          aria-label={`Pratinjau ${label}`}
+                          role="region"
+                          tabIndex={0}
+                        >
+                          {file.content.trim() ? (
+                            <MarkdownView>{file.content}</MarkdownView>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">Belum ada isi.</p>
+                          )}
+                        </div>
+                      ) : (
                       <Textarea
                         id={`${ids}-content-${file.key}`}
                         rows={12}
@@ -284,6 +312,7 @@ export function KnowledgeFilesEditor({ id, files, limits, errors, onChange, onRe
                         aria-invalid={!!contentErr}
                         aria-describedby={`${ids}-content-count-${file.key} ${ids}-total${contentErr ? ` ${ids}-content-err-${file.key}` : ""}`}
                       />
+                      )}
                       {contentErr && (
                         <p id={`${ids}-content-err-${file.key}`} className="text-sm text-destructive">
                           {contentErr}
@@ -365,5 +394,40 @@ export function KnowledgeFilesEditor({ id, files, limits, errors, onChange, onRe
         </DialogContent>
       </Dialog>
     </fieldset>
+  );
+}
+
+/** Tombol Edit / Pratinjau untuk isi Markdown. */
+export function EditPreviewToggle({
+  preview,
+  onChange,
+  label,
+}: {
+  preview: boolean;
+  onChange: (preview: boolean) => void;
+  label: string;
+}) {
+  return (
+    <div role="group" aria-label={`Tampilan isi ${label}`} className="inline-flex rounded-md border p-0.5 text-sm">
+      {(
+        [
+          [false, "Edit"],
+          [true, "Pratinjau"],
+        ] as const
+      ).map(([value, text]) => (
+        <button
+          key={text}
+          type="button"
+          aria-pressed={preview === value}
+          onClick={() => onChange(value)}
+          className={cn(
+            "min-h-7 rounded px-2.5 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 max-md:min-h-10",
+            preview === value ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:text-foreground",
+          )}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
   );
 }

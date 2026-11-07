@@ -26,6 +26,7 @@ import {
   ImageIcon,
   LayoutGrid,
   MessageCircle,
+  Bot,
   X,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -74,6 +75,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   ImageIcon,
   LayoutGrid,
   MessageCircle,
+  Bot,
 };
 
 interface MenuItem {

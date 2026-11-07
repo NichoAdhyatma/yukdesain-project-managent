@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "@/components/ui/toast";
@@ -7,13 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { BotBrainCard } from "./whatsapp/BotBrainCard";
-import { BotGuideCard } from "./whatsapp/BotGuideCard";
-import { BotSandboxCard } from "./whatsapp/BotSandboxCard";
 import { OwnerNumberCard } from "./whatsapp/OwnerNumberCard";
-import { AiProviderCard } from "./whatsapp/AiProviderCard";
 import { ChannelCard } from "./whatsapp/ChannelCard";
-import { WHATSAPP_SETTINGS_KEY, putWhatsAppSettings, type WhatsAppSettings, type WhatsAppUsage } from "./whatsapp/settings-api";
+import { WHATSAPP_SETTINGS_KEY, fetchWhatsAppSettings, putWhatsAppSettings, type WhatsAppSettings, type WhatsAppUsage } from "./whatsapp/settings-api";
 
 export type { WhatsAppUsage } from "./whatsapp/settings-api";
 
@@ -92,11 +89,7 @@ export function WhatsAppSettingsTab() {
   const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<WhatsAppSettings>({
     queryKey: WHATSAPP_SETTINGS_KEY,
-    queryFn: async () => {
-      const res = await fetch("/api/settings/whatsapp");
-      if (!res.ok) throw new Error("Gagal memuat pengaturan WhatsApp");
-      return res.json();
-    },
+    queryFn: fetchWhatsAppSettings,
   });
 
   const toggleBot = useMutation({
@@ -152,7 +145,7 @@ export function WhatsAppSettingsTab() {
           <p>
             Saluran WhatsApp yang aktif belum siap: env di server belum lengkap, jadi bot belum menerima pesan.
             {data.aiConfigured
-              ? " Uji bot dan uji koneksi AI sudah bisa dipakai."
+              ? " Uji bot dan uji koneksi AI di menu Bot AI sudah bisa dipakai."
               : " API key penyedia AI yang dipilih juga belum diisi."}
           </p>
         </div>
@@ -165,7 +158,11 @@ export function WhatsAppSettingsTab() {
           <CardTitle>Bot WhatsApp</CardTitle>
           <CardDescription>
             Asisten AI yang melayani konsultasi dan brief order lewat WhatsApp. Harga, deadline, dan validasi DP
-            tetap diputuskan admin di portal.
+            tetap diputuskan admin di portal. Pengetahuan, panduan, uji coba, dan model AI bot diatur di menu{" "}
+            <Link href="/bot" className="font-medium text-foreground underline underline-offset-2">
+              Bot AI
+            </Link>
+            .
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -193,8 +190,14 @@ export function WhatsAppSettingsTab() {
           {data.ai.provider === "GATEWAY" && (
             <p role="note" className="mt-3 flex gap-2 text-sm text-amber-700 dark:text-amber-300">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-              AI sedang memakai {data.ai.effective.label} (testing). Chat klien sungguhan akan dikirim ke gateway ini;
-              pindah ke Anthropic resmi sebelum menyalakan balas otomatis untuk klien.
+              <span>
+                AI sedang memakai {data.ai.effective.label} (testing). Chat klien sungguhan akan dikirim ke gateway ini;
+                pindah ke Anthropic resmi di{" "}
+                <Link href="/bot?tab=model" className="font-medium underline underline-offset-2">
+                  Bot AI › Model AI
+                </Link>{" "}
+                sebelum menyalakan balas otomatis untuk klien.
+              </span>
             </p>
           )}
         </CardContent>
@@ -203,14 +206,6 @@ export function WhatsAppSettingsTab() {
       <ChannelCard data={data} />
 
       <OwnerNumberCard />
-
-      <BotBrainCard />
-
-      <BotGuideCard />
-
-      <BotSandboxCard />
-
-      <AiProviderCard data={data} />
 
       <UsageCard usage={data.usage} />
     </div>

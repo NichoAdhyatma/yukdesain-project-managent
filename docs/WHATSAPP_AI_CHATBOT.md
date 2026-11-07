@@ -843,3 +843,9 @@ penjaga: `docs/WHATSAPP_BOT_KNOWLEDGE.md`.
 Kartu di Settings › WhatsApp yang menampilkan semua yang diketahui bot (identitas studio, layanan, harga, alur order,
 aturan dasar, panduan owner, kemampuan) dalam pohon yang bisa dibuka-tutup, beserta isi prompt lengkap untuk draft
 atau versi terbit. Hanya membaca; tombol Ubah membuka editor aslinya. Detail: `docs/WHATSAPP_BOT_BRAIN_VIEW.md`.
+
+## 29. Menu Bot AI (2026-11-07)
+
+Otak bot, Panduan, Uji bot, dan Model AI pindah dari Settings › WhatsApp ke menu baru **Bot AI** (`/bot`). Otak bot
+tampil sebagai mind map yang bisa diklik (pohon di layar kecil), dan isi Markdown dirender rapi. Settings › WhatsApp
+tinggal Saluran, Balas otomatis, Nomor owner, dan Pemakaian. Detail dan langkah deploy: `docs/BOT_AI_PAGE.md`.
