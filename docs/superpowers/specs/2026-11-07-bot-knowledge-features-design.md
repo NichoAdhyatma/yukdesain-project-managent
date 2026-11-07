@@ -56,9 +56,8 @@ Bot AI). Disimpan di `StudioSettings` (kolom baru, semua punya default = perilak
 | `revisionQuota` | Int 0–10 | 3 | Project baru (snapshot), API revisi, portal klien, bot |
 | `revisionNotice` | String ≤300 | teks `REVISION_NOTICE` sekarang | Portal klien saat mengajukan revisi, bot |
 | `settlementNote` | String ≤200 | "Pelunasan dilakukan setelah desain selesai." | Bot (dikutip apa adanya) |
-| `workingDays` | Int[] (1=Senin…7=Minggu) | [1..6] | Bot |
-| `workingHoursStart` / `End` | String "HH:mm" WIB | "09:00" / "17:00" | Bot |
-| `outsideHoursNote` | String ≤200 | "Admin membalas di jam kerja berikutnya." | Bot saat handoff di luar jam kerja |
+| `workingDays` | Int[] (1=Senin…7=Minggu) | [1..6] | Bot (jam kerja **desainer**) |
+| `workingHoursStart` / `End` | String "HH:mm" WIB | "09:00" / "17:00" | Bot (jam kerja **desainer**) |
 
 Aturan:
 
@@ -66,8 +65,9 @@ Aturan:
   mengambil nilai dari Operasional saat dibuat. Route revisi memakai `project.revisionQuota`, bukan konstanta.
   `WaIntake.dpPercent Int?` dicatat saat admin menyimpan harga, supaya penawaran lama tidak berubah.
 - `DP_PERCENT` / `MAX_REVISION_QUOTA` tetap ada sebagai default dan fallback, bukan sumber utama.
-- Jam kerja tidak membuat bot diam. Bot tetap membalas; yang berubah hanya pesan saat mengalihkan ke admin di luar
-  jam kerja (menyebut `outsideHoursNote` dan jam kerja berikutnya).
+- Jam kerja adalah **jam kerja desainer** (koreksi owner 2026-11-08). Bot menyebutnya saat klien menanyakan progres,
+  revisi, atau kapan desain dikerjakan. Bot tetap membalas di luar jam itu, dan pengalihan ke admin tidak menyebut jam
+  kerja.
 - Bot membaca Operasional sebagai blok **Kebijakan** ringkas di system prompt (di-cache; berubah hanya saat owner
   menyimpan).
 - Menggantikan `03-kebijakan-studio.md`.

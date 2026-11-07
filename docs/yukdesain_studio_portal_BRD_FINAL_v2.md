@@ -376,7 +376,7 @@ Owner decisions for this flow (must not be changed without new approval):
 |---|---|
 | Provider | WhatsApp Cloud API (Meta), official |
 | Price | Set by admin after the client confirms the brief. The bot never states or estimates a price before admin sets it. |
-| DP | 50% of price |
+| DP | Percent of price set in **Operasional studio** (default 50%). Snapshot per order when the admin saves the price (change 2026-11-08, docs/STUDIO_OPERATIONS.md). |
 | Deadline | Set by admin, together with the price |
 | DP validation | Admin via checklist. AI reading is assistance only, never a decision. |
 | Old flow (form link) | Remains available as an alternative |
@@ -1235,7 +1235,7 @@ Implementation details:
 - Designer submits via "Submit Final Work" in Workspace (Progress tab)
 - Client approves via "Approve Final Work" in tokenized portal
 - Designer can attach final deliverable files (category: FINAL)
-- Revision quota (3x) remains available after final submission
+- Revision quota (per project, default 3x; set in Operasional studio, snapshot when the project is created; change 2026-11-08) remains available after final submission
 - `POST /api/designer/projects/[id]/submit-final` — designer final submission endpoint
 - `POST /api/client-links/[token]/approve-final` — client approval endpoint
 
