@@ -46,6 +46,14 @@ function toPayload(values: ServiceFormValues) {
   };
 }
 
+// Urutan isian di form; fokus pindah ke isian pertama yang salah (sama dengan form Operasional studio).
+const FIELD_ORDER = ["name", "startingPrice", "priceNote", "suitableFor", "botNotes"];
+
+function focusFirstInvalid(fields: Record<string, string>) {
+  const first = FIELD_ORDER.find((k) => k in fields);
+  if (first) requestAnimationFrame(() => document.getElementById(`service-${first}`)?.focus());
+}
+
 function toFormValues(service: Service): ServiceFormValues {
   return {
     name: service.name,
@@ -103,6 +111,7 @@ export default function ServicesPage() {
     onError: (err: Error) => {
       if (err instanceof ServiceSaveError && Object.keys(err.fields).length > 0) {
         setFormErrors(err.fields);
+        focusFirstInvalid(err.fields);
         return;
       }
       setAlertMessage(err.message || "Gagal menyimpan layanan.");
@@ -124,6 +133,7 @@ export default function ServicesPage() {
   const handleSave = () => {
     if (!formTarget || !formValues.name.trim()) {
       setFormErrors({ name: "Nama layanan wajib diisi" });
+      focusFirstInvalid({ name: "" });
       return;
     }
     setFormErrors({});
@@ -213,14 +223,14 @@ export default function ServicesPage() {
         {isError ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <p className="text-muted-foreground">Daftar layanan gagal dimuat.</p>
-            <Button variant="outline" onClick={() => refetch()}>
+            <Button variant="outline" className="max-md:h-11" onClick={() => refetch()}>
               Coba lagi
             </Button>
           </div>
         ) : services.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <p className="text-muted-foreground">Belum ada layanan. Tambahkan layanan pertama supaya bisa dipesan klien.</p>
-            <Button onClick={() => openForm(null)}>
+            <Button className="max-md:h-11" onClick={() => openForm(null)}>
               <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
               Layanan Baru
             </Button>
@@ -290,16 +300,11 @@ export default function ServicesPage() {
             <DialogTitle>{formTarget?.id ? "Edit Layanan" : "Tambah Layanan Baru"}</DialogTitle>
           </DialogHeader>
           <ServiceForm idPrefix="service" values={formValues} onChange={setFormValues} errors={formErrors} />
-          {formErrors.name && (
-            <p role="alert" className="text-sm text-destructive">
-              {formErrors.name}
-            </p>
-          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setFormTarget(null)}>
+            <Button variant="outline" className="max-md:h-11" onClick={() => setFormTarget(null)}>
               <X className="h-4 w-4 mr-1" aria-hidden="true" /> Batal
             </Button>
-            <Button onClick={handleSave} disabled={saveMutation.isPending || tooLong}>
+            <Button className="max-md:h-11" onClick={handleSave} disabled={saveMutation.isPending || tooLong}>
               {saveMutation.isPending ? (
                 <Loader2 className="h-4 w-4 mr-1 animate-spin" aria-hidden="true" />
               ) : (

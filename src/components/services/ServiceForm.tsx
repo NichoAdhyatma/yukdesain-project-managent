@@ -105,7 +105,10 @@ export function ServiceForm({ idPrefix, values, onChange, errors }: Props) {
           placeholder="Contoh: Logo Minimalis"
           className="max-md:h-11"
           required
+          aria-invalid={!!errors.name}
+          aria-describedby={errors.name ? id("name-error") : undefined}
         />
+        <FieldError id={id("name-error")} message={errors.name} />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={id("description")}>
