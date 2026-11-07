@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { normalizePhone } from "./phone";
 import { FONNTE_MEDIA_PREFIX } from "./media";
 import type { InboundMessage } from "./payload";
@@ -51,12 +51,17 @@ export function parseKirimiPayload(body: KirimiPayload, eventHeader: string | nu
   const fromMe = pick(m, ["fromMe", "from_me", "key.fromMe", "isFromMe", "is_from_me"]);
   if (fromMe === true || fromMe === "true") return { kind: "ignored", reason: "from_me" };
 
-  const rawSender = str(pick(m, ["from", "sender", "phone", "number", "remoteJid", "key.remoteJid", "chatId", "chat_id", "jid"])).trim();
-  const isGroup = pick(m, ["isGroup", "is_group", "group"]);
+  let rawSender = str(pick(m, ["from", "sender", "phone", "number", "remoteJid", "key.remoteJid", "chatId", "chat_id", "jid"])).trim();
+  const isGroup = pick(m, ["isFromGroup", "isGroup", "is_group", "group"]);
   if (isGroup === true || /@g\.us$/i.test(rawSender) || /@g\.us$/i.test(str(pick(m, ["chatId", "chat_id", "remoteJid", "key.remoteJid"])))) {
     return { kind: "ignored", reason: "group" };
   }
-  if (/@lid$/i.test(rawSender)) return { kind: "ignored", reason: "lid" };
+  // Kontak dengan id privasi (@lid): Kirimi mengirim nomor aslinya di senderAlt.
+  if (/@lid$/i.test(rawSender)) {
+    const alt = str(pick(m, ["senderAlt", "sender_alt", "senderPn"])).trim();
+    if (!alt || /@lid$/i.test(alt)) return { kind: "ignored", reason: "lid" };
+    rawSender = alt;
+  }
   const waId = normalizePhone(rawSender.replace(/@(s\.whatsapp\.net|c\.us)$/i, ""));
   if (!waId || waId.length < 10) return { kind: "ignored", reason: "invalid_sender" };
 
@@ -80,8 +85,15 @@ export function parseKirimiPayload(body: KirimiPayload, eventHeader: string | nu
   if (!text.trim() && !mediaUrl) return { kind: "ignored", reason: "empty" };
 
   const seconds = Number(pick(m, ["timestamp", "messageTimestamp", "t", "time"]));
-  const sentAt = Number.isFinite(seconds) && seconds > 0 ? new Date(seconds > 1e12 ? seconds : seconds * 1000) : now;
-  const rawId = str(pick(m, ["id", "message_id", "messageId", "key.id", "msg_id"])).trim();
+  const createdAt = Date.parse(str(pick(m, ["created_at", "createdAt"])));
+  const sentAt =
+    Number.isFinite(seconds) && seconds > 0
+      ? new Date(seconds > 1e12 ? seconds : seconds * 1000)
+      : Number.isFinite(createdAt)
+        ? new Date(createdAt)
+        : now;
+  // msgId = id pesan WhatsApp (sama walau event dikirim ulang / lewat jalur lain); `id` = id event Kirimi.
+  const rawId = str(pick(m, ["msgId", "msg_id", "message_id", "messageId", "key.id", "id"])).trim();
   // Id stabil untuk dedupe (kolom wamid unik); Kirimi mencoba ulang webhook sampai 7 kali.
   const id = rawId || createHash("sha256").update(`${waId}|${seconds}|${text}|${mediaUrl}`).digest("hex").slice(0, 32);
 
@@ -129,4 +141,12 @@ export function describeKirimiPayload(body: KirimiPayload, eventHeader: string |
   const inner = unwrap(body);
   const innerParts = inner === body ? [] : Object.keys(inner).sort().map((k) => `${k}:${shape(inner[k])}`);
   return `event=${kirimiEventName(body, eventHeader) ?? "-"} root=[${parts.join(" ")}]${innerParts.length ? ` inner=[${innerParts.join(" ")}]` : ""}`;
+}
+
+/** Signature resmi Kirimi (tab Webhook dashboard): hex HMAC-SHA256 dari `${timestamp}.${body}`. */
+export function kirimiSignatureValid(raw: string, signature: string | null, timestamp: string | null, secret: string): boolean {
+  if (!signature || !timestamp) return false;
+  const expected = createHmac("sha256", secret).update(`${timestamp}.${raw}`).digest("hex");
+  const given = signature.replace(/^sha256=/i, "").trim().toLowerCase();
+  return given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
 }

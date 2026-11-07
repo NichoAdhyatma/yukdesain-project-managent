@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { getKirimiEnv } from "@/lib/whatsapp/env";
 import { getChannel } from "@/lib/whatsapp/channel";
-import { describeKirimiPayload, parseKirimiPayload, type KirimiPayload } from "@/lib/whatsapp/kirimi-webhook";
+import { describeKirimiPayload, kirimiSignatureValid, parseKirimiPayload, type KirimiPayload } from "@/lib/whatsapp/kirimi-webhook";
 import { storeInboundMessage } from "@/lib/whatsapp/inbound";
 import { handleInboundMessage } from "@/lib/whatsapp/bot";
 import { expireOwnerQueries } from "@/lib/whatsapp/owner/queries";
@@ -21,7 +21,7 @@ function secretMatches(given: string, expected: string): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-/** Cocokkan signature dengan beberapa bentuk HMAC-SHA256 yang umum; hanya untuk log (belum dipaksa). */
+/** Cocokkan signature dengan beberapa bentuk HMAC-SHA256 yang umum; untuk log saat signing secret belum disimpan. */
 function signatureCheck(raw: string, signature: string | null, timestamp: string | null, secret: string | null): string {
   if (!signature) return "tanpa signature";
   if (!secret) return "secret langganan belum tersimpan";
@@ -80,11 +80,29 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const eventHeader = request.headers.get("x-kirimi-event");
-  const settings = await prisma.studioSettings.findUnique({ where: { id: "default" }, select: { waKirimiWebhookSecret: true } });
-  // Signing secret dashboard (HMAC-SHA256 dari timestamp.body); cadangan: secret langganan API.
-  const signingSecret = process.env.KIRIMI_SIGNING_SECRET?.trim() || settings?.waKirimiWebhookSecret || null;
-  const signature = signatureCheck(raw, request.headers.get("x-kirimi-signature"), request.headers.get("x-kirimi-timestamp"), signingSecret);
-  // Bentuk data (tanpa isi pesan / nomor) untuk memastikan format Kirimi dari data asli.
+  const sigHeader = request.headers.get("x-kirimi-signature");
+  const tsHeader = request.headers.get("x-kirimi-timestamp");
+  const signingSecret = process.env.KIRIMI_SIGNING_SECRET?.trim() || null;
+
+  // Tes URL dari dashboard dikirim tanpa signature dan tidak pernah diproses sebagai pesan.
+  if (body.event === "webhook.test" || body.test === true) {
+    console.info(`[kirimi] tes URL dari dashboard diterima`);
+    return NextResponse.json({ ok: true, ignored: "test" });
+  }
+
+  let signature: string;
+  if (signingSecret) {
+    // Signing secret tersimpan → signature wajib cocok (docs/WHATSAPP_CHANNEL_KIRIMI.md §8).
+    if (!kirimiSignatureValid(raw, sigHeader, tsHeader, signingSecret)) {
+      console.warn(`[kirimi] webhook ditolak: signature ${sigHeader ? "tidak cocok" : "tidak ada"} (event=${body.event ?? eventHeader ?? "-"})`);
+      return new Response("Invalid signature", { status: 401 });
+    }
+    signature = "valid";
+  } else {
+    const settings = await prisma.studioSettings.findUnique({ where: { id: "default" }, select: { waKirimiWebhookSecret: true } });
+    signature = signatureCheck(raw, sigHeader, tsHeader, settings?.waKirimiWebhookSecret ?? null);
+  }
+  // Bentuk data (tanpa isi pesan / nomor) untuk memantau format Kirimi.
   console.info(`[kirimi] webhook ${describeKirimiPayload(body, eventHeader)} signature=${signature}`);
 
   // Saluran lain aktif → pesan Kirimi tidak dibalas (balasan akan lewat saluran yang salah).

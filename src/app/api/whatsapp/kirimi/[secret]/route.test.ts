@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({ studioSettings: { findUnique: vi.fn() } }));
 const channel = vi.hoisted(() => ({ getChannel: vi.fn() }));
@@ -86,16 +86,38 @@ describe("POST /api/whatsapp/kirimi/[secret]", () => {
     expect((await GET(new Request("http://x"), ctx("salah"))).status).toBe(404);
   });
 
-  it("signature HMAC-SHA256 dari timestamp.body dengan signing secret dashboard dikenali", async () => {
-    process.env.KIRIMI_SIGNING_SECRET = "dashboard-secret";
-    const raw = JSON.stringify({ from: "6281234567890", message: "x" });
+  describe("signing secret tersimpan → signature wajib", () => {
+    const raw = JSON.stringify({ event: "message", deviceId: "D-1", from: "6281234567890", message: "x", msgId: "M1" });
     const ts = "1793700000";
-    const sig = createHmac("sha256", "dashboard-secret").update(`${ts}.${raw}`).digest("hex");
-    await POST(
-      new Request("http://x", { method: "POST", body: raw, headers: { "content-type": "application/json", "x-kirimi-event": "message", "x-kirimi-timestamp": ts, "x-kirimi-signature": sig } }),
-      ctx(),
-    );
-    expect(vi.mocked(console.info).mock.calls.flat().join(" ")).toContain("signature=cocok hex(ts.body)");
-    delete process.env.KIRIMI_SIGNING_SECRET;
+    const signed = (sig: string | null) =>
+      new Request("http://x", {
+        method: "POST",
+        body: raw,
+        headers: { "content-type": "application/json", "x-kirimi-timestamp": ts, ...(sig ? { "x-kirimi-signature": sig } : {}) },
+      });
+    beforeEach(() => {
+      process.env.KIRIMI_SIGNING_SECRET = "dashboard-secret";
+    });
+    afterEach(() => {
+      delete process.env.KIRIMI_SIGNING_SECRET;
+    });
+
+    it("HMAC-SHA256 hex dari timestamp.body → diproses", async () => {
+      const sig = createHmac("sha256", "dashboard-secret").update(`${ts}.${raw}`).digest("hex");
+      expect((await POST(signed(sig), ctx())).status).toBe(200);
+      expect(inbound.storeInboundMessage).toHaveBeenCalled();
+    });
+
+    it("signature salah atau tidak ada → 401, tidak disimpan", async () => {
+      expect((await POST(signed("deadbeef"), ctx())).status).toBe(401);
+      expect((await POST(signed(null), ctx())).status).toBe(401);
+      expect(inbound.storeInboundMessage).not.toHaveBeenCalled();
+    });
+
+    it("tes URL dashboard (webhook.test) tanpa signature tetap 200, tidak diproses", async () => {
+      const res = await POST(req({ event: "webhook.test", test: true, device_id: "D-1" }, {}), ctx());
+      expect(await res.json()).toEqual({ ok: true, ignored: "test" });
+      expect(inbound.storeInboundMessage).not.toHaveBeenCalled();
+    });
   });
 });

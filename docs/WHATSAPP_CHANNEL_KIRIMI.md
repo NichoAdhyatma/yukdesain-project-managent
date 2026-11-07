@@ -72,3 +72,18 @@ Langkahnya:
 - Panel Perangkat Kirimi menampilkan URL lengkap (khusus owner, tersamar sampai "Tampilkan") dengan tombol Salin.
 - Dashboard menyebut signature = HMAC-SHA256 dari `timestamp.body` dengan **Signing secret** dashboard. Disimpan
   opsional sebagai `KIRIMI_SIGNING_SECRET` (terminal tersembunyi); sementara masih dicatat sebagai diagnostik.
+
+## 9. Format pesan masuk (dipastikan 2026-11-07) dan signature wajib
+
+Contoh event `message` asli (isi disamarkan): `event`, `deviceId`, `from` (62… atau `…@lid`), `senderAlt` (nomor asli
+saat `from` berupa LID), `originLid`, `name`, `message`, `messageType` (`text`/…), `mediaUrl` (kosong untuk teks),
+`msgId` (id pesan WhatsApp), `id` (id event Kirimi), `isFromMe`, `isFromGroup`, `created_at`, `datetime_wib`.
+
+- Pembaca: `msgId` sebagai id dedupe (`kirimi:in:<msgId>`), `isFromGroup` → abaikan, `isFromMe` → abaikan (pantulan
+  balasan bot sendiri), `@lid` → pakai `senderAlt`, waktu dari `created_at`.
+- **Signature wajib** bila `KIRIMI_SIGNING_SECRET` tersimpan: hex HMAC-SHA256 dari `${X-Kirimi-Timestamp}.${body}`;
+  salah / tidak ada → 401. Pengecualian: tes URL dari dashboard (`event: "webhook.test"`, tanpa signature) dijawab 200
+  dan tidak diproses.
+- Status webhook di panel dibaca dari `webhook_url` perangkat (diisi dashboard). Langganan lewat API dihapus
+  (`kirimiRemoveApiSubscriptions`, dijalankan sekali setelah deploy).
+- Uji 2026-11-07: teks dari nomor lain masuk, bot membalas lewat Kirimi (status sent). Foto belum diuji.
