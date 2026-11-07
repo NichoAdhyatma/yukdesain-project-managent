@@ -48,7 +48,8 @@ const fail = (message: string, details?: unknown): ToolOutcome => ({
 export const INTAKE_TOOLS: Anthropic.Tool[] = [
   {
     name: "list_services",
-    description: "Daftar layanan desain yang aktif (kode, nama, deskripsi, format output). Tidak berisi harga.",
+    description:
+      "Daftar layanan desain yang aktif: kode, nama, deskripsi, format output, harga mulai, catatan harga, cocok untuk. Harga mulai bukan harga final.",
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
@@ -256,7 +257,8 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
   async list_services() {
     const services = await prisma.service.findMany({
       where: { isActive: true },
-      select: { code: true, name: true, description: true, outputFormat: true },
+      // Tanpa botNotes: catatan internal hanya masuk STATE dengan label "jangan dikutip".
+      select: { code: true, name: true, description: true, outputFormat: true, startingPrice: true, priceNote: true, suitableFor: true },
       orderBy: { code: "asc" },
     });
     // Hanya layanan yang punya konfigurasi brief yang bisa dipesan lewat WA.

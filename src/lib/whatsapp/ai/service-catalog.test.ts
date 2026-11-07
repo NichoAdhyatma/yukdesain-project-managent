@@ -51,7 +51,7 @@ describe("getBotServiceCatalog", () => {
 });
 
 describe("servicePriceNumbers", () => {
-  it("harga mulai dan angka di catatan harga", () => {
-    expect(servicePriceNumbers([svc({ startingPrice: 150000, priceNote: "A3 mulai Rp200.000" }), svc({})])).toEqual(["150000", "200000"]);
+  it("harga mulai dan semua angka di catatan harga (penjaga memakainya hanya untuk kalimat harga)", () => {
+    expect(servicePriceNumbers([svc({ startingPrice: 150000, priceNote: "A3 mulai Rp200.000" }), svc({})])).toEqual(["150000", "3", "200000"]);
   });
 });

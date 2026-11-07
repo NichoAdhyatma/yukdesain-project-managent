@@ -61,14 +61,10 @@ export async function getBotServiceCatalog(): Promise<BotService[]> {
 
 const digitsOf = (s: string) => (s.match(/\d[\d.,]*/g) ?? []).map((n) => n.replace(/[.,]/g, ""));
 
-// Dari catatan harga hanya nominal rupiah (≥1.000): angka kecil seperti "A3" atau "4R" tidak boleh membuka jalan
-// untuk kalimat lain yang kebetulan memuat angka itu (mis. "selesai 3 hari").
-const MIN_NOTE_AMOUNT = 1000;
-
-/** Angka yang boleh lolos penjaga harga karena berasal dari katalog: harga mulai dan nominal di catatan harga. */
+/**
+ * Angka katalog untuk penjaga harga: harga mulai dan semua angka di catatan harga ("termasuk 3 konsep").
+ * Penjaga memakainya hanya untuk kalimat harga, bukan lama pengerjaan (reply-guard `catalogNumbers`).
+ */
 export function servicePriceNumbers(services: Pick<BotService, "startingPrice" | "priceNote">[]): string[] {
-  return services.flatMap((s) => [
-    ...(s.startingPrice ? [String(s.startingPrice)] : []),
-    ...digitsOf(s.priceNote ?? "").filter((n) => Number(n) >= MIN_NOTE_AMOUNT),
-  ]);
+  return services.flatMap((s) => [...(s.startingPrice ? [String(s.startingPrice)] : []), ...digitsOf(s.priceNote ?? "")]);
 }

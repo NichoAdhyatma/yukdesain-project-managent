@@ -5,12 +5,15 @@ const PRICE = /(harga|biaya|tarif|budget|bujet|estimasi|kisaran|ongkos|bayar)[^.
 const PRICE_REVERSED = /(rp\.?\s?\d[\d.,]*|\d[\d.,]*\s?(rb|ribu|jt|juta)\b)[^.!?\n]{0,30}(harga|biaya|tarif|untuk (desain|logo|jasa))/i;
 // Potongan/biaya tambahan (termasuk persen): hanya boleh jika nilainya dari aturan harga owner.
 const DISCOUNT = /(diskon|potongan|promo|cashback|tambahan|surcharge)[^.!?\n]{0,40}(rp\.?\s?\d|\d[\d.,]*\s?(rb|ribu|k|jt|juta)\b|\d{1,3}(\.\d{3})+|\d{1,3}\s?%)/i;
+// Nominal rupiah tanpa kata kunci ("mulai Rp150.000", "jadi 300rb"): sejak bot boleh menyebut harga mulai
+// (docs/SERVICES_CATALOG.md), setiap nominal harus berasal dari data yang diizinkan.
+const RUPIAH = /(rp\.?\s?\d|\d[\d.,]*\s?(rb|ribu|jt|juta)\b)/i;
 const DURATION = /(selesai|jadi|estimasi|deadline|pengerjaan|dikerjakan|proses)[^.!?\n]{0,30}\d+\s?(-\s?\d+\s?)?(hari|minggu|jam|bulan)/i;
 
 export const PRICE_PLACEHOLDER = "Untuk harga dan estimasi waktu, tim kami akan mengirimkannya setelah brief lengkap ya kak.";
 
 export function mentionsPriceOrDeadline(sentence: string): boolean {
-  return PRICE.test(sentence) || PRICE_REVERSED.test(sentence) || DISCOUNT.test(sentence) || DURATION.test(sentence);
+  return PRICE.test(sentence) || PRICE_REVERSED.test(sentence) || RUPIAH.test(sentence) || DISCOUNT.test(sentence) || DURATION.test(sentence);
 }
 
 const digitsOf = (s: string) => (s.match(/\d[\d.,]*/g) ?? []).map((n) => n.replace(/[.,]/g, ""));
@@ -22,17 +25,23 @@ const digitsOf = (s: string) => (s.match(/\d[\d.,]*/g) ?? []).map((n) => n.repla
  * `briefText`: isi brief (mis. harga item menu dari klien). Kalimat yang semua
  * angkanya berasal dari brief atau dari `allowedNumbers` (aturan harga owner) tidak
  * dianggap penawaran harga.
+ *
+ * `catalogNumbers`: harga mulai dan angka catatan harga dari menu Layanan. Hanya berlaku untuk kalimat
+ * harga: kalimat lama pengerjaan tidak boleh lolos karena angkanya kebetulan ada di katalog.
  */
 export function stripPriceMentions(
   text: string,
   briefText = "",
   // Nilai aturan harga owner yang sudah terbit (docs/WHATSAPP_OWNER_COMMANDS.md §6)
   allowedNumbers: string[] = [],
+  catalogNumbers: string[] = [],
 ): { text: string; changed: boolean } {
   const briefNumbers = new Set([...digitsOf(briefText), ...allowedNumbers]);
+  const withCatalog = new Set([...briefNumbers, ...catalogNumbers]);
   const fromBrief = (sentence: string) => {
     const numbers = digitsOf(sentence);
-    return numbers.length > 0 && numbers.every((n) => briefNumbers.has(n));
+    const allowed = DURATION.test(sentence) ? briefNumbers : withCatalog;
+    return numbers.length > 0 && numbers.every((n) => allowed.has(n));
   };
   // Pisah kalimat hanya di tanda baca yang diikuti spasi/baris baru, supaya
   // pemisah ribuan ("Rp500.000") tidak memecah kalimat.

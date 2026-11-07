@@ -120,3 +120,35 @@ describe("stripPriceMentions — aturan harga owner (docs/WHATSAPP_OWNER_COMMAND
     expect(stripPriceMentions("Ada potongan Rp50.000 kak.").text).not.toContain("50.000");
   });
 });
+
+describe("stripPriceMentions: harga mulai dari katalog Layanan", () => {
+  const allowed = ["150000"];
+  it("harga mulai persis lolos", () => {
+    expect(stripPriceMentions("Logo Minimalis mulai Rp150.000 ya kak.", "", allowed)).toEqual({ text: "Logo Minimalis mulai Rp150.000 ya kak.", changed: false });
+  });
+  it.each([
+    "Logo Minimalis mulai Rp120.000 ya kak.",
+    "Kalau 2 logo jadi Rp300.000 kak.",
+    "Harganya 150 ribu kak.",
+  ])("angka lain dihapus: %s", (text) => {
+    const r = stripPriceMentions(text, "", allowed);
+    expect(r.changed).toBe(true);
+    expect(r.text).toContain(PRICE_PLACEHOLDER);
+  });
+});
+
+describe("stripPriceMentions: angka katalog hanya untuk kalimat harga", () => {
+  // Angka dari katalog (harga mulai + catatan "termasuk 3 konsep") dikirim sebagai catalogNumbers.
+  const catalog = ["150000", "3"];
+  it("kalimat yang mengutip harga mulai + catatannya lolos", () => {
+    const text = "Logo Minimalis mulai Rp150.000 (termasuk 3 konsep) ya kak.";
+    expect(stripPriceMentions(text, "", [], catalog).changed).toBe(false);
+  });
+  it("lama pengerjaan tetap dihapus walau angkanya ada di katalog", () => {
+    const r = stripPriceMentions("Logo Minimalis selesai 3 hari kak.", "", [], catalog);
+    expect(r.changed).toBe(true);
+  });
+  it("aturan harga owner yang menyebut durasi tetap lolos", () => {
+    expect(stripPriceMentions("Paket express selesai 1 hari, tambahan 50% dari total.", "", ["50", "1"], catalog).changed).toBe(false);
+  });
+});
