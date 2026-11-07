@@ -13,7 +13,7 @@ Disetujui dan diimplementasikan 2026-11-07 (checkpoint 050).
 
 ## 2. Yang dilihat owner
 
-Kartu **Otak bot** di Settings › WhatsApp, di atas Panduan bot.
+Kartu **Otak bot** di menu **Bot AI › Otak bot** (dulu di Settings › WhatsApp; dipindah 2026-11-07, lihat `docs/BOT_AI_PAGE.md`).
 
 Ringkasan di atas: versi panduan aktif, apakah draft berbeda dari versi terbit, perkiraan ukuran prompt, dan
 pilihan **Versi terbit** (yang dipakai klien) / **Draft** (yang dipakai Uji bot).

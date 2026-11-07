@@ -14,7 +14,8 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { PricingRulesEditor, type FormRule } from "./PricingRulesEditor";
-import { KnowledgeFilesEditor, type FormKnowledgeFile, type KnowledgeLimits } from "./KnowledgeFilesEditor";
+import { EditPreviewToggle, KnowledgeFilesEditor, type FormKnowledgeFile, type KnowledgeLimits } from "./KnowledgeFilesEditor";
+import { MarkdownView } from "@/components/ui/markdown-view";
 
 // Panduan bot dari owner (docs/WHATSAPP_BOT_GUIDE.md): draft → Uji bot → terbitkan.
 
@@ -126,6 +127,7 @@ export function BotGuideCard() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [confirmPublish, setConfirmPublish] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [previewInstructions, setPreviewInstructions] = useState(false);
   const newestFaqQuestion = useRef<HTMLInputElement | null>(null);
 
   /* eslint-disable react-hooks/set-state-in-effect -- sinkronisasi form dari data server */
@@ -265,8 +267,20 @@ export function BotGuideCard() {
           <div id="wa-guide-section-instructions" className="scroll-mt-6 space-y-2">
             <div className="flex items-baseline justify-between gap-2 text-sm">
               <Label htmlFor="wa-guide-instructions">Aturan tambahan</Label>
-              <Counter id="wa-guide-instructions-count" value={form.instructions.length} max={limits.instructionsMaxChars} />
+              <div className="flex items-center gap-2">
+                <EditPreviewToggle preview={previewInstructions} onChange={setPreviewInstructions} label="aturan tambahan" />
+                <Counter id="wa-guide-instructions-count" value={form.instructions.length} max={limits.instructionsMaxChars} />
+              </div>
             </div>
+            {previewInstructions ? (
+              <div className="min-h-32 rounded-lg border bg-muted/30 p-3" role="region" aria-label="Pratinjau aturan tambahan" tabIndex={0}>
+                {form.instructions.trim() ? (
+                  <MarkdownView>{form.instructions}</MarkdownView>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Belum ada aturan tambahan.</p>
+                )}
+              </div>
+            ) : (
             <Textarea
               id="wa-guide-instructions"
               rows={6}
@@ -280,6 +294,7 @@ export function BotGuideCard() {
               aria-invalid={!!errors.instructions}
               aria-describedby="wa-guide-instructions-help wa-guide-instructions-count"
             />
+            )}
             <p id="wa-guide-instructions-help" className={errors.instructions ? "text-sm text-destructive" : "text-sm text-muted-foreground"}>
               {errors.instructions ?? "Tulis seperti memberi arahan ke staf baru: kebiasaan studio, jam layanan, hal yang perlu ditanyakan."}
             </p>
