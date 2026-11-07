@@ -9,9 +9,11 @@ import { handleInboundMessage } from "@/lib/whatsapp/bot";
 import { expireOwnerQueries } from "@/lib/whatsapp/owner/queries";
 import { waitForBurst } from "@/lib/whatsapp/spam-guard";
 import { maskPhone } from "@/lib/whatsapp/phone";
+import { ECHO_SETTLE_MS, handleKirimiEcho, rememberConversationLid } from "@/lib/whatsapp/phone-takeover";
 
 // Webhook pesan masuk Kirimi (docs/WHATSAPP_CHANNEL_KIRIMI.md). URL memuat KIRIMI_WEBHOOK_SECRET; device_id
-// dicocokkan dengan KIRIMI_DEVICE_ID. X-Kirimi-Signature dicek sebagai diagnostik sampai cara hitungnya dipastikan.
+// dicocokkan dengan KIRIMI_DEVICE_ID; X-Kirimi-Signature wajib bila KIRIMI_SIGNING_SECRET tersimpan. Pantulan pesan
+// keluar (isFromMe) dipakai untuk mengenali admin yang membalas dari HP (docs/WHATSAPP_CHANNEL_KIRIMI.md §10).
 
 export const maxDuration = 60;
 
@@ -115,9 +117,28 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ ok: true, ignored: "device" });
   }
 
+  if (parsed.kind === "echo") {
+    const echo = parsed;
+    const receivedAt = new Date();
+    after(async () => {
+      // Tunggu pesan bot/portal tersimpan dulu, baru dicocokkan dengan pantulannya.
+      await new Promise((resolve) => setTimeout(resolve, ECHO_SETTLE_MS));
+      try {
+        const outcome = await handleKirimiEcho(echo, receivedAt);
+        if (outcome !== "own" && outcome !== "duplicate") {
+          console.info(`[kirimi] pesan keluar dari HP ke ${maskPhone(echo.to.waId ?? "")}: ${outcome}`);
+        }
+      } catch (error) {
+        console.error("[kirimi] gagal memproses pesan keluar dari HP:", (error as Error).name);
+      }
+    });
+    return NextResponse.json({ ok: true, echo: true });
+  }
+
   let id: string | null;
   try {
     id = await storeInboundMessage(parsed.message);
+    if (parsed.lid) await rememberConversationLid(parsed.message.waId, parsed.lid);
   } catch (error) {
     console.error("[kirimi] gagal menyimpan pesan masuk:", (error as Error).name);
     return new Response("Error", { status: 500 });

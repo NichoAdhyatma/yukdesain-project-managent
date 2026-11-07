@@ -622,6 +622,8 @@ model WaConversation {
   blockedAt     DateTime? // nomor diblokir: pesan disimpan, bot diam (docs/WHATSAPP_SPAM_GUARD.md §5)
   blockedById   String?
   ownerActsAsClient Boolean @default(false) // owner sedang tes sebagai klien (#klien / #owner)
+  // LID WhatsApp (id privasi) dari Kirimi: memetakan pantulan pesan keluar ke percakapan (docs/WHATSAPP_CHANNEL_KIRIMI.md §10)
+  waLid             String?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 
@@ -632,6 +634,7 @@ model WaConversation {
   lookupAttempts WaLookupAttempt[]
 
   @@index([clientId])
+  @@index([waLid])
   @@map("wa_conversations")
 }
 
