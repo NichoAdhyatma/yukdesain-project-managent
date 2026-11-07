@@ -56,8 +56,8 @@ Bot AI). Disimpan di `StudioSettings` (kolom baru, semua punya default = perilak
 | `revisionQuota` | Int 0–10 | 3 | Project baru (snapshot), API revisi, portal klien, bot |
 | `revisionNotice` | String ≤300 | teks `REVISION_NOTICE` sekarang | Portal klien saat mengajukan revisi, bot |
 | `settlementNote` | String ≤200 | "Pelunasan dilakukan setelah desain selesai." | Bot (dikutip apa adanya) |
-| `workingDays` | Int[] (1=Senin…7=Minggu) | [1..6] | Bot, Inbox |
-| `workingHoursStart` / `End` | String "HH:mm" WIB | "09:00" / "17:00" | Bot, Inbox |
+| `workingDays` | Int[] (1=Senin…7=Minggu) | [1..6] | Bot |
+| `workingHoursStart` / `End` | String "HH:mm" WIB | "09:00" / "17:00" | Bot |
 | `outsideHoursNote` | String ≤200 | "Admin membalas di jam kerja berikutnya." | Bot saat handoff di luar jam kerja |
 
 Aturan:
