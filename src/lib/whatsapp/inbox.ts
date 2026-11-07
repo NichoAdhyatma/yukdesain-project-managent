@@ -6,6 +6,7 @@ import { ownerNumberSet } from "./intake-api";
 import { getPrivateMediaUrl } from "./media";
 import { isWithinServiceWindow } from "./outbound";
 import { maskPhone } from "./phone";
+import { isPhoneReplyWamid } from "./phone-takeover";
 
 // Inbox semua chat WhatsApp (docs/OWNER_NOTIFICATIONS_INBOX.md §3). Hanya percakapan sungguhan (bukan Uji bot).
 
@@ -141,6 +142,7 @@ export async function getInboxConversation(id: string) {
           mediaStorageKey: true,
           sentByBot: true,
           sentById: true,
+          wamid: true,
           deliveryStatus: true,
           errorCode: true,
           createdAt: true,
@@ -164,7 +166,7 @@ export async function getInboxConversation(id: string) {
       body: m.body,
       imageUrl: m.type === "image" ? await signedUrl(m.mediaStorageKey) : null,
       sentByBot: m.sentByBot,
-      sentByAdmin: m.sentById !== null,
+      sentByAdmin: m.sentById !== null || isPhoneReplyWamid(m.wamid),
       deliveryStatus: m.deliveryStatus,
       errorCode: m.errorCode,
       createdAt: m.createdAt,

@@ -79,11 +79,45 @@ Contoh event `message` asli (isi disamarkan): `event`, `deviceId`, `from` (62…
 saat `from` berupa LID), `originLid`, `name`, `message`, `messageType` (`text`/…), `mediaUrl` (kosong untuk teks),
 `msgId` (id pesan WhatsApp), `id` (id event Kirimi), `isFromMe`, `isFromGroup`, `created_at`, `datetime_wib`.
 
-- Pembaca: `msgId` sebagai id dedupe (`kirimi:in:<msgId>`), `isFromGroup` → abaikan, `isFromMe` → abaikan (pantulan
-  balasan bot sendiri), `@lid` → pakai `senderAlt`, waktu dari `created_at`.
+- Pembaca: `msgId` sebagai id dedupe (`kirimi:in:<msgId>`), `isFromGroup` → abaikan, `isFromMe` → pantulan pesan keluar
+  (§10), `@lid` → pakai `senderAlt`, waktu dari `created_at`.
 - **Signature wajib** bila `KIRIMI_SIGNING_SECRET` tersimpan: hex HMAC-SHA256 dari `${X-Kirimi-Timestamp}.${body}`;
   salah / tidak ada → 401. Pengecualian: tes URL dari dashboard (`event: "webhook.test"`, tanpa signature) dijawab 200
   dan tidak diproses.
 - Status webhook di panel dibaca dari `webhook_url` perangkat (diisi dashboard). Langganan lewat API dihapus
   (`kirimiRemoveApiSubscriptions`, dijalankan sekali setelah deploy).
-- Uji 2026-11-07: teks dari nomor lain masuk, bot membalas lewat Kirimi (status sent). Foto belum diuji.
+- Uji 2026-11-07: teks dari nomor lain masuk, bot membalas lewat Kirimi (status sent); foto masuk sebagai bukti bayar.
+
+## 10. Nomor admin dipakai bot; admin membalas dari HP (keputusan owner 2026-11-07)
+
+Mulai go-live, perangkat Kirimi memakai **nomor admin studio** (bukan nomor uji). Keputusan owner:
+
+1. **Bot membalas semua chat**, termasuk pelanggan lama.
+2. **Admin membalas dari HP → bot otomatis diam** untuk chat itu (mode HUMAN, tanpa notifikasi; admin sendiri yang
+   sedang membalas).
+3. **Kembali ke bot hanya lewat Inbox** (tombol "Kembalikan ke bot"); tidak ada batas waktu otomatis.
+
+Cara kerja (`src/lib/whatsapp/phone-takeover.ts`):
+
+- Setiap pesan keluar dari perangkat memantul ke webhook sebagai event `message` dengan `isFromMe: true`; `from`
+  berisi nomor tujuan (62…), atau `…@lid`. Pembaca mengembalikan `kind: "echo"`.
+- Pesan masuk membawa `originLid` (angka LID polos); disimpan di `WaConversation.waLid` supaya pantulan yang hanya
+  membawa LID tetap bisa dipetakan ke percakapannya.
+- Pantulan diproses di `after()` setelah jeda `ECHO_SETTLE_MS` (10 detik), karena pesan bot/portal baru tersimpan
+  setelah Kirimi menjawab. Kirimi tidak mengembalikan id pesan, jadi dicocokkan dari **isi**: sama persis dengan
+  pesan OUTBOUND percakapan itu dalam 10 menit terakhir (spasi dirapikan; toleransi kecil di ujung untuk teks 20+
+  karakter) → pantulan bot/portal, diabaikan.
+- Tidak cocok → diketik admin di HP: chat pindah ke HUMAN dan pesannya dicatat sebagai OUTBOUND
+  (`wamid kirimi:phone:<msgId>`, `sentByBot: false`). Inbox dan Order WA menampilkannya dengan label **Admin**, dan
+  AI ikut membacanya sebagai riwayat setelah chat dikembalikan ke bot. Foto/stiker dari HP dicatat sebagai
+  "[Media dikirim dari HP admin]".
+- Admin menyapa pelanggan lama lebih dulu (belum ada percakapan) → percakapan dibuat langsung dalam mode HUMAN,
+  jadi balasan pelanggan itu tidak dijawab bot.
+- Chat ke nomor owner tidak dialihkan (tetap jalur instruksi owner). Kiriman ulang webhook tidak dicatat dua kali.
+
+Batasan:
+
+- Bila admin membalas dalam beberapa detik pertama, bot bisa saja tetap mengirim satu balasan untuk pesan yang
+  sedang diproses (jeda gabung pesan 5 detik + AI). Balasan berikutnya sudah diam.
+- AI bawaan Kirimi harus mati: balasannya juga memantul dan akan dianggap ketikan admin.
+- Pantulan yang hanya membawa LID tanpa percakapan yang dikenal dilewati (dicatat di log).

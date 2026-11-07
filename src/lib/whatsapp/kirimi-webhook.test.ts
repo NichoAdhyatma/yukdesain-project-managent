@@ -13,6 +13,7 @@ describe("parseKirimiPayload (docs/WHATSAPP_CHANNEL_KIRIMI.md)", () => {
     expect(r).toEqual({
       kind: "message",
       device: "D-1",
+      lid: null,
       message: { wamid: "kirimi:in:ABC", waId: "6281234567890", profileName: "Sari", sentAt: new Date(1793700000 * 1000), contextWamid: null, type: "text", body: "Halo mau logo" },
     });
   });
@@ -35,7 +36,7 @@ describe("parseKirimiPayload (docs/WHATSAPP_CHANNEL_KIRIMI.md)", () => {
 
   it.each([
     [{ from: "6281234567890", message: "x" }, "message.sent", "not_message_event"],
-    [{ from: "6281234567890", message: "x", fromMe: true }, "message", "from_me"],
+    [{ from: "abc", message: "x", fromMe: true }, "message", "from_me"],
     [{ from: "120363@g.us", message: "x" }, "message", "group"],
     [{ from: "6281234567890", message: "x", isGroup: true }, "message", "group"],
     [{ from: "1234567890@lid", message: "x" }, "message", "lid"],
@@ -67,6 +68,7 @@ describe("parseKirimiPayload (docs/WHATSAPP_CHANNEL_KIRIMI.md)", () => {
     expect(r).toEqual({
       kind: "message",
       device: "D-8IL0J",
+      lid: "123456789012345",
       message: {
         wamid: "kirimi:in:3EB0ABCDEF0123456789",
         waId: "628970000937",
@@ -78,12 +80,39 @@ describe("parseKirimiPayload (docs/WHATSAPP_CHANNEL_KIRIMI.md)", () => {
       },
     });
     expect(parseKirimiPayload({ ...real, isFromGroup: true }, null, now)).toEqual({ kind: "ignored", reason: "group" });
-    expect(parseKirimiPayload({ ...real, isFromMe: true }, null, now)).toEqual({ kind: "ignored", reason: "from_me" });
+  });
+
+  it("pantulan pesan keluar (isFromMe) → echo ke nomor / LID lawan bicara (§10)", () => {
+    // Bentuk asli pantulan: `from` = nomor tujuan, tanpa senderAlt / originLid.
+    const echo = {
+      created_at: "2026-11-07T16:35:02+07:00",
+      deviceId: "D-8IL0J",
+      event: "message",
+      from: "628970000937",
+      id: "2b9f3c1e-0000-4000-8000-000000000002",
+      isFromGroup: false,
+      isFromMe: true,
+      mediaUrl: "",
+      message: "Siap kak, saya cek dulu ya",
+      messageType: "text",
+      msgId: "3EB0FEDCBA9876543210AB",
+      name: "Admin",
+    };
+    expect(parseKirimiPayload(echo, null, now)).toEqual({
+      kind: "echo",
+      device: "D-8IL0J",
+      to: { waId: "628970000937", lid: null },
+      body: "Siap kak, saya cek dulu ya",
+      msgId: "3EB0FEDCBA9876543210AB",
+    });
+    const viaLid = parseKirimiPayload({ ...echo, from: "123456789012345@lid" }, null, now);
+    expect(viaLid).toMatchObject({ kind: "echo", to: { waId: null, lid: "123456789012345" } });
+    expect(parseKirimiPayload({ ...echo, isFromGroup: true }, null, now)).toEqual({ kind: "ignored", reason: "group" });
   });
 
   it("pengirim @lid memakai nomor dari senderAlt; tanpa senderAlt diabaikan", () => {
     const r = parseKirimiPayload({ event: "message", from: "123456789012345@lid", senderAlt: "6281234567890", message: "halo", msgId: "M1" }, null, now);
-    expect(r.kind === "message" && r.message.waId).toBe("6281234567890");
+    expect(r).toMatchObject({ kind: "message", lid: "123456789012345", message: { waId: "6281234567890" } });
     expect(parseKirimiPayload({ event: "message", from: "123456789012345@lid", message: "halo" }, null, now)).toEqual({ kind: "ignored", reason: "lid" });
   });
 

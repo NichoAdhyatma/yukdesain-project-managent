@@ -10,6 +10,7 @@ import { getPrivateMediaUrl } from "./media";
 import { maskPhone } from "./phone";
 import { listOwnerNumbers } from "./owner/identity";
 import { getAppPublicUrl } from "./env";
+import { isPhoneReplyWamid } from "./phone-takeover";
 
 // Bagian bersama route /api/wa-intakes/* (owner). DTO dibangun eksplisit (AGENTS.md §36).
 
@@ -134,6 +135,7 @@ export const detailInclude = {
           mediaStorageKey: true,
           sentByBot: true,
           sentById: true,
+          wamid: true,
           deliveryStatus: true,
           errorCode: true,
           createdAt: true,
@@ -182,8 +184,8 @@ export async function toDetail(row: DetailRow) {
       body: m.body,
       imageUrl: m.type === "image" ? await signedUrl(m.mediaStorageKey) : null,
       sentByBot: m.sentByBot,
-      // Balasan manual admin dari portal; id admin tidak ikut di DTO
-      sentByAdmin: m.sentById !== null,
+      // Balasan manual admin dari portal atau dari HP (Kirimi); id admin tidak ikut di DTO
+      sentByAdmin: m.sentById !== null || isPhoneReplyWamid(m.wamid),
       deliveryStatus: m.deliveryStatus,
       errorCode: m.errorCode,
       createdAt: m.createdAt,

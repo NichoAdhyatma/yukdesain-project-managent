@@ -35,8 +35,16 @@ function unwrap(body: KirimiPayload): Obj {
 }
 
 export type ParsedKirimi =
-  | { kind: "message"; device: string | null; message: InboundMessage }
+  | { kind: "message"; device: string | null; message: InboundMessage; lid: string | null }
+  /** Pesan keluar dari perangkat (pantulan balasan bot, atau admin mengetik di HP). `to` = nomor 62… atau LID lawan bicara. */
+  | { kind: "echo"; device: string | null; to: { waId: string | null; lid: string | null }; body: string; msgId: string | null }
   | { kind: "ignored"; reason: "not_message_event" | "from_me" | "group" | "empty" | "invalid_sender" | "lid" };
+
+/** Angka LID dari "123…@lid"; `plain` = field yang memang berisi LID (originLid dikirim sebagai angka polos). */
+function lidDigits(v: string, plain = false): string | null {
+  if (/^\d{8,20}@lid$/i.test(v)) return v.slice(0, v.indexOf("@"));
+  return plain && /^\d{8,20}$/.test(v) ? v : null;
+}
 
 export function kirimiEventName(body: KirimiPayload, header: string | null): string | null {
   return header?.trim() || str(body.event).trim() || str(body.type).trim() || null;
@@ -49,13 +57,34 @@ export function parseKirimiPayload(body: KirimiPayload, eventHeader: string | nu
 
   const m = unwrap(body);
   const fromMe = pick(m, ["fromMe", "from_me", "key.fromMe", "isFromMe", "is_from_me"]);
-  if (fromMe === true || fromMe === "true") return { kind: "ignored", reason: "from_me" };
+  const device = str(pick(body, ["device_id", "deviceId", "session", "sessionId"])) || str(pick(m, ["device_id", "deviceId"])) || null;
 
   let rawSender = str(pick(m, ["from", "sender", "phone", "number", "remoteJid", "key.remoteJid", "chatId", "chat_id", "jid"])).trim();
   const isGroup = pick(m, ["isFromGroup", "isGroup", "is_group", "group"]);
   if (isGroup === true || /@g\.us$/i.test(rawSender) || /@g\.us$/i.test(str(pick(m, ["chatId", "chat_id", "remoteJid", "key.remoteJid"])))) {
     return { kind: "ignored", reason: "group" };
   }
+
+  if (fromMe === true || fromMe === "true") {
+    // Pantulan pesan keluar: `from` berisi lawan bicara (nomor 62… atau LID).
+    const echoText = str(typeof m.message === "string" ? m.message : pick(m, ["text", "body", "caption", "message.conversation", "message.extendedTextMessage.text"]));
+    const lid = lidDigits(rawSender);
+    const alt = str(pick(m, ["senderAlt", "sender_alt", "senderPn"])).trim();
+    const phoneRaw = lid ? (alt && !/@lid$/i.test(alt) ? alt : "") : rawSender;
+    const waId = phoneRaw ? normalizePhone(phoneRaw.replace(/@(s\.whatsapp\.net|c\.us)$/i, "")) : null;
+    const validWaId = waId && waId.length >= 10 ? waId : null;
+    if (!lid && !validWaId) return { kind: "ignored", reason: "from_me" };
+    return {
+      kind: "echo",
+      device,
+      to: { waId: validWaId, lid },
+      body: echoText,
+      msgId: str(pick(m, ["msgId", "msg_id", "message_id", "messageId", "key.id"])).trim() || null,
+    };
+  }
+
+  // LID pengirim (Kirimi: originLid, atau `from` berupa @lid) untuk mengenali pantulan pesan keluar nanti.
+  const lid = lidDigits(str(pick(m, ["originLid", "origin_lid"])).trim(), true) ?? lidDigits(rawSender);
   // Kontak dengan id privasi (@lid): Kirimi mengirim nomor aslinya di senderAlt.
   if (/@lid$/i.test(rawSender)) {
     const alt = str(pick(m, ["senderAlt", "sender_alt", "senderPn"])).trim();
@@ -104,19 +133,19 @@ export function parseKirimiPayload(body: KirimiPayload, eventHeader: string | nu
     sentAt,
     contextWamid: null,
   };
-  const device = str(pick(body, ["device_id", "deviceId", "session", "sessionId"])) || str(pick(m, ["device_id", "deviceId"])) || null;
 
   if (mediaUrl) {
     const isImage = IMAGE_TYPES.test(type) || /^image\//i.test(type) || IMAGE_EXT.test(mediaUrl);
     return {
       kind: "message",
       device,
+      lid,
       message: isImage
         ? { ...base, type: "image", mediaId: `${FONNTE_MEDIA_PREFIX}${mediaUrl}`, mimeType: null, sha256: null, caption: text || null }
         : { ...base, type: "unsupported", originalType: type || "file" },
     };
   }
-  return { kind: "message", device, message: { ...base, type: "text", body: text } };
+  return { kind: "message", device, lid, message: { ...base, type: "text", body: text } };
 }
 
 /**
