@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const db = vi.hoisted(() => ({ waMessage: { count: vi.fn() } }));
+const db = vi.hoisted(() => ({ waMessage: { count: vi.fn() }, studioSettings: { findUnique: vi.fn() } }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 
 import { botReplyLimitReached, checkInboundRate, getMonthlyUsage, imageLimitExceeded, startOfMonthWib } from "./rate-limit";
@@ -70,6 +70,7 @@ describe("startOfMonthWib", () => {
 
 describe("getMonthlyUsage", () => {
   it("menghitung per jenis dan menandai mendekati batas", async () => {
+    db.studioSettings.findUnique.mockResolvedValue({ waBotMonthlyReplyCap: 2000 });
     db.waMessage.count
       .mockResolvedValueOnce(820) // terkirim
       .mockResolvedValueOnce(3) // gagal
@@ -87,6 +88,14 @@ describe("getMonthlyUsage", () => {
       warningThreshold: 800,
       freeTier: 1000,
       nearLimit: true,
+      monthlyReplyCap: 2000,
+      brakeActive: false,
     });
+  });
+
+  it("rem bulanan aktif saat balasan bot mencapai batas owner", async () => {
+    db.studioSettings.findUnique.mockResolvedValue({ waBotMonthlyReplyCap: 500 });
+    db.waMessage.count.mockReset().mockResolvedValueOnce(510).mockResolvedValueOnce(0).mockResolvedValueOnce(0).mockResolvedValueOnce(500).mockResolvedValueOnce(600);
+    expect(await getMonthlyUsage(new Date("2026-11-15T05:00:00Z"))).toMatchObject({ monthlyReplyCap: 500, brakeActive: true });
   });
 });

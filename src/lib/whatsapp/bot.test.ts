@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   waMessage: { findUniqueOrThrow: vi.fn(), create: vi.fn(), count: vi.fn() },
   waConversation: { update: vi.fn() },
+  waIntake: { findFirst: vi.fn() },
   studioSettings: { findUnique: vi.fn() },
   waOwnerQuery: { updateMany: vi.fn() },
 }));
@@ -16,6 +17,7 @@ const limits = vi.hoisted(() => ({
   imageLimitExceeded: vi.fn(),
 }));
 const tools = vi.hoisted(() => ({ findActiveIntake: vi.fn() }));
+const guard = vi.hoisted(() => ({ getMonthlyBrake: vi.fn(), notifyOwnersBrakeOnce: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("./client-api", async (orig) => ({
@@ -29,6 +31,11 @@ vi.mock("./rate-limit", () => limits);
 vi.mock("./ai/tools", () => tools);
 vi.mock("./owner/identity", () => ({ resolveOwner: owner.resolveOwner }));
 vi.mock("./owner/handle", () => ({ handleOwnerMessage: owner.handleOwnerMessage }));
+vi.mock("./spam-guard", async (orig) => ({
+  ...(await orig<typeof import("./spam-guard")>()),
+  getMonthlyBrake: guard.getMonthlyBrake,
+  notifyOwnersBrakeOnce: guard.notifyOwnersBrakeOnce,
+}));
 
 import { WhatsAppApiError } from "./client-api";
 import { BOT_REPLIES, handleInboundMessage } from "./bot";
@@ -61,6 +68,8 @@ describe("handleInboundMessage", () => {
     db.waMessage.count.mockResolvedValue(0);
     api.sendText.mockResolvedValue("wamid.OUT");
     api.markAsRead.mockResolvedValue(undefined);
+    guard.getMonthlyBrake.mockResolvedValue({ cap: 2000, used: 10, active: false, month: "2026-11" });
+    guard.notifyOwnersBrakeOnce.mockResolvedValue(undefined);
     aiReply("Halo kak, mau desain apa?");
     limits.checkInboundRate.mockResolvedValue("ok");
     limits.botReplyLimitReached.mockResolvedValue(false);
@@ -264,6 +273,63 @@ describe("handleInboundMessage", () => {
     await handleInboundMessage("msg_1");
     expect(ai.runAiTurn).toHaveBeenCalledTimes(2);
     expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
+  });
+
+  describe("perlindungan spam (docs/WHATSAPP_SPAM_GUARD.md)", () => {
+    it("nomor diblokir → tidak dibaca, tidak dibalas, tanpa AI", async () => {
+      db.waMessage.findUniqueOrThrow.mockResolvedValue({
+        id: "msg_1",
+        wamid: "wamid.IN",
+        type: "text",
+        body: "halo",
+        createdAt: new Date("2026-11-01T10:00:00Z"),
+        conversation: { id: "conv_1", waId: "6281234567890", mode: "BOT", blockedAt: new Date() },
+      });
+      await handleInboundMessage("msg_1");
+      expect(api.markAsRead).not.toHaveBeenCalled();
+      expect(api.sendText).not.toHaveBeenCalled();
+      expect(ai.runAiTurn).not.toHaveBeenCalled();
+    });
+
+    it("rem bulanan aktif → satu pesan, mode HUMAN, owner diberi tahu, tanpa AI", async () => {
+      givenMessage("text");
+      guard.getMonthlyBrake.mockResolvedValue({ cap: 2000, used: 2000, active: true, month: "2026-11" });
+      await handleInboundMessage("msg_1");
+      expect(sentBodies()).toEqual([BOT_REPLIES.monthlyCap]);
+      expect(humanModeSet()).toBe(true);
+      expect(guard.notifyOwnersBrakeOnce).toHaveBeenCalledWith(expect.objectContaining({ active: true }));
+      expect(ai.runAiTurn).not.toHaveBeenCalled();
+    });
+
+    it.each(["AWAITING_QUOTE", "DP_REVIEW"])("basa-basi saat %s → tidak dibalas, tanpa AI", async (status) => {
+      givenMessage("text", "ok makasih kak 🙏");
+      tools.findActiveIntake.mockResolvedValue({ id: "i1", status, createdAt: new Date() });
+      await handleInboundMessage("msg_1");
+      expect(ai.runAiTurn).not.toHaveBeenCalled();
+      expect(api.sendText).not.toHaveBeenCalled();
+    });
+
+    it("basa-basi setelah order jadi project → tidak dibalas", async () => {
+      givenMessage("text", "makasih");
+      tools.findActiveIntake.mockResolvedValue(null);
+      db.waIntake.findFirst.mockResolvedValue({ status: "APPROVED" });
+      await handleInboundMessage("msg_1");
+      expect(ai.runAiTurn).not.toHaveBeenCalled();
+    });
+
+    it.each(["COLLECTING", "QUOTED"])("'ok' saat %s tetap diproses AI (bisa berarti setuju)", async (status) => {
+      givenMessage("text", "ok");
+      tools.findActiveIntake.mockResolvedValue({ id: "i1", status, createdAt: new Date() });
+      await handleInboundMessage("msg_1");
+      expect(ai.runAiTurn).toHaveBeenCalled();
+    });
+
+    it("pertanyaan setelah brief tetap dijawab", async () => {
+      givenMessage("text", "ok, kapan jadinya?");
+      tools.findActiveIntake.mockResolvedValue({ id: "i1", status: "AWAITING_QUOTE", createdAt: new Date() });
+      await handleInboundMessage("msg_1");
+      expect(ai.runAiTurn).toHaveBeenCalled();
+    });
   });
 
   it("kode layanan internal dibuang dari balasan", async () => {

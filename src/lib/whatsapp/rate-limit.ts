@@ -59,13 +59,17 @@ export type MonthlyUsage = {
   warningThreshold: number;
   freeTier: number;
   nearLimit: boolean;
+  /** Rem bulanan (docs/WHATSAPP_SPAM_GUARD.md §3): batas balasan bot bulan ini dan apakah sudah tercapai. */
+  monthlyReplyCap: number;
+  brakeActive: boolean;
 };
 
 export async function getMonthlyUsage(now = new Date()): Promise<MonthlyUsage> {
   const since = startOfMonthWib(now);
   // Uji bot tidak mengirim apa pun ke WhatsApp, jadi tidak memakai kuota Meta.
   const where = { createdAt: { gte: since }, conversation: { isSandbox: false } };
-  const [outboundSent, outboundFailed, templatesSent, botReplies, inbound] = await Promise.all([
+  const [settings, outboundSent, outboundFailed, templatesSent, botReplies, inbound] = await Promise.all([
+    prisma.studioSettings.findUnique({ where: { id: "default" }, select: { waBotMonthlyReplyCap: true } }),
     prisma.waMessage.count({ where: { ...where, direction: "OUTBOUND", NOT: { deliveryStatus: "failed" } } }),
     prisma.waMessage.count({ where: { ...where, direction: "OUTBOUND", deliveryStatus: "failed" } }),
     prisma.waMessage.count({ where: { ...where, direction: "OUTBOUND", type: "template", NOT: { deliveryStatus: "failed" } } }),
@@ -83,5 +87,8 @@ export async function getMonthlyUsage(now = new Date()): Promise<MonthlyUsage> {
     warningThreshold: WA_RATE_LIMITS.outboundMonthlyWarning,
     freeTier: WA_RATE_LIMITS.outboundMonthlyFreeTier,
     nearLimit: outboundSent >= WA_RATE_LIMITS.outboundMonthlyWarning,
+    monthlyReplyCap: settings?.waBotMonthlyReplyCap ?? WA_RATE_LIMITS.monthlyReplyCapDefault,
+    // Hitungan sama dengan spam-guard getMonthlyBrake: balasan bot ke klien sungguhan yang tidak gagal.
+    brakeActive: botReplies >= (settings?.waBotMonthlyReplyCap ?? WA_RATE_LIMITS.monthlyReplyCapDefault),
   };
 }

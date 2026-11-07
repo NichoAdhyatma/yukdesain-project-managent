@@ -6,6 +6,7 @@ import { botReplyLimitReached, checkInboundRate, imageLimitExceeded } from "./ra
 import { BOT_REPLIES, isSuperseded, replyWithAi, sendBotText, setHumanMode } from "./bot-reply";
 import { resolveOwner } from "./owner/identity";
 import { handleOwnerMessage } from "./owner/handle";
+import { SMALL_TALK_SILENT_STATUSES, getMonthlyBrake, isSmallTalk, notifyOwnersBrakeOnce } from "./spam-guard";
 
 export { BOT_REPLIES, sendBotText } from "./bot-reply";
 
@@ -24,10 +25,13 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
       body: true,
       createdAt: true,
       contextWamid: true,
-      conversation: { select: { id: true, waId: true, mode: true, isSandbox: true } },
+      conversation: { select: { id: true, waId: true, mode: true, isSandbox: true, blockedAt: true } },
     },
   });
   const { conversation } = message;
+
+  // Nomor diblokir admin: pesan tetap tersimpan untuk arsip, bot diam (docs/WHATSAPP_SPAM_GUARD.md §5).
+  if (conversation.blockedAt && !conversation.isSandbox) return;
 
   // Nomor owner (atau Uji bot sebagai owner): instruksi ke bot, bukan chat klien
   // (docs/WHATSAPP_OWNER_COMMANDS.md §3).
@@ -48,6 +52,19 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
     if (!settings?.waBotEnabled) return;
   }
   if (conversation.mode === "HUMAN") return;
+
+  // Rem bulanan: balasan bot bulan ini sudah mencapai batas owner → satu pesan, lalu admin (§3).
+  if (!conversation.isSandbox) {
+    const brake = await getMonthlyBrake();
+    if (brake.active) {
+      await setHumanMode(conversation.id);
+      await sendBotText(conversation, BOT_REPLIES.monthlyCap);
+      await notifyOwnersBrakeOnce(brake).catch((error) =>
+        console.error("[whatsapp] info rem bulanan gagal:", (error as Error).name),
+      );
+      return;
+    }
+  }
 
   if (message.wamid) {
     // Centang biru hanya kosmetik; gagal tidak menghentikan balasan.
@@ -87,7 +104,14 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
     }
   }
 
+  // Pesan beruntun: webhook menunggu sebentar sebelum memanggil bot, jadi giliran lama berhenti di sini
+  // dan hanya pesan terakhir yang dibalas (docs/WHATSAPP_SPAM_GUARD.md §2).
   if (await isSuperseded(conversation.id, message.createdAt)) return;
+
+  // Basa-basi setelah brief dikonfirmasi ("ok", "makasih", emoji): tidak perlu balasan (§4).
+  if (message.type === "text" && !conversation.isSandbox && isSmallTalk(message.body) && (await briefAlreadyConfirmed(conversation.id))) {
+    return;
+  }
 
   // Batas biaya: percakapan yang sangat panjang dialihkan ke admin (§17).
   if (await botReplyLimitReached(conversation.id)) {
@@ -97,4 +121,12 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   }
 
   await replyWithAi(conversation, message, { checkSuperseded: true });
+}
+
+/** Order terakhir sudah lewat tahap brief (menunggu harga, verifikasi DP, atau sudah jadi project). */
+async function briefAlreadyConfirmed(conversationId: string): Promise<boolean> {
+  const latest =
+    (await findActiveIntake(conversationId)) ??
+    (await prisma.waIntake.findFirst({ where: { conversationId }, orderBy: { createdAt: "desc" }, select: { status: true } }));
+  return !!latest && SMALL_TALK_SILENT_STATUSES.has(latest.status);
 }

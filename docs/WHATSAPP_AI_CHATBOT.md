@@ -849,3 +849,9 @@ atau versi terbit. Hanya membaca; tombol Ubah membuka editor aslinya. Detail: `d
 Otak bot, Panduan, Uji bot, dan Model AI pindah dari Settings › WhatsApp ke menu baru **Bot AI** (`/bot`). Otak bot
 tampil sebagai mind map yang bisa diklik (pohon di layar kecil), dan isi Markdown dirender rapi. Settings › WhatsApp
 tinggal Saluran, Balas otomatis, Nomor owner, dan Pemakaian. Detail dan langkah deploy: `docs/BOT_AI_PAGE.md`.
+
+## 30. Perlindungan spam dan hemat token (2026-11-07)
+
+Pesan beruntun digabung (jeda 5 detik), rem bulanan balasan bot (default 2.000, diatur di Settings › WhatsApp ›
+Pemakaian), basa-basi setelah brief dikonfirmasi tidak dibalas, blokir nomor dari Order WA, dan teks klien > 2.000
+karakter dipotong untuk AI. Batas harian per nomor tetap 80. Detail: `docs/WHATSAPP_SPAM_GUARD.md`.

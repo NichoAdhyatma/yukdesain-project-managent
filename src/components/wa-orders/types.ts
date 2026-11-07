@@ -13,6 +13,7 @@ export type WaIntakeListItem = {
   deadline: string | null;
   pendingProofs: number;
   conversationMode: "BOT" | "HUMAN";
+  blocked: boolean;
   waitingForOwner: boolean;
   outsideServiceWindow: boolean;
   updatedAt: string;
@@ -88,6 +89,7 @@ export type WaIntakeDetail = {
     waId: string;
     profileName: string | null;
     mode: "BOT" | "HUMAN";
+    blockedAt: string | null;
     lastInboundAt: string | null;
     outsideServiceWindow: boolean;
   };

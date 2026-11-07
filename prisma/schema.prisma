@@ -550,6 +550,8 @@ model StudioSettings {
   waFonnteDevice             String?
   // Draft panduan bot dari owner ({ instructions, faqs }); versi terbit di WaBotGuideVersion
   waBotGuideDraft     Json?
+  waBotMonthlyReplyCap  Int     @default(2000) // rem bulanan, docs/WHATSAPP_SPAM_GUARD.md §3
+  waBotCapNotifiedMonth String? // "YYYY-MM" (WIB): owner sudah diberi tahu rem aktif bulan ini
   updatedAt DateTime @updatedAt
 
   @@map("studio_settings")
@@ -594,6 +596,8 @@ model WaConversation {
   // Percakapan uji dari Settings › Uji bot: tidak pernah dikirim ke WhatsApp dan disaring
   // dari Order WA, statistik, dan rate limit (docs/WHATSAPP_BOT_GUIDE.md §5)
   isSandbox     Boolean            @default(false)
+  blockedAt     DateTime? // nomor diblokir: pesan disimpan, bot diam (docs/WHATSAPP_SPAM_GUARD.md §5)
+  blockedById   String?
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
 

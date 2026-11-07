@@ -5,6 +5,7 @@ import { verifySignature } from "@/lib/whatsapp/signature";
 import { parseWebhook } from "@/lib/whatsapp/payload";
 import { applyStatusUpdate, storeInboundMessage } from "@/lib/whatsapp/inbound";
 import { handleInboundMessage } from "@/lib/whatsapp/bot";
+import { waitForBurst } from "@/lib/whatsapp/spam-guard";
 import { maskPhone } from "@/lib/whatsapp/phone";
 import { expireOwnerQueries } from "@/lib/whatsapp/owner/queries";
 
@@ -85,6 +86,8 @@ export async function POST(request: Request) {
     after(async () => {
       // Pertanyaan ke owner yang lewat batas waktu → chat klien ke admin (tanpa cron).
       await expireOwnerQueries().catch((error) => console.error("[whatsapp] expire pertanyaan owner gagal:", (error as Error).name));
+      // Tunggu pesan susulan: pesan beruntun dibalas sekali (docs/WHATSAPP_SPAM_GUARD.md §2).
+      await waitForBurst();
       for (const { id, waId } of stored) {
         try {
           await handleInboundMessage(id);
