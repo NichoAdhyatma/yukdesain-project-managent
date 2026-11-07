@@ -70,7 +70,7 @@ export type PaymentExtraction = {
 export type WaIntakeDetail = {
   id: string;
   status: WaIntakeStatus;
-  service: { id: string; code: string; name: string } | null;
+  service: { id: string; code: string; name: string; startingPrice: number | null; priceNote: string | null } | null;
   clientName: string | null;
   clientEmail: string | null;
   brief: {
