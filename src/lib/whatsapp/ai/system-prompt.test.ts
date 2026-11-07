@@ -35,7 +35,8 @@ describe("buildSystemPrompt: blok Kebijakan dari Operasional studio", () => {
     expect(prompt).toContain("Lunas sebelum file final dikirim.");
     expect(prompt).toContain("Revisi gratis 5x per project");
     expect(prompt).toContain(OPERATIONS_DEFAULTS.revisionNotice);
-    expect(prompt).toContain("Senin–Sabtu, 09.00–17.00 WIB");
+    expect(prompt).toContain("Jam kerja tim desain: Senin–Sabtu, 09.00–17.00 WIB. Sebutkan saat klien menanyakan progres, revisi, atau kapan desainnya dikerjakan.");
+    expect(prompt).not.toContain("Jam kerja admin");
     expect(prompt).not.toContain("DP 50%");
   });
 

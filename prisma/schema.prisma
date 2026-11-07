@@ -582,9 +582,8 @@ model StudioSettings {
   opsRevisionNotice    String?
   opsSettlementNote    String?
   opsWorkingDays       Int[]   @default([1, 2, 3, 4, 5, 6]) // 1 = Senin … 7 = Minggu
-  opsWorkingHoursStart String  @default("09:00") // WIB
-  opsWorkingHoursEnd   String  @default("17:00") // WIB
-  opsOutsideHoursNote  String?
+  opsWorkingHoursStart String  @default("09:00") // jam kerja desainer, WIB
+  opsWorkingHoursEnd   String  @default("17:00") // jam kerja desainer, WIB
   updatedAt DateTime @updatedAt
 
   @@map("studio_settings")

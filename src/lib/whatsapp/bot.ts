@@ -5,8 +5,6 @@ import { findActiveIntake } from "./ai/tools";
 import { botReplyLimitReached, checkInboundRate, imageLimitExceeded } from "./rate-limit";
 import { BOT_REPLIES, isSuperseded, replyWithAi, sendBotText, setHumanMode } from "./bot-reply";
 import { resolveOwner } from "./owner/identity";
-import { handoffReply } from "./handoff-reply";
-import { getStudioOperations } from "@/lib/studio-operations";
 import { handleOwnerMessage } from "./owner/handle";
 import { notifyNewClient } from "@/lib/notifications/owner-events";
 import { SMALL_TALK_SILENT_STATUSES, getMonthlyBrake, isSmallTalk, notifyOwnersBrakeOnce } from "./spam-guard";
@@ -105,7 +103,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
 
   if (message.type === "text" && HANDOFF_KEYWORDS.has(message.body.trim().toLowerCase())) {
     await setHumanMode(conversation.id, "client_asked");
-    await sendBotText(conversation, handoffReply(await getStudioOperations(), new Date()));
+    await sendBotText(conversation, BOT_REPLIES.handoff);
     return;
   }
 

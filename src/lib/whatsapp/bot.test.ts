@@ -33,14 +33,6 @@ vi.mock("./rate-limit", () => limits);
 vi.mock("./ai/tools", () => tools);
 vi.mock("./owner/identity", () => ({ resolveOwner: owner.resolveOwner }));
 vi.mock("./owner/handle", () => ({ handleOwnerMessage: owner.handleOwnerMessage }));
-// Jam kerja 24 jam setiap hari supaya tes tidak bergantung pada jam saat dijalankan.
-vi.mock("@/lib/studio-operations", async (orig) => {
-  const actual = await orig<typeof import("@/lib/studio-operations")>();
-  return {
-    ...actual,
-    getStudioOperations: async () => ({ ...actual.OPERATIONS_DEFAULTS, workingDays: [1, 2, 3, 4, 5, 6, 7], workingHoursStart: "00:00", workingHoursEnd: "23:59" }),
-  };
-});
 vi.mock("./spam-guard", async (orig) => ({
   ...(await orig<typeof import("./spam-guard")>()),
   getMonthlyBrake: guard.getMonthlyBrake,
@@ -162,20 +154,6 @@ describe("handleInboundMessage", () => {
     expect(humanModeSet()).toBe(true);
     expect(sentBodies()).toEqual([BOT_REPLIES.handoff]);
     expect(ai.runAiTurn).not.toHaveBeenCalled();
-  });
-
-  it("kata kunci admin di luar jam kerja → kabari jam kerja admin (docs/STUDIO_OPERATIONS.md)", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-11-09T16:59:30Z")); // Senin 23.59.30 WIB: di luar 00:00–23:59
-    try {
-      givenMessage("text", "admin");
-      await handleInboundMessage("msg_1");
-    } finally {
-      vi.useRealTimers();
-    }
-    expect(sentBodies()).toEqual([
-      "Baik kak, percakapan ini kami teruskan ke admin. Admin membalas di jam kerja berikutnya. (Jam kerja: Senin–Minggu, 00.00–23.59 WIB)",
-    ]);
   });
 
   it("kalimat yang memuat kata admin tetap ke AI", async () => {

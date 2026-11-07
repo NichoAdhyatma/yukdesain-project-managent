@@ -34,7 +34,6 @@ describe("saveStudioOperations (docs/STUDIO_OPERATIONS.md)", () => {
       opsWorkingDays: [1, 2, 3, 4, 5, 6],
       opsWorkingHoursStart: "09:00",
       opsWorkingHoursEnd: "17:00",
-      opsOutsideHoursNote: null,
     };
     expect(tx.studioSettings.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "default" }, update: data, create: expect.objectContaining(data) }));
   });

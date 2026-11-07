@@ -17,7 +17,7 @@ function renderPolicies(ops: StudioOperations): string {
   return `# Kebijakan studio
 - Pengerjaan dimulai setelah DP ${ops.dpPercent}% dari harga yang dikirim tim kami. ${ops.settlementNote}
 ${revision}
-- Jam kerja admin: ${formatWorkingHours(ops)}. Kamu tetap melayani di luar jam itu; saat mengalihkan ke admin di luar jam kerja, sampaikan bahwa admin membalas di jam kerja.`;
+- Jam kerja tim desain: ${formatWorkingHours(ops)}. Sebutkan saat klien menanyakan progres, revisi, atau kapan desainnya dikerjakan. Kamu tetap melayani chat di luar jam itu.`;
 }
 
 export function buildSystemPrompt(studioName: string, guide: BotGuide | null, ops: StudioOperations): string {

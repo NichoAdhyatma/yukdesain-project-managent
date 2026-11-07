@@ -90,6 +90,7 @@ async function upsertMenuItems() {
     { name: "Projects", href: "/projects", icon: "Briefcase", group: "Work", order: 11 },
     { name: "Order WA", href: "/wa-orders", icon: "MessageCircle", group: "Work", order: 12 },
     { name: "Bot AI", href: "/bot", icon: "Bot", group: "Work", order: 13 },
+    { name: "Operasional", href: "/operasional", icon: "Clock", group: "Work", order: 14 },
 
     // Team
     { name: "Designers", href: "/designers", icon: "Users", group: "Team", order: 20 },
@@ -116,6 +117,7 @@ async function upsertMenuItems() {
     "/projects": ["OWNER"],
     "/wa-orders": ["OWNER"],
     "/bot": ["OWNER"],
+    "/operasional": ["OWNER"],
     "/designers": ["OWNER"],
     "/services": ["OWNER"],
     "/designer": ["OWNER", "DESIGNER"],

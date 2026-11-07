@@ -45,10 +45,7 @@ vi.mock("@/lib/studio", () => ({
   getStudioSettings: async () => ({ name: "YukDesain Studio", email: "hello@x", phone: "0812", address: "Jakarta", logoUrl: "l", tagline: "t" }),
 }));
 const owners = vi.hoisted(() => ({ listOwnerNumbers: vi.fn() }));
-vi.mock("@/lib/studio-operations", async (orig) => {
-  const actual = await orig<typeof import("@/lib/studio-operations")>();
-  return { ...actual, getStudioOperations: async () => actual.OPERATIONS_DEFAULTS };
-});
+
 vi.mock("../owner/identity", () => owners);
 const queryStore = vi.hoisted(() => ({ findPendingQuery: vi.fn(), createOwnerQuery: vi.fn(), notifyOwners: vi.fn() }));
 vi.mock("../owner/query-store", () => queryStore);
@@ -294,18 +291,6 @@ describe("tool lain", () => {
   it("request_human_handoff → mode HUMAN", async () => {
     await run("request_human_handoff", { reason: "minta diskon" });
     expect(db.waConversation.updateMany).toHaveBeenCalledWith({ where: { id: "conv_1", mode: "BOT" }, data: { mode: "HUMAN" } });
-  });
-
-  it("request_human_handoff di luar jam kerja → arahan menyebut jam kerja admin", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date("2026-11-08T03:00:00Z")); // Minggu
-    try {
-      const out = await run("request_human_handoff", { reason: "minta diskon" });
-      expect(JSON.stringify(out)).toContain("Admin membalas di jam kerja berikutnya.");
-      expect(JSON.stringify(out)).toContain("Senin–Sabtu, 09.00–17.00 WIB");
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 

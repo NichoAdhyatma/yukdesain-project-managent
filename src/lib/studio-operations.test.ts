@@ -8,8 +8,6 @@ import {
   formatWorkingHours,
   getStudioOperations,
   invalidateOperationsCache,
-  isWithinWorkingHours,
-  nextWorkingStart,
   studioOperationsSchema,
 } from "./studio-operations";
 
@@ -37,20 +35,7 @@ describe("studioOperationsSchema (docs/STUDIO_OPERATIONS.md)", () => {
   });
 });
 
-describe("jam kerja (WIB, apa pun zona server)", () => {
-  it("Senin 09.30 WIB = jam kerja; 17.30 WIB dan Minggu = di luar", () => {
-    expect(isWithinWorkingHours(new Date("2026-11-09T02:30:00Z"), OPERATIONS_DEFAULTS)).toBe(true);
-    expect(isWithinWorkingHours(new Date("2026-11-09T10:30:00Z"), OPERATIONS_DEFAULTS)).toBe(false);
-    expect(isWithinWorkingHours(new Date("2026-11-08T03:00:00Z"), OPERATIONS_DEFAULTS)).toBe(false);
-  });
-
-  it("awal jam kerja berikutnya", () => {
-    expect(nextWorkingStart(new Date("2026-11-08T03:00:00Z"), OPERATIONS_DEFAULTS).toISOString()).toBe("2026-11-09T02:00:00.000Z");
-    expect(nextWorkingStart(new Date("2026-11-09T10:30:00Z"), OPERATIONS_DEFAULTS).toISOString()).toBe("2026-11-10T02:00:00.000Z");
-    const during = new Date("2026-11-09T02:30:00Z");
-    expect(nextWorkingStart(during, OPERATIONS_DEFAULTS)).toEqual(during);
-  });
-
+describe("jam kerja desainer", () => {
   it("format untuk klien", () => {
     expect(formatWorkingHours(OPERATIONS_DEFAULTS)).toBe("Senin–Sabtu, 09.00–17.00 WIB");
     expect(formatWorkingHours({ ...OPERATIONS_DEFAULTS, workingDays: [1, 3, 5] })).toBe("Senin, Rabu, Jumat, 09.00–17.00 WIB");
@@ -72,7 +57,6 @@ describe("getStudioOperations", () => {
       opsWorkingDays: [1, 2, 3, 4, 5],
       opsWorkingHoursStart: "08:00",
       opsWorkingHoursEnd: "16:00",
-      opsOutsideHoursNote: null,
     });
     expect(await getStudioOperations()).toEqual({
       ...OPERATIONS_DEFAULTS,

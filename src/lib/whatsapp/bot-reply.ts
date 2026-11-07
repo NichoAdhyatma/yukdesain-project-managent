@@ -6,7 +6,6 @@ import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
 import { setHumanMode } from "./handoff";
 import { clampReply, sanitizeReply, stripPriceMentions } from "./ai/reply-guard";
-import { HANDOFF_IN_HOURS } from "./handoff-reply";
 
 // Bagian bersama bot: kirim/simpan balasan dan satu giliran AI → balasan ke klien.
 // Dipakai pesan masuk (bot.ts) dan penerusan jawaban owner (owner/queries.ts).
@@ -16,8 +15,7 @@ export const BOT_REPLIES = {
     "Maaf kak, saat ini kami hanya bisa membaca pesan teks dan gambar. Silakan kirim ulang sebagai teks atau gambar ya.",
   MEDIA_TOO_LARGE: "Maaf kak, gambarnya terlalu besar. Kirim gambar maksimal 10 MB ya.",
   MEDIA_TYPE_NOT_ALLOWED: "Maaf kak, gambarnya tidak bisa kami proses. Kirim gambar JPG, PNG, atau WEBP ya.",
-  // Dalam jam kerja; di luar jam kerja pakai handoffReply (docs/STUDIO_OPERATIONS.md)
-  handoff: HANDOFF_IN_HOURS,
+  handoff: "Baik kak, percakapan ini kami teruskan ke admin. Admin kami akan membalas secepatnya ya.",
   busy: "Maaf kak, sistem kami sedang sibuk. Admin kami akan membalas secepatnya ya.",
   tooManyMessages: "Kak, pesannya banyak sekali dalam waktu singkat. Kami balas lagi beberapa menit lagi ya.",
   tooManyImages: "Maaf kak, gambar untuk order ini sudah banyak sekali, jadi gambar ini tidak kami simpan. Kalau masih ada gambar penting, ketik *admin* untuk dibantu tim kami.",
