@@ -96,16 +96,20 @@ Nama desainer, catatan internal, `ownerId`, dan nominal lain tidak pernah masuk 
 | Tool | Input | Aturan server |
 |---|---|---|
 | `draft_revision` | `project_code`, `description` (≤2000), `image_message_ids[]` (dari STATE) | Project milik klien nomor ini (pencocokan sama dengan `get_my_projects`), sudah dikerjakan (`SEDANG_DIKERJAKAN`), belum final disetujui, kuota tersisa > 0. Menyimpan draft di percakapan (belum terhitung). Mengembalikan ringkasan + sisa kuota + `revisionNotice`. |
-| `confirm_revision` | — | Hanya bila ada draft dan pesan klien terakhir menyetujui. Membuat `Revision` (nomor berikutnya, `remainingQuota` dari kuota project, lampiran dari gambar WA), notifikasi desainer + owner (web push), lalu draft dihapus. |
-| `approve_final` | `project_code`, `confirmed` | Hanya bila `finalSubmittedAt` terisi dan `finalApprovedAt` kosong. Panggilan pertama mengembalikan kalimat konfirmasi; `confirmed: true` setelah klien setuju → `finalApprovedAt` + `SELESAI` (logika sama dengan `approve-final` portal, diekstrak ke `src/lib/projects/approve-final.ts`) + kabar `COMPLETED`. |
+| `confirm_revision` | — | Hanya bila ada draft yang sudah dikirim ke klien pada giliran sebelumnya dan sesudahnya ada pesan klien baru (pengaman di bawah). Membuat `Revision` (nomor berikutnya, `remainingQuota` dari kuota project, lampiran dari gambar WA), notifikasi desainer + owner (web push), lalu draft dihapus. |
+| `approve_final` | `project_code`, `confirmed` | Hanya bila `finalSubmittedAt` terisi dan `finalApprovedAt` kosong. Panggilan pertama mencatat permintaan konfirmasi dan mengembalikan kalimatnya; `confirmed: true` hanya diterima bila permintaan itu dibuat pada giliran sebelumnya dan sesudahnya ada pesan klien baru → `finalApprovedAt` + `SELESAI` (logika sama dengan `approve-final` portal, diekstrak ke `src/lib/projects/approve-final.ts`) + kabar `COMPLETED`. |
 
-- Draft revisi disimpan di `WaConversation.revisionDraft Json?` (aditif) dengan masa berlaku 24 jam.
+- Draft revisi atau permintaan konfirmasi final disimpan di `WaConversation.pendingClientAction Json?` (aditif):
+  `{ kind: "REVISION" | "FINAL_APPROVAL", projectId, createdAt, … }`, berlaku 24 jam, satu per percakapan.
+- **Pengaman konfirmasi**: model yang menilai jawaban klien (pola sama dengan `confirm_brief`), tetapi server hanya
+  menerima konfirmasi bila tindakan tertunda dibuat pada giliran sebelumnya dan ada pesan INBOUND klien setelah
+  `createdAt`. Jadi bot tidak bisa membuat dan mengonfirmasi dalam satu giliran.
 - Gambar referensi: gambar klien yang belum ditanggapi (sudah tersimpan sebagai `WaMessage` image) disalin menjadi
   `Attachment` revisi.
 - Prompt: bagian "Status project yang sudah berjalan" diperbarui (revisi bisa lewat chat dengan alur draft → konfirmasi;
   sampaikan `revisionNotice` apa adanya sebelum konfirmasi; kuota habis atau sudah final → jelaskan dan tawarkan
   admin).
-- Kode yang menyatakan "tidak bisa menerima revisi lewat chat" dihapus dari prompt.
+- Kalimat prompt "tidak bisa menerima revisi lewat chat" dihapus.
 
 ### 5.2 Yang tidak boleh
 
@@ -144,8 +148,9 @@ Nama desainer, catatan internal, `ownerId`, dan nominal lain tidak pernah masuk 
 - A: pemilihan kejadian per pemicu; dedupe (`event`, `refId`); jeda 60 menit dan satu PENDING per project; Meta di luar
   24 jam → SKIPPED; isi pesan tanpa data internal; cron menolak tanpa secret.
 - B: `draft_revision` menolak project milik orang lain, project belum dikerjakan, final disetujui, dan kuota habis;
-  `confirm_revision` tanpa draft / draft kedaluwarsa ditolak; nomor revisi dan `remainingQuota` benar; `approve_final`
-  tanpa `confirmed` tidak mengubah apa pun; sandbox tidak membuat revisi.
+  `confirm_revision` tanpa draft, draft kedaluwarsa, atau di giliran yang sama dengan draft ditolak; nomor revisi dan `remainingQuota` benar; `approve_final`
+  tanpa `confirmed`, atau tanpa pesan klien baru setelah permintaan konfirmasi, tidak mengubah apa pun; sandbox tidak
+  membuat revisi.
 - C: portal tanpa form revisi/approve; route lama 410; link WhatsApp tampil hanya bila nomor studio ada.
 - Setiap bagian: typecheck, lint, test, build, uji browser (UI/UX Pro Max + `/antislop` untuk UI).
 
