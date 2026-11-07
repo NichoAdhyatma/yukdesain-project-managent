@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { parseServiceBotFields, toServiceDto } from "@/lib/services/service-dto";
 
 export async function GET() {
   try {
@@ -13,8 +14,10 @@ export async function GET() {
       orderBy: { code: "asc" },
     });
 
+    // Harga mulai dan catatan bot khusus owner (docs/SERVICES_CATALOG.md).
+    const isOwner = user.roles.includes("OWNER");
     return NextResponse.json(
-      { services },
+      { services: services.map((s) => toServiceDto(s, isOwner)) },
       {
         headers: {
           // Cache for 1 hour on client, revalidate in background for up to 24h
@@ -44,6 +47,10 @@ export async function POST(request: Request) {
     if (!name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
     }
+    const botFields = parseServiceBotFields(body);
+    if (!botFields.ok) {
+      return NextResponse.json({ error: "Data tidak valid", fields: botFields.fields }, { status: 400 });
+    }
 
     // Generate next service code
     const lastService = await prisma.service.findFirst({ orderBy: { code: "desc" } });
@@ -53,7 +60,7 @@ export async function POST(request: Request) {
     const code = `SVC-${String(nextNum).padStart(2, "0")}`;
 
     const service = await prisma.service.create({
-      data: { code, name, description, outputFormat },
+      data: { code, name, description, outputFormat, ...botFields.data },
     });
 
     return NextResponse.json({ service }, { status: 201 });
