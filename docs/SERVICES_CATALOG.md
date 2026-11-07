@@ -15,8 +15,10 @@ dan 2026-11-08. Menu **Layanan** menjadi sumber pengetahuan bot tentang layanan,
 
 - Teks kosong disimpan sebagai `null`. Validasi: `serviceBotFieldsSchema` (`src/lib/whatsapp/ai/service-catalog.ts`).
 - Keempat kolom hanya dikirim dan diterima untuk owner (`toServiceDto`, `parseServiceBotFields` di
-  `src/lib/services/service-dto.ts`); desainer juga diblokir proxy dari `/api/services`.
-- Halaman Layanan mengambil data dengan `cache: "no-store"`, karena `GET /api/services` di-cache browser 1 jam.
+  `src/lib/services/service-dto.ts`); desainer juga diblokir proxy dari `/api/services`. Payload project (termasuk
+  route yang dibuka desainer) memuat layanan lewat `SERVICE_PUBLIC_SELECT`, tanpa kolom bot.
+- `GET /api/services` dikirim dengan `Cache-Control: private, no-cache`, jadi harga yang baru disimpan langsung
+  terbaca di semua halaman (sebelumnya di-cache browser 1 jam).
 - **Yang perlu disiapkan klien** tidak diketik: diturunkan dari field brief wajib layanan (`getBriefConfig` +
   `BRIEF_FIELD_DESCRIPTIONS`), jadi selalu sama dengan form brief.
 
@@ -38,21 +40,29 @@ dan 2026-11-08. Menu **Layanan** menjadi sumber pengetahuan bot tentang layanan,
 `stripPriceMentions` (`src/lib/whatsapp/ai/reply-guard.ts`) menghapus kalimat yang menyebut harga atau lama
 pengerjaan, kecuali semua angkanya berasal dari data yang diizinkan:
 
-1. Setiap **nominal rupiah** dianggap menyebut harga, dengan atau tanpa kata "harga" ("mulai Rp120.000",
-   "jadi 300rb").
-2. Angka yang diizinkan: isi brief klien, nilai aturan harga owner, dan **angka katalog** (harga mulai + angka di
-   catatan harga).
-3. Angka katalog hanya berlaku untuk kalimat harga. Kalimat lama pengerjaan ("selesai 3 hari") tetap dihapus
-   walau angka 3 ada di catatan harga.
+1. Setiap **nominal** dianggap menyebut harga, dengan atau tanpa kata "harga": "Rp…", "IDR …", "…rb/ribu/k/jt/juta",
+   dan angka berpemisah ribuan ("120.000").
+2. Angka dibandingkan sebagai **nilai rupiah** (`amountsOf`): "18rb" = "Rp18.000", "Rp150.000,-" = 150000.
+3. Tingkat angka yang diizinkan:
+   - isi brief klien dan nilai aturan harga owner: kalimat apa pun;
+   - teks kebijakan (catatan revisi, catatan pelunasan) dan jawaban FAQ owner: bukan kalimat lama pengerjaan;
+   - **katalog per layanan** (harga mulai + catatan harga): bukan lama pengerjaan, wajib kata "mulai", tanpa kata
+     total ("total", "jadi", "semua", "2x"), dan semua angkanya dari **satu** layanan.
 
-Contoh dengan harga mulai Rp150.000:
+Contoh (Logo Rp150.000 "termasuk 2 konsep", Feed Rp300.000):
 
 | Kalimat bot | Hasil |
 |---|---|
-| "Logo Minimalis mulai Rp150.000 ya kak." | lolos |
-| "Logo Minimalis mulai Rp120.000 ya kak." | dihapus |
-| "Kalau 2 logo jadi Rp300.000 kak." | dihapus |
-| "Harganya 150 ribu kak." | dihapus (format lain) |
+| "Logo Minimalis mulai Rp150.000 (termasuk 2 konsep) ya kak." | lolos |
+| "Logo mulai 150 ribu ya kak." | lolos (nilai sama) |
+| "Logo mulai 120k ya kak." / "Logo mulai IDR 120.000" | dihapus |
+| "Kalau 2 logo jadi Rp300.000 kak." | dihapus (total, campur layanan) |
+| "Totalnya Rp150.000 ya kak." | dihapus (tanpa "mulai") |
+| "Logo mulai Rp150.000, selesai 2 hari kak." | dihapus (lama pengerjaan) |
+
+Batasan yang diterima: kalimat "mulai" dengan harga mulai milik layanan lain ("Feed IG mulai Rp150.000") tidak
+ditolak, karena mencocokkan nama layanan di kalimat terlalu rapuh; harganya tetap harga mulai nyata dan harga final
+tetap diisi admin.
 
 ## 4. Setelah deploy
 

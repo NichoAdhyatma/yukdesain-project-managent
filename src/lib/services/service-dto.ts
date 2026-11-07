@@ -6,6 +6,21 @@ import { serviceBotFieldsSchema, type ServiceBotFields } from "@/lib/whatsapp/ai
 
 const BOT_KEYS = ["startingPrice", "priceNote", "suitableFor", "botNotes"] as const;
 
+/**
+ * Kolom layanan untuk payload project (dipakai juga oleh route yang dibuka desainer): tanpa kolom bot, supaya
+ * harga mulai dan catatan bot tidak ikut terkirim lewat data project.
+ */
+export const SERVICE_PUBLIC_SELECT = {
+  id: true,
+  code: true,
+  name: true,
+  description: true,
+  outputFormat: true,
+  isActive: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
+
 export function toServiceDto(service: Service, isOwner: boolean) {
   if (isOwner) return service;
   const rest: Partial<Service> = { ...service };

@@ -20,8 +20,9 @@ export async function GET() {
       { services: services.map((s) => toServiceDto(s, isOwner)) },
       {
         headers: {
-          // Cache for 1 hour on client, revalidate in background for up to 24h
-          "Cache-Control": "private, max-age=3600, stale-while-revalidate=86400",
+          // Tanpa cache browser: harga mulai yang baru disimpan harus langsung terbaca di semua halaman
+          // (docs/SERVICES_CATALOG.md §1); daftarnya kecil, jadi biaya ambil ulang tidak berarti.
+          "Cache-Control": "private, no-cache",
         },
       }
     );

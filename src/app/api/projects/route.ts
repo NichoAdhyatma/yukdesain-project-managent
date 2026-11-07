@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createProject } from "@/lib/projects/create-project";
+import { SERVICE_PUBLIC_SELECT } from "@/lib/services/service-dto";
 
 export async function GET(request: Request) {
   try {
@@ -72,7 +73,7 @@ export async function GET(request: Request) {
       where: whereClause,
       include: {
         client: true,
-        service: true,
+        service: { select: SERVICE_PUBLIC_SELECT },
         brief: true,
         assignments: {
           include: {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { SERVICE_PUBLIC_SELECT } from "@/lib/services/service-dto";
 
 export async function GET() {
   try {
@@ -15,7 +16,7 @@ export async function GET() {
         project: {
           include: {
             client: true,
-            service: true,
+            service: { select: SERVICE_PUBLIC_SELECT },
             brief: true,
             assignments: {
               include: {

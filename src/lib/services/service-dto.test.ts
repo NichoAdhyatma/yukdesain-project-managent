@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Service } from "@prisma/client";
-import { parseServiceBotFields, toServiceDto } from "./service-dto";
+import { execSync } from "node:child_process";
+import { SERVICE_PUBLIC_SELECT, parseServiceBotFields, toServiceDto } from "./service-dto";
 
 const svc: Service = {
   id: "s1",
@@ -48,5 +49,19 @@ describe("parseServiceBotFields", () => {
 
   it("teks dirapikan", () => {
     expect(parseServiceBotFields({ suitableFor: "  usaha makanan  " })).toEqual({ ok: true, data: { suitableFor: "usaha makanan" } });
+  });
+});
+
+describe("SERVICE_PUBLIC_SELECT: data layanan di payload project (desainer ikut menerima)", () => {
+  it("tanpa kolom bot", () => {
+    for (const key of BOT_KEYS) expect(SERVICE_PUBLIC_SELECT).not.toHaveProperty(key);
+    expect(SERVICE_PUBLIC_SELECT).toMatchObject({ id: true, code: true, name: true });
+  });
+
+  it("tidak ada route/lib yang memuat layanan utuh (service: true) ke payload project", () => {
+    const files = execSync("grep -rln 'service: true' src/app src/lib || true", { encoding: "utf8" })
+      .split("\n")
+      .filter((f) => f && !f.includes(".test."));
+    expect(files).toEqual([]);
   });
 });
