@@ -59,6 +59,8 @@ export type KirimiDevice = {
   expiresAt: string | null;
   expired: boolean;
   aiEnabled: boolean;
+  /** Webhook URL yang dipasang di dashboard Kirimi (jalur pesan masuk yang dipakai Kirimi). */
+  webhookUrl: string | null;
 };
 
 type DeviceStatusData = {
@@ -71,6 +73,7 @@ type DeviceStatusData = {
   expired_at?: number | null;
   is_expired?: boolean;
   ai_enabled?: boolean;
+  webhook_url?: string | null;
 };
 
 export async function kirimiDeviceStatus(): Promise<KirimiDevice> {
@@ -86,27 +89,22 @@ export async function kirimiDeviceStatus(): Promise<KirimiDevice> {
     expiresAt: typeof d.expired_at === "number" ? new Date(d.expired_at * 1000).toISOString() : null,
     expired: d.is_expired === true,
     aiEnabled: d.ai_enabled === true,
+    webhookUrl: d.webhook_url ?? null,
   };
 }
 
-export const KIRIMI_WEBHOOK_EVENTS = ["message", "message.sent", "message.failed"] as const;
-
-type Subscription = { id: string; target_url?: string | null; delivery?: string; events?: string[]; label?: string | null; secret?: string };
-
-/** Pasang webhook push ke portal. Langganan lain milik perangkat ini (mis. poll uji) dihapus supaya tidak dobel. */
-export async function kirimiInstallWebhook(targetUrl: string): Promise<{ id: string; secret: string | null }> {
+/**
+ * Langganan webhook lewat API (`/v1/webhook/subscribe`) tidak dipakai Kirimi untuk pesan masuk (temuan 2026-11-07,
+ * docs/WHATSAPP_CHANNEL_KIRIMI.md §8). Dipakai sekali untuk menghapus langganan lama perangkat ini.
+ */
+export async function kirimiRemoveApiSubscriptions(): Promise<number> {
   const env = getKirimiEnv();
-  const existing = await kirimiFetch<{ items?: (Subscription & { device_id?: string | null })[] }>("/v1/webhook/list");
+  const existing = await kirimiFetch<{ items?: { id: string; device_id?: string | null }[] }>("/v1/webhook/list");
+  let removed = 0;
   for (const sub of existing.items ?? []) {
-    if (sub.device_id === env.KIRIMI_DEVICE_ID && sub.target_url !== targetUrl) {
-      await kirimiFetch("/v1/webhook/unsubscribe", { id: sub.id });
-    }
+    if (sub.device_id !== env.KIRIMI_DEVICE_ID) continue;
+    await kirimiFetch("/v1/webhook/unsubscribe", { id: sub.id });
+    removed++;
   }
-  const created = await kirimiFetch<Subscription>("/v1/webhook/subscribe", {
-    device_id: env.KIRIMI_DEVICE_ID,
-    target_url: targetUrl,
-    events: KIRIMI_WEBHOOK_EVENTS,
-    label: "YukDesain portal",
-  });
-  return { id: created.id, secret: created.secret ?? null };
+  return removed;
 }

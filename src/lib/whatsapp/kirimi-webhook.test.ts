@@ -45,6 +45,48 @@ describe("parseKirimiPayload (docs/WHATSAPP_CHANNEL_KIRIMI.md)", () => {
     expect(parseKirimiPayload(body, event, now)).toEqual({ kind: "ignored", reason });
   });
 
+  it("format asli Kirimi (2026-11-07): msgId sebagai id, isFromGroup, created_at", () => {
+    const real = {
+      created_at: "2026-11-07T16:34:36+07:00",
+      datetime_wib: "2026-11-07 16:34:36 WIB",
+      deviceId: "D-8IL0J",
+      event: "message",
+      from: "628970000937",
+      id: "2b9f3c1e-0000-4000-8000-000000000001",
+      isFromGroup: false,
+      isFromMe: false,
+      mediaUrl: "",
+      message: "halo mas",
+      messageType: "text",
+      msgId: "3EB0ABCDEF0123456789",
+      name: "Nicho",
+      originLid: "123456789012345",
+      senderAlt: "628970000937",
+    };
+    const r = parseKirimiPayload(real, null, now);
+    expect(r).toEqual({
+      kind: "message",
+      device: "D-8IL0J",
+      message: {
+        wamid: "kirimi:in:3EB0ABCDEF0123456789",
+        waId: "628970000937",
+        profileName: "Nicho",
+        sentAt: new Date("2026-11-07T09:34:36Z"),
+        contextWamid: null,
+        type: "text",
+        body: "halo mas",
+      },
+    });
+    expect(parseKirimiPayload({ ...real, isFromGroup: true }, null, now)).toEqual({ kind: "ignored", reason: "group" });
+    expect(parseKirimiPayload({ ...real, isFromMe: true }, null, now)).toEqual({ kind: "ignored", reason: "from_me" });
+  });
+
+  it("pengirim @lid memakai nomor dari senderAlt; tanpa senderAlt diabaikan", () => {
+    const r = parseKirimiPayload({ event: "message", from: "123456789012345@lid", senderAlt: "6281234567890", message: "halo", msgId: "M1" }, null, now);
+    expect(r.kind === "message" && r.message.waId).toBe("6281234567890");
+    expect(parseKirimiPayload({ event: "message", from: "123456789012345@lid", message: "halo" }, null, now)).toEqual({ kind: "ignored", reason: "lid" });
+  });
+
   it("tanpa id → hash stabil untuk kiriman ulang", () => {
     const body = { from: "6281234567890", message: "halo", timestamp: 1793700000 };
     const a = parseKirimiPayload(body, "message", now);

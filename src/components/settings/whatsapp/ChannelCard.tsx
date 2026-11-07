@@ -387,15 +387,15 @@ type KirimiStatus =
       expired: boolean;
       aiEnabled: boolean;
       webhookInstalled: boolean;
+      webhookElsewhere: boolean;
       webhookUrl: string;
       signingSecretSet: boolean;
     };
 
 const KIRIMI_KEY = ["settings", "whatsapp", "kirimi"];
 
-/** Status perangkat Kirimi + pasang webhook (docs/WHATSAPP_CHANNEL_KIRIMI.md). Scan QR di dashboard Kirimi. */
+/** Status perangkat Kirimi + Webhook URL untuk dashboard (docs/WHATSAPP_CHANNEL_KIRIMI.md §8). */
 function KirimiPanel() {
-  const queryClient = useQueryClient();
   const [showUrl, setShowUrl] = useState(false);
   const { data, isLoading, isError, error, refetch, isRefetching } = useQuery<KirimiStatus>({
     queryKey: KIRIMI_KEY,
@@ -405,23 +405,6 @@ function KirimiPanel() {
       if (!res.ok) throw new Error(body.message ?? "Status Kirimi tidak bisa dimuat");
       return body;
     },
-  });
-  const install = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/settings/whatsapp/kirimi", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "install-webhook" }),
-      });
-      const body = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(body.message ?? "Gagal memasang webhook");
-      return body as KirimiStatus;
-    },
-    onSuccess: (next) => {
-      queryClient.setQueryData(KIRIMI_KEY, next);
-      toast("Webhook Kirimi terpasang. Pesan masuk akan dibalas bot jika saluran Kirimi aktif.", "success");
-    },
-    onError: (e) => toast(e.message, "error"),
   });
 
   if (isLoading) return <div className="h-16 animate-pulse rounded-lg bg-muted" aria-busy="true" />;
@@ -461,7 +444,13 @@ function KirimiPanel() {
         </div>
         <div>
           <dt className="text-muted-foreground">Webhook</dt>
-          <dd>{data.webhookInstalled ? "Terpasang" : "Belum dipasang"}</dd>
+          <dd className={data.webhookInstalled ? undefined : "text-destructive"}>
+            {data.webhookInstalled
+              ? "Terpasang di dashboard Kirimi"
+              : data.webhookElsewhere
+                ? "Mengarah ke URL lain (pesan tidak masuk ke portal)"
+                : "Belum dipasang di dashboard Kirimi"}
+          </dd>
         </div>
         <div>
           <dt className="text-muted-foreground">Perangkat</dt>
@@ -515,14 +504,12 @@ function KirimiPanel() {
         </div>
         <p className="text-muted-foreground">
           URL ini memuat kunci rahasia: jangan dibagikan. Signing secret dari dashboard{" "}
-          {data.signingSecretSet ? "sudah tersimpan di server." : "belum disimpan di server (opsional, untuk memastikan webhook benar dari Kirimi)."}
+          {data.signingSecretSet
+            ? "sudah tersimpan di server; webhook tanpa signature yang benar ditolak."
+            : "belum disimpan di server. Simpan supaya webhook palsu ditolak."}
         </p>
       </section>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" className="max-md:h-11" disabled={!data.connected || install.isPending} onClick={() => install.mutate()}>
-          {install.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-          {data.webhookInstalled ? "Pasang ulang webhook" : "Pasang webhook"}
-        </Button>
         <Button variant="ghost" className="max-md:h-11" disabled={isRefetching} onClick={() => refetch()}>
           {isRefetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
           Muat ulang status
