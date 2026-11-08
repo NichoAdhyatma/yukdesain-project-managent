@@ -37,6 +37,14 @@ describe("flushPendingNotices (docs/CLIENT_NOTIFICATIONS.md)", () => {
     expect(events.sendNoticeNow).toHaveBeenCalledWith("n1");
   });
 
+  it("PENDING yang lebih lama dari kabar progres terakhir yang terkirim → dibuang (SKIPPED SUPERSEDED), tidak dikirim", async () => {
+    db.clientProjectNotice.findMany.mockResolvedValue([{ id: "n1", projectId: "p1", createdAt: minutesAgo(130) }]);
+    db.clientProjectNotice.findFirst.mockResolvedValue({ sentAt: minutesAgo(120) });
+    expect(await flushPendingNotices(now)).toEqual({ sent: 0, skipped: 1, failed: 0 });
+    expect(db.clientProjectNotice.updateMany).toHaveBeenCalledWith({ where: { id: "n1", status: "PENDING" }, data: { status: "SKIPPED", reason: "SUPERSEDED" } });
+    expect(events.sendNoticeNow).not.toHaveBeenCalled();
+  });
+
   it("klaim atomik: proses lain sudah mengambil notice → tidak dikirim dua kali", async () => {
     db.clientProjectNotice.findMany.mockResolvedValue([{ id: "n1", projectId: "p1" }]);
     db.clientProjectNotice.findFirst.mockResolvedValue(null);

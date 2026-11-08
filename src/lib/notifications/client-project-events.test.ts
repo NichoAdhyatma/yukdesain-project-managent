@@ -81,6 +81,12 @@ describe("notifyClientProjectEvent (docs/CLIENT_NOTIFICATIONS.md)", () => {
       expect(outbound.sendSystemText).not.toHaveBeenCalled();
     });
 
+    it("terkirim langsung → PENDING lama project itu dibuang dulu (tidak menyusul setelah update yang lebih baru)", async () => {
+      db.clientProjectNotice.findFirst.mockResolvedValue({ sentAt: new Date(now.getTime() - PROGRESS_COOLDOWN_MS - 60_000) });
+      expect(await notifyClientProjectEvent("p1", { kind: "PROGRESS", updateId: "u3" }, now)).toBe("SENT");
+      expect(db.clientProjectNotice.deleteMany).toHaveBeenCalledWith({ where: { projectId: "p1", event: "PROGRESS", status: "PENDING" } });
+    });
+
     it("lewat jeda → terkirim dengan persen dan catatan", async () => {
       db.clientProjectNotice.findFirst.mockResolvedValue({ sentAt: new Date(now.getTime() - PROGRESS_COOLDOWN_MS - 60_000) });
       expect(await notifyClientProjectEvent("p1", { kind: "PROGRESS", updateId: "u2" }, now)).toBe("SENT");
@@ -94,8 +100,24 @@ describe("notifyClientProjectEvent (docs/CLIENT_NOTIFICATIONS.md)", () => {
     });
   });
 
+  it.each(["FINAL_SUBMITTED", "COMPLETED"] as const)("%s membuang kabar progres yang masih tertahan", async (kind) => {
+    expect(await notifyClientProjectEvent("p1", { kind }, now)).toBe("SENT");
+    expect(db.clientProjectNotice.deleteMany).toHaveBeenCalledWith({ where: { projectId: "p1", event: "PROGRESS", status: "PENDING" } });
+  });
+
   it("error tak terduga tidak dilempar → FAILED", async () => {
     db.project.findUnique.mockRejectedValue(new Error("db down"));
     expect(await notifyClientProjectEvent("p1", { kind: "STARTED" }, now)).toBe("FAILED");
+  });
+});
+
+describe("sendNoticeNow: kabar progres tertunda tidak menyusul setelah final", () => {
+  it("project sudah kirim final atau selesai → SKIPPED SUPERSEDED, tidak dikirim", async () => {
+    db.clientProjectNotice.findUnique.mockResolvedValue({ id: "n9", projectId: "p1", event: "PROGRESS", refId: "u9" });
+    db.project.findUnique.mockResolvedValue({ ...project, finalSubmittedAt: new Date("2026-11-08T09:00:00Z"), status: "SEDANG_DIKERJAKAN" });
+    const { sendNoticeNow } = await import("./client-project-events");
+    expect(await sendNoticeNow("n9")).toBe("SKIPPED");
+    expect(db.clientProjectNotice.update).toHaveBeenCalledWith({ where: { id: "n9" }, data: { status: "SKIPPED", reason: "SUPERSEDED" } });
+    expect(outbound.sendSystemText).not.toHaveBeenCalled();
   });
 });

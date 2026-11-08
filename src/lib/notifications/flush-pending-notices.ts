@@ -9,7 +9,7 @@ export async function flushPendingNotices(now: Date): Promise<{ sent: number; sk
     where: { status: "PENDING" },
     orderBy: { createdAt: "asc" },
     take: 50,
-    select: { id: true, projectId: true },
+    select: { id: true, projectId: true, createdAt: true },
   });
   const result = { sent: 0, skipped: 0, failed: 0 };
   for (const notice of pending) {
@@ -18,6 +18,15 @@ export async function flushPendingNotices(now: Date): Promise<{ sent: number; sk
       orderBy: { sentAt: "desc" },
       select: { sentAt: true },
     });
+    // Sudah ada kabar progres yang lebih baru dari notice ini (mis. cron sempat mati): buang, jangan kirim mundur.
+    if (lastSent?.sentAt && notice.createdAt < lastSent.sentAt) {
+      const dropped = await prisma.clientProjectNotice.updateMany({
+        where: { id: notice.id, status: "PENDING" },
+        data: { status: "SKIPPED", reason: "SUPERSEDED" },
+      });
+      if (dropped.count > 0) result.skipped++;
+      continue;
+    }
     if (lastSent?.sentAt && now.getTime() - lastSent.sentAt.getTime() < PROGRESS_COOLDOWN_MS) continue;
     const claimed = await prisma.clientProjectNotice.updateMany({
       where: { id: notice.id, status: "PENDING" },

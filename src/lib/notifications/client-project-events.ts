@@ -29,6 +29,8 @@ const isUniqueViolation = (error: unknown) =>
 type ProjectForNotice = {
   id: string;
   clientId: string;
+  status: string;
+  finalSubmittedAt: Date | null;
   clientName: string;
   service: { name: string };
   clientLinks: { token: string }[];
@@ -40,6 +42,8 @@ async function loadProject(projectId: string): Promise<ProjectForNotice | null> 
     select: {
       id: true,
       clientId: true,
+      status: true,
+      finalSubmittedAt: true,
       clientName: true,
       service: { select: { name: true } },
       clientLinks: { where: { status: "ACTIVE" }, orderBy: { createdAt: "desc" }, take: 1, select: { token: true } },
@@ -115,13 +119,16 @@ export async function notifyClientProjectEvent(projectId: string, event: ClientP
         orderBy: { sentAt: "desc" },
         select: { sentAt: true },
       });
+      // Satu PENDING per project: update terbaru menggantikan yang lama, baik ditahan maupun langsung dikirim,
+      // supaya kabar lama tidak menyusul setelah kabar yang lebih baru.
+      await dropPendingProgress(projectId);
       if (lastSent?.sentAt && now.getTime() - lastSent.sentAt.getTime() < PROGRESS_COOLDOWN_MS) {
-        // Satu PENDING per project: update terbaru menggantikan yang lama.
-        await prisma.clientProjectNotice.deleteMany({ where: { projectId, event: "PROGRESS", status: "PENDING" } });
         await prisma.clientProjectNotice.create({ data: { projectId, event: "PROGRESS", refId, status: "PENDING" } });
         return "PENDING";
       }
     }
+    // Hasil final / project selesai: kabar progres yang masih tertahan sudah tidak relevan.
+    if (event.kind === "FINAL_SUBMITTED" || event.kind === "COMPLETED") await dropPendingProgress(projectId);
 
     let notice: { id: string };
     try {
@@ -140,6 +147,10 @@ export async function notifyClientProjectEvent(projectId: string, event: ClientP
   }
 }
 
+function dropPendingProgress(projectId: string) {
+  return prisma.clientProjectNotice.deleteMany({ where: { projectId, event: "PROGRESS", status: "PENDING" } });
+}
+
 /** Kirim notice PENDING yang sudah diklaim (status SENDING) oleh cron. */
 export async function sendNoticeNow(noticeId: string): Promise<NoticeOutcome> {
   try {
@@ -150,6 +161,10 @@ export async function sendNoticeNow(noticeId: string): Promise<NoticeOutcome> {
     if (!notice) return "SKIPPED";
     const project = await loadProject(notice.projectId);
     if (!project) return finish(notice.id, "SKIPPED", "PROJECT_GONE");
+    // Pengaman: progres tertunda tidak dikirim setelah hasil final dikirim atau project selesai.
+    if (notice.event === "PROGRESS" && (project.finalSubmittedAt || project.status === "SELESAI")) {
+      return finish(notice.id, "SKIPPED", "SUPERSEDED");
+    }
     const event: ClientProjectEvent =
       notice.event === "PROGRESS"
         ? { kind: "PROGRESS", updateId: notice.refId }
