@@ -46,7 +46,7 @@ describe("label tampilan tetap sinkron dengan bot", () => {
   });
 
   it("aturan dasar dipecah per heading, paragraf pembuka jadi Peran", () => {
-    const sections = splitBaseRules(buildSystemPrompt("YukDesain Studio", null, OPERATIONS_DEFAULTS));
+    const sections = splitBaseRules(buildSystemPrompt("YukDesain Studio", null, OPERATIONS_DEFAULTS, []));
     expect(sections.map((s) => s.title)).toEqual([
       "Peran",
       "Topik",
@@ -57,6 +57,7 @@ describe("label tampilan tetap sinkron dengan bot", () => {
       "Status project yang sudah berjalan",
       "Gaya",
       "Kebijakan studio",
+      "Layanan",
     ]);
     expect(sections.every((s) => s.text.length > 0)).toBe(true);
   });
@@ -65,7 +66,7 @@ describe("label tampilan tetap sinkron dengan bot", () => {
 describe("buildBrain", () => {
   it("versi terbit: prompt = yang dipakai bot untuk klien, draft ditandai berbeda", async () => {
     const brain = await buildBrain("published");
-    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", published, OPERATIONS_DEFAULTS));
+    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", published, OPERATIONS_DEFAULTS, []));
     expect(brain.guide.knowledgeFiles).toEqual([]);
     expect(brain.draftDiffers).toBe(true);
     expect(brain.guide.changed).toEqual({ instructions: false, knowledgeFiles: true, faqs: false, pricingRules: false });
@@ -74,7 +75,7 @@ describe("buildBrain", () => {
 
   it("draft: prompt = yang dipakai Uji bot", async () => {
     const brain = await buildBrain("draft");
-    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", draft, OPERATIONS_DEFAULTS));
+    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", draft, OPERATIONS_DEFAULTS, []));
     expect(brain.prompt.text).toContain("Sapa dengan kak.");
     expect(brain.guide.knowledgeFiles).toHaveLength(1);
   });
@@ -91,7 +92,7 @@ describe("buildBrain", () => {
     guides.getPublishedGuide.mockResolvedValue(null);
     const brain = await buildBrain("published");
     expect(brain.published).toBeNull();
-    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", null, OPERATIONS_DEFAULTS));
+    expect(brain.prompt.text).toBe(buildSystemPrompt("YukDesain Studio", null, OPERATIONS_DEFAULTS, []));
     expect(brain.draftDiffers).toBe(true);
   });
 });

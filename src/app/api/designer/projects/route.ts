@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { SERVICE_PUBLIC_SELECT } from "@/lib/services/service-dto";
 import { getPublicUrl } from "@/lib/storage";
 
 type StoredAttachment = { storageKey: string };
@@ -23,7 +24,7 @@ export async function GET() {
         project: {
           include: {
             client: true,
-            service: true,
+            service: { select: SERVICE_PUBLIC_SELECT },
             brief: true,
             assignments: {
               include: {

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { getStudioOperations } from "@/lib/studio-operations";
 import { describeRuleValue, getDraftGuide, getPublishedGuide, isGuideEmpty, sameGuide, type BotGuide } from "./bot-guide";
 import { buildSystemPrompt } from "./system-prompt";
+import { getBotServiceCatalog } from "./service-catalog";
 import { INTAKE_TOOLS } from "./tools";
 
 // Otak bot (docs/WHATSAPP_BOT_BRAIN_VIEW.md): semua yang diketahui bot klien dalam satu tampilan untuk owner.
@@ -109,11 +110,13 @@ export async function buildBrain(source: BrainSource) {
     getPublishedGuide(),
   ]);
   const ops = await getStudioOperations();
+  // Daftar Layanan ikut di prompt yang sama dengan bot; node per layanan menyusul di Bagian 4.
+  const catalog = await getBotServiceCatalog();
 
   const studioName = settings?.name ?? "YukDesain Studio";
   const guide = source === "draft" ? draft : (published?.guide ?? null);
-  const baseRules = buildSystemPrompt(studioName, null, ops);
-  const promptText = buildSystemPrompt(studioName, guide, ops);
+  const baseRules = buildSystemPrompt(studioName, null, ops, catalog);
+  const promptText = buildSystemPrompt(studioName, guide, ops, catalog);
   // Definisi tools ikut dikirim di setiap request, jadi dihitung dalam ukuran.
   const toolChars = JSON.stringify(INTAKE_TOOLS).length;
 

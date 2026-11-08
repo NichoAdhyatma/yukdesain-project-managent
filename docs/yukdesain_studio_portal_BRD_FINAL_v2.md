@@ -375,7 +375,7 @@ Owner decisions for this flow (must not be changed without new approval):
 | Topic | Decision |
 |---|---|
 | Provider | WhatsApp Cloud API (Meta), official |
-| Price | Set by admin after the client confirms the brief. The bot never states or estimates a price before admin sets it. |
+| Price | Set by admin after the client confirms the brief. The bot may state a service's starting price exactly as set in the Services menu (always as "mulai"); it never states a final price, total, range, or duration before admin sets it. (Changed 2026-11-08, owner decision; see docs/SERVICES_CATALOG.md.) |
 | DP | Percent of price set in **Operasional studio** (default 50%). Snapshot per order when the admin saves the price (change 2026-11-08, docs/STUDIO_OPERATIONS.md). |
 | Deadline | Set by admin, together with the price |
 | DP validation | Admin via checklist. AI reading is assistance only, never a decision. |

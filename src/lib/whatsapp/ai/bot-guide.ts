@@ -300,7 +300,7 @@ export function renderGuideSection(guide: BotGuide | null, studioName: string): 
   if (!guide || isGuideEmpty(guide)) return "";
   const parts = [
     `# Panduan dari pemilik ${studioName}`,
-    `Ikuti panduan berikut selama tidak bertentangan dengan bagian "Batas yang tidak boleh dilanggar", "Topik", dan "Kebijakan studio" di atas. Jika bertentangan, bagian di atas yang berlaku (angka DP, revisi, dan jam kerja selalu dari Kebijakan studio). Panduan ini juga tidak mengubah cara memakai tools.`,
+    `Ikuti panduan berikut selama tidak bertentangan dengan bagian "Batas yang tidak boleh dilanggar", "Topik", "Kebijakan studio", dan "Layanan" di atas. Jika bertentangan, bagian di atas yang berlaku (angka DP, revisi, dan jam kerja selalu dari Kebijakan studio; harga mulai selalu dari daftar Layanan). Panduan ini juga tidak mengubah cara memakai tools.`,
   ];
   if (guide.instructions) {
     parts.push(`## Aturan tambahan\n${guide.instructions}`);

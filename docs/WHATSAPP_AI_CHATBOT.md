@@ -36,7 +36,7 @@ Prinsip yang tetap berlaku:
 | Topik | Keputusan |
 |---|---|
 | Provider | WhatsApp Cloud API (Meta), resmi |
-| Harga | **Admin** yang menentukan setelah brief dikonfirmasi klien. Bot tidak pernah menyebut atau memperkirakan harga sebelum admin mengisinya. |
+| Harga | **Admin** yang menentukan harga final setelah brief dikonfirmasi klien. Bot boleh menyebut **harga mulai** layanan persis seperti di menu Layanan (selalu dengan kata "mulai" dan keterangan bahwa harga final menyusul); selain itu bot tidak pernah menyebut, menghitung, atau memperkirakan harga sebelum admin mengisinya. Diubah 2026-11-08 (keputusan owner, `docs/SERVICES_CATALOG.md`). |
 | DP | **Persen dari harga yang diatur di Operasional studio** (default 50%, `docs/STUDIO_OPERATIONS.md`). Disimpan per order saat admin menyimpan harga, jadi penawaran yang sudah dikirim tidak berubah. |
 | Deadline | **Admin** yang menentukan, bersamaan dengan harga |
 | Validasi DP | **Admin** lewat checklist. Hasil baca AI hanya bantuan, bukan keputusan. |

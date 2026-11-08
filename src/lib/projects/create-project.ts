@@ -1,6 +1,7 @@
 import type { PaymentStatus, Prisma, ProjectStatus } from "@prisma/client";
 import { generateProjectCode } from "@/lib/project-code";
 import { getStudioOperations } from "@/lib/studio-operations";
+import { SERVICE_PUBLIC_SELECT } from "@/lib/services/service-dto";
 
 // Diekstrak dari POST /api/projects supaya alur WhatsApp (approve-intake) memakai
 // logika yang sama persis. Menerima `db` berupa prisma atau transaction client.
@@ -78,7 +79,7 @@ export async function createProject(db: Db, input: CreateProjectInput) {
     },
     include: {
       client: true,
-      service: true,
+      service: { select: SERVICE_PUBLIC_SELECT },
       invoices: true,
     },
   });
