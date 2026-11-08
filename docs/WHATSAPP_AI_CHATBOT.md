@@ -867,3 +867,9 @@ ambil alih, blokir). Detail dan langkah deploy: `docs/OWNER_NOTIFICATIONS_INBOX.
 Saluran ketiga (scan QR, tidak resmi) di samping Meta Cloud API dan Fonnte; dipilih di Settings › WhatsApp › Saluran.
 Perilaku sama dengan Fonnte (teks, tanpa aturan 24 jam). Detail dan langkah setelah deploy:
 `docs/WHATSAPP_CHANNEL_KIRIMI.md`.
+
+## 33. Kabar otomatis ke klien (2026-11-08)
+
+Selain membalas chat, sistem mengirim kabar saat order klien berubah (mulai dikerjakan, update progres pilihan desainer,
+hasil final, revisi selesai, project selesai). Dikirim sebagai teks lewat saluran aktif dan tercatat di Inbox; di Meta di
+luar 24 jam dilewati. Detail: `docs/CLIENT_NOTIFICATIONS.md`.

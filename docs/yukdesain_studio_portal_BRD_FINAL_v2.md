@@ -1693,6 +1693,7 @@ The following are explicit business rules:
 12. Client must not see internal financial data.
 13. Payment status and production status are separate concerns.
 14. WhatsApp remains communication; YukDesain remains the system of record. The WhatsApp AI bot never sets price, deadline, DP validity, or creates a project on its own.
+15. (Change 2026-11-08) The system sends automatic WhatsApp updates to the client when work starts, when a designer posts a progress update marked "Kabari klien", when the final is submitted, when a revision is marked done, and when the project is completed. Designers mark revisions done in the workspace. Details: docs/CLIENT_NOTIFICATIONS.md.
 15. Do not silently replace the existing Sticker Label contract with the specialized Sticker Builder requirement.
 
 ---
