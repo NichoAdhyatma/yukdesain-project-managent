@@ -28,6 +28,9 @@ SHARED=$BASE/shared
 LIVE=/var/www/yukdesain-project-managent # symlink ke rilis aktif (dipakai unit systemd)
 KEEP=3
 HEALTH_URL=http://127.0.0.1:3000/login
+# Build jalan dengan prioritas CPU rendah supaya server yang sedang melayani tetap kebagian CPU (VPS 2 core).
+# ionice tidak dipakai: scheduler disk mq-deadline mengabaikannya.
+LOW="nice -n 15"
 
 log() { echo "[$(date '+%F %T')] $*"; }
 
@@ -69,12 +72,12 @@ ln -s "$SHARED/.env" "$NEW/.env"
 
 cd "$NEW"
 log "npm ci"
-npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+$LOW npm ci --no-audit --no-fund || $LOW npm install --no-audit --no-fund
 log "prisma generate + db push"
-npx prisma generate
+$LOW npx prisma generate
 npx prisma db push
 log "next build"
-npx next build --webpack
+$LOW npx next build --webpack
 
 log "Tukar symlink ke rilis baru dan restart"
 point_live_to "$NEW"

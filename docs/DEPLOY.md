@@ -32,8 +32,10 @@ Sumber script: `deploy/deploy-yukdesain.sh` di repo ini. Salinan di server yang 
 1. Kunci `flock` (`/var/lock/yukdesain-deploy.lock`) supaya tidak ada dua deploy sekaligus.
 2. `git fetch` ke `repo.git`, lalu `git worktree add` rilis baru dari `main`, lalu symlink `.env` dari `shared/`.
 3. Di folder rilis baru: `npm ci`, `prisma generate`, `prisma db push` (aditif saja), `next build --webpack`
-   (`--max-old-space-size=2048`; RAM 1,7 GB + swap 4 GB). Kalau satu langkah gagal, folder rilis dihapus dan server
-   lama tetap jalan tanpa perubahan apa pun.
+   (`--max-old-space-size=2048`; RAM 1,7 GB + swap 4 GB). `npm ci`, `prisma generate`, dan build jalan dengan
+   `nice -n 15` supaya server yang sedang melayani tetap kebagian CPU (VPS 2 core). `ionice` tidak dipakai karena
+   scheduler disk (`mq-deadline`) mengabaikannya. Kalau satu langkah gagal, folder rilis dihapus dan server lama tetap
+   jalan tanpa perubahan apa pun.
 4. Symlink ditukar secara atomik (`ln -sfn` + `mv -T`), lalu `systemctl restart yukdesain`.
 5. Script menunggu `GET /login` sehat hingga 30 detik. Kalau tidak sehat, symlink dikembalikan ke rilis sebelumnya dan
    service di-restart lagi (exit 1).
@@ -110,5 +112,7 @@ Deploy pertama dengan script baru, 2026-11-08 08:44–08:52 WIB, `main` = `eb2a8
   - 8 timeout >5 detik selama `npm ci` dan build. Penyebabnya CPU (2 core, load ±5) dan RAM (tersisa ±100 MB) di VPS
     kecil, bukan error. Server lama tidak restart (PID sama, tidak ada OOM). Tekanan ini juga ada dengan script lama.
 - Setelah deploy, proses node berjalan di path asli rilis baru (`/proc/<pid>/cwd`). Rilis lama tetap ada untuk rollback.
+- `nice -n 15` ditambahkan setelah deploy ini untuk mengurangi timeout di atas. Efeknya belum diukur; ukur di deploy
+  berikutnya dengan probe yang sama (`curl -m 5 -w "%{http_code} %{time_total}"` tiap 2 detik).
 - `status=143` / "Failed with result 'exit-code'" saat restart adalah SIGTERM biasa dari `systemctl restart`, bukan
   crash.
