@@ -19,6 +19,8 @@ const PUBLIC_PATHS = [
   "/api/whatsapp/fonnte/",
   // Kirimi webhook — authenticated by the secret in the URL, not session
   "/api/whatsapp/kirimi/",
+  // Cron VPS — authenticated by Authorization: Bearer CRON_SECRET, not session (docs/CLIENT_NOTIFICATIONS.md)
+  "/api/cron/",
   // PWA: browser mengambil manifest tanpa cookie; service worker hanya menampilkan notifikasi
   "/manifest.webmanifest",
   "/sw.js",
