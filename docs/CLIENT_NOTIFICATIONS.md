@@ -47,7 +47,7 @@ Description=YukDesain: kirim kabar progres tertunda
 
 [Service]
 Type=oneshot
-EnvironmentFile=/var/www/yukdesain-project-managent/.env
+EnvironmentFile=/etc/yukdesain/cron.env
 ExecStart=/bin/sh -c 'curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/client-notices'
 ```
 
@@ -65,7 +65,12 @@ OnUnitActiveSec=5min
 WantedBy=timers.target
 ```
 
-Aktifkan: `systemctl daemon-reload && systemctl enable --now yukdesain-client-notices.timer`.
+`/etc/yukdesain/cron.env` (root, 600) berisi satu baris `CRON_SECRET=…` yang sama dengan `.env` aplikasi. systemd tidak
+boleh membaca `.env` di `/var/www` (SELinux, "Failed to load environment files: Permission denied"), jadi secret disalin:
+`grep "^CRON_SECRET=" /var/www/yukdesain-project-managent/.env > /etc/yukdesain/cron.env`.
+
+Aktifkan: `systemctl daemon-reload && systemctl enable --now yukdesain-client-notices.timer`. Terpasang di produksi
+2026-11-08 (uji: dengan secret `{"ok":true,…}`, tanpa secret 401).
 
 ## 4. Revisi selesai
 
