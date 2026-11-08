@@ -4,7 +4,9 @@ import { maskPhone } from "@/lib/whatsapp/phone";
 import { notifyOwnersPush, type NotifyEvent } from "./push";
 
 // Kejadian Order WA → notifikasi owner (docs/OWNER_NOTIFICATIONS_INBOX.md §2). Isi notifikasi tanpa nomor lengkap
-// dan tanpa isi bukti transfer. Tidak dikirim untuk Uji bot, nomor owner (#klien), dan nomor yang diblokir.
+// dan tanpa isi bukti transfer. Tidak dikirim untuk Uji bot, nomor yang diblokir, dan nomor owner yang sedang memberi
+// instruksi. Owner yang tes sebagai klien (#klien) tetap menerima notifikasi, berjudul "[Tes] …", supaya bisa
+// memastikan notifikasi masuk tanpa nomor kedua.
 
 export type HandoffReason = "client_asked" | "ai_failed" | "daily_limit" | "monthly_brake" | "owner_timeout" | "proof_limit" | "bot_handoff";
 
@@ -18,16 +20,25 @@ const HANDOFF_TEXT: Record<HandoffReason, string> = {
   bot_handoff: "bot mengalihkan ke admin",
 };
 
-type ConversationInfo = { id: string; waId: string; profileName: string | null; isSandbox: boolean; blockedAt: Date | null };
+type ConversationInfo = {
+  id: string;
+  waId: string;
+  profileName: string | null;
+  isSandbox: boolean;
+  blockedAt: Date | null;
+  ownerActsAsClient: boolean;
+};
 
-async function eligibleConversation(conversationId: string): Promise<ConversationInfo | null> {
+/** Percakapan yang boleh memicu notifikasi; `test` = owner sedang tes sebagai klien. */
+async function eligibleConversation(conversationId: string): Promise<{ conversation: ConversationInfo; test: boolean } | null> {
   const conversation = await prisma.waConversation.findUnique({
     where: { id: conversationId },
-    select: { id: true, waId: true, profileName: true, isSandbox: true, blockedAt: true },
+    select: { id: true, waId: true, profileName: true, isSandbox: true, blockedAt: true, ownerActsAsClient: true },
   });
   if (!conversation || conversation.isSandbox || conversation.blockedAt) return null;
-  if ((await listOwnerNumbers()).some((o) => o.waNumber === conversation.waId)) return null;
-  return conversation;
+  const isOwner = (await listOwnerNumbers()).some((o) => o.waNumber === conversation.waId);
+  if (isOwner && !conversation.ownerActsAsClient) return null;
+  return { conversation, test: isOwner };
 }
 
 async function latestIntake(conversationId: string) {
@@ -42,10 +53,13 @@ const who = (c: ConversationInfo, clientName?: string | null) => `${clientName ?
 
 async function send(event: NotifyEvent, conversationId: string, build: (c: ConversationInfo, intake: Awaited<ReturnType<typeof latestIntake>>) => { title: string; body: string }) {
   try {
-    const conversation = await eligibleConversation(conversationId);
-    if (!conversation) return;
+    const eligible = await eligibleConversation(conversationId);
+    if (!eligible) return;
+    const { conversation, test } = eligible;
     const intake = await latestIntake(conversationId);
-    const { title, body } = build(conversation, intake);
+    const built = build(conversation, intake);
+    const title = test ? `[Tes] ${built.title}` : built.title;
+    const { body } = built;
     const url = intake ? `/wa-orders/${intake.id}` : `/wa-orders?tab=inbox&chat=${conversation.id}`;
     await notifyOwnersPush(event, { title, body, url, tag: `${event}:${conversationId}` });
   } catch (error) {

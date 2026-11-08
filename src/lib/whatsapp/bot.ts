@@ -59,9 +59,15 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   }
 
   // Nomor yang pertama kali menghubungi bot → notifikasi owner, juga saat bot nonaktif (docs/OWNER_NOTIFICATIONS_INBOX.md).
-  if (!conversation.isSandbox && !ownerTesting) {
-    const inbound = await prisma.waMessage.count({ where: { conversationId: conversation.id, direction: "INBOUND" } });
-    if (inbound === 1) void notifyNewClient(conversation.id);
+  // Ditentukan dari pesan paling awal, bukan jumlah pesan: setelah jeda gabung pesan (waitForBurst), pesan kedua
+  // klien yang mengetik beruntun sudah tersimpan saat pesan pertama diproses.
+  if (!conversation.isSandbox) {
+    const first = await prisma.waMessage.findFirst({
+      where: { conversationId: conversation.id, direction: "INBOUND" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true },
+    });
+    if (first?.id === message.id) void notifyNewClient(conversation.id);
   }
 
   // Saklar dibaca langsung tanpa cache: mematikan bot harus langsung berlaku. Uji bot dan owner yang

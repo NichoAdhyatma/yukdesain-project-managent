@@ -10,7 +10,15 @@ vi.mock("@/lib/whatsapp/owner/identity", () => owners);
 
 import { notifyNeedsAdmin, notifyNeedsQuote, notifyNewClient } from "./owner-events";
 
-const conv = (over: object = {}) => ({ id: "c1", waId: "6281234567890", profileName: "Sari", isSandbox: false, blockedAt: null, ...over });
+const conv = (over: object = {}) => ({
+  id: "c1",
+  waId: "6281234567890",
+  profileName: "Sari",
+  isSandbox: false,
+  blockedAt: null,
+  ownerActsAsClient: false,
+  ...over,
+});
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -46,10 +54,16 @@ describe("kejadian notifikasi owner", () => {
   it.each([
     ["Uji bot", { isSandbox: true }],
     ["nomor diblokir", { blockedAt: new Date() }],
-    ["nomor owner (tes #klien)", { waId: "6289700000000" }],
+    ["nomor owner (instruksi ke bot)", { waId: "6289700000000" }],
   ])("%s → tidak dikirim", async (_label, over) => {
     db.waConversation.findUnique.mockResolvedValue(conv(over));
     await notifyNewClient("c1");
     expect(push.notifyOwnersPush).not.toHaveBeenCalled();
+  });
+
+  it("owner tes sebagai klien (#klien) → tetap dikirim, ditandai [Tes]", async () => {
+    db.waConversation.findUnique.mockResolvedValue(conv({ waId: "6289700000000", ownerActsAsClient: true }));
+    await notifyNeedsQuote("c1");
+    expect(push.notifyOwnersPush).toHaveBeenCalledWith("NEEDS_QUOTE", expect.objectContaining({ title: "[Tes] Perlu harga", url: "/wa-orders/i1" }));
   });
 });

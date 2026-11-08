@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
-  waMessage: { findUniqueOrThrow: vi.fn(), create: vi.fn(), count: vi.fn() },
+  waMessage: { findUniqueOrThrow: vi.fn(), create: vi.fn(), count: vi.fn(), findFirst: vi.fn() },
   waConversation: { update: vi.fn(), updateMany: vi.fn() },
   waIntake: { findFirst: vi.fn() },
   studioSettings: { findUnique: vi.fn() },
@@ -197,8 +197,8 @@ describe("handleInboundMessage", () => {
 
   it("pesan baru masuk selama AI berpikir → balasan tidak dikirim", async () => {
     givenMessage("text");
-    // 1: jumlah pesan masuk (cek klien baru), 2: belum ada pesan lebih baru, 3: ada pesan baru setelah AI selesai
-    db.waMessage.count.mockResolvedValueOnce(3).mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+    // 1: belum ada pesan lebih baru, 2: ada pesan baru setelah AI selesai
+    db.waMessage.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
     await handleInboundMessage("msg_1");
     expect(ai.runAiTurn).toHaveBeenCalled();
     expect(api.sendText).not.toHaveBeenCalled();
@@ -282,15 +282,27 @@ describe("handleInboundMessage", () => {
   describe("notifikasi owner (docs/OWNER_NOTIFICATIONS_INBOX.md)", () => {
     it("pesan pertama dari nomor baru → notifikasi klien baru, juga saat bot nonaktif", async () => {
       givenMessage("text");
-      db.waMessage.count.mockResolvedValue(1);
+      db.waMessage.findFirst.mockResolvedValue({ id: "msg_1" });
       db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
       await handleInboundMessage("msg_1");
       expect(notify.notifyNewClient).toHaveBeenCalledWith("conv_1");
     });
 
+    it("pesan beruntun klien baru: pesan pertama tetap memicu notifikasi walau pesan kedua sudah tersimpan", async () => {
+      givenMessage("text");
+      // Setelah jeda gabung pesan, sudah ada 2 pesan masuk; yang menentukan adalah pesan paling awal.
+      db.waMessage.count.mockResolvedValue(2);
+      db.waMessage.findFirst.mockResolvedValue({ id: "msg_1" });
+      await handleInboundMessage("msg_1");
+      expect(notify.notifyNewClient).toHaveBeenCalledWith("conv_1");
+      expect(db.waMessage.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { conversationId: "conv_1", direction: "INBOUND" }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+      );
+    });
+
     it("bukan pesan pertama → tanpa notifikasi klien baru", async () => {
       givenMessage("text");
-      db.waMessage.count.mockResolvedValue(4);
+      db.waMessage.findFirst.mockResolvedValue({ id: "msg_0" });
       await handleInboundMessage("msg_1");
       expect(notify.notifyNewClient).not.toHaveBeenCalled();
     });
