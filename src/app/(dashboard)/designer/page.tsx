@@ -1,619 +1,288 @@
 "use client";
 
-import { useState } from "react";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { toast } from "@/components/ui/toast";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { AlertCircle, CalendarClock, FolderOpen, MousePointerClick, RotateCw, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ProgressUploader, type UploadedFile } from "@/components/ui/progress-uploader";
-import { BriefReader } from "@/components/forms/brief/BriefReader";
-import { Search, Loader2, Plus, Clock, FileText, TrendingUp, CheckCircle2, AlertCircle, Paperclip } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { latestProgress } from "@/lib/projects/progress-update";
 import type { ProjectStatus } from "@/types";
+import { ProjectDetail } from "@/components/designer/ProjectDetail";
+import {
+  PRIORITY_STYLE,
+  STATUS_BADGE,
+  WORK_STATUSES,
+  formatDate,
+  statusLabel,
+  type DesignerProject,
+} from "@/components/designer/types";
 
-type BriefResponse = { questionId: string; question: string; answer: string };
+type StatusFilter = "all" | ProjectStatus;
 
-type ProjectUpdate = {
-  id: string;
-  description: string;
-  progress: number | null;
-  author: { name: string };
-  createdAt: string;
-  attachment?: {
-    id: string;
-    filename: string;
-    mimeType: string;
-    storageKey: string;
-  } | null;
-};
+async function fetchProjects(): Promise<DesignerProject[]> {
+  const res = await fetch("/api/designer/projects");
+  if (!res.ok) throw new Error("Gagal memuat project.");
+  const data = await res.json();
+  return data.projects as DesignerProject[];
+}
 
-type Project = {
-  id: string;
-  projectNumber: string;
-  clientName: string;
-  status: ProjectStatus;
-  priority: string;
-  deadline: string | null;
-  agreedPrice: number;
-  service: { code: string; name: string };
-  brief: { id: string; responses: BriefResponse[] } | null;
-  finalSubmittedAt?: string;
-  finalApprovedAt?: string;
-  assignments: Array<{ designer: { id: string; name: string } }>;
-  updates: ProjectUpdate[];
-  revisions: Array<{
-    id: string;
-    number: number;
-    status: string;
-    description: string;
-    requestedAt: string;
-  }>;
-};
+function isOverdue(p: DesignerProject): boolean {
+  return !!p.deadline && p.status !== "SELESAI" && new Date(p.deadline).getTime() < Date.now();
+}
 
-const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
-  DRAFT: { label: "Draft", variant: "secondary" },
-  BELUM_DIKERJAKAN: { label: "Menunggu Brief", variant: "secondary" },
-  SEDANG_DIKERJAKAN: { label: "Dikerjakan", variant: "default" },
-  SELESAI: { label: "Selesai", variant: "outline" },
-};
+function ProjectListItem({
+  project,
+  selected,
+  onSelect,
+}: {
+  project: DesignerProject;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const priority = PRIORITY_STYLE[project.priority] ?? PRIORITY_STYLE.NORMAL;
+  const progress = latestProgress(project.updates);
+  const pendingRevisions = project.revisions.filter((r) => r.status === "PENDING").length;
+  const overdue = isOverdue(project);
 
-const priorityConfig: Record<string, { label: string; class: string }> = {
-  URGENT: { label: "Urgent", class: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-400" },
-  HIGH: { label: "Tinggi", class: "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-400" },
-  NORMAL: { label: "Normal", class: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-400" },
-  LOW: { label: "Rendah", class: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400" },
-};
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-current={selected ? "true" : undefined}
+      className={cn(
+        "w-full space-y-2.5 rounded-lg border bg-card p-3 text-left transition-colors outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50",
+        selected && "border-primary bg-primary/5 hover:bg-primary/5"
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs text-muted-foreground tabular-nums">{project.projectNumber}</p>
+          <p className="truncate font-medium">{project.clientName}</p>
+          <p className="truncate text-xs text-muted-foreground">{project.service.name}</p>
+        </div>
+        <Badge variant={STATUS_BADGE[project.status]} className="shrink-0">
+          {statusLabel(project.status)}
+        </Badge>
+      </div>
 
-function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+      <div className="flex items-center gap-2">
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted" aria-hidden>
+          <div className="h-full rounded-full bg-primary" style={{ width: `${progress ?? 0}%` }} />
+        </div>
+        <span className="shrink-0 text-right text-xs whitespace-nowrap tabular-nums text-muted-foreground">
+          {progress === null ? "Belum diisi" : `${progress}%`}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+        <span className={cn("rounded px-1.5 py-0.5 font-medium", priority.className)}>{priority.label}</span>
+        {project.deadline && (
+          <span className={cn("inline-flex items-center gap-1", overdue ? "font-medium text-destructive" : "text-muted-foreground")}>
+            <CalendarClock className="size-3.5" aria-hidden />
+            {overdue ? "Lewat deadline " : ""}
+            {formatDate(project.deadline)}
+          </span>
+        )}
+        {pendingRevisions > 0 && (
+          <span className="font-medium text-amber-700 dark:text-amber-300">{pendingRevisions} revisi menunggu</span>
+        )}
+      </div>
+    </button>
+  );
+}
+
+function ListSkeleton() {
+  return (
+    <div className="space-y-2" aria-hidden>
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="h-[118px] animate-pulse rounded-lg border bg-muted/40" />
+      ))}
+    </div>
+  );
+}
+
+function DesignerWorkspace() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const selectedId = searchParams.get("project");
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const detailRef = useRef<HTMLDivElement>(null);
+
+  const { data, isLoading, isError, error, refetch, isRefetching } = useQuery({
+    queryKey: ["designer-projects"],
+    queryFn: fetchProjects,
+  });
+  const projects = useMemo(() => data ?? [], [data]);
+
+  const selected = projects.find((p) => p.id === selectedId) ?? null;
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: projects.length };
+    for (const s of WORK_STATUSES) c[s] = projects.filter((p) => p.status === s).length;
+    return c;
+  }, [projects]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return projects.filter((p) => {
+      const matchesSearch =
+        !q ||
+        p.projectNumber.toLowerCase().includes(q) ||
+        p.clientName.toLowerCase().includes(q) ||
+        p.service.name.toLowerCase().includes(q);
+      const matchesStatus = statusFilter === "all" || p.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    });
+  }, [projects, search, statusFilter]);
+
+  // Pindahkan fokus ke detail saat project dipilih, supaya pengguna keyboard dan pembaca layar ikut pindah.
+  useEffect(() => {
+    if (selectedId) detailRef.current?.focus({ preventScroll: false });
+  }, [selectedId]);
+
+  function select(id: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("project", id);
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }
+
+  function clearSelection() {
+    router.push(pathname, { scroll: false });
+  }
+
+  const filters: Array<{ value: StatusFilter; label: string }> = [
+    { value: "all", label: "Semua" },
+    ...WORK_STATUSES.map((s) => ({ value: s as StatusFilter, label: statusLabel(s) })),
+  ];
+
+  return (
+    <div className="flex min-h-full flex-col">
+      <header className={cn("border-b px-4 py-4 md:px-6", selected && "max-lg:hidden")}>
+        <h1 className="text-xl font-semibold md:text-2xl">Workspace</h1>
+        <p className="text-sm text-muted-foreground">
+          Project yang ditugaskan ke kamu. Pilih project untuk mengirim update progres.
+        </p>
+      </header>
+
+      <div className="grid flex-1 lg:grid-cols-[minmax(300px,380px)_1fr]">
+        {/* Daftar project */}
+        <section
+          aria-label="Daftar project"
+          className={cn("space-y-3 p-4 md:p-6 lg:border-r", selected && "max-lg:hidden")}
+        >
+          <div className="relative">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+            <Input
+              type="search"
+              placeholder="Cari nomor, klien, atau layanan"
+              aria-label="Cari project"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-11 pl-9 text-base md:h-9 md:text-sm"
+            />
+          </div>
+
+          <div role="group" aria-label="Filter status" className="flex flex-wrap gap-2">
+            {filters.map((f) => (
+              <Button
+                key={f.value}
+                type="button"
+                variant={statusFilter === f.value ? "default" : "outline"}
+                aria-pressed={statusFilter === f.value}
+                onClick={() => setStatusFilter(f.value)}
+                className="h-11 px-3 text-xs md:h-8"
+              >
+                {f.label}
+                <span className="tabular-nums opacity-70">{counts[f.value] ?? 0}</span>
+              </Button>
+            ))}
+          </div>
+
+          {isLoading ? (
+            <ListSkeleton />
+          ) : isError ? (
+            <div role="alert" className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm">
+              <p className="flex items-center gap-2 font-medium text-destructive">
+                <AlertCircle className="size-4" aria-hidden /> {error.message}
+              </p>
+              <Button type="button" variant="outline" className="h-11 md:h-9" onClick={() => refetch()} disabled={isRefetching}>
+                <RotateCw className={cn(isRefetching && "animate-spin")} aria-hidden /> Coba lagi
+              </Button>
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-10 text-center">
+              <FolderOpen className="size-6 text-muted-foreground" aria-hidden />
+              <p className="text-sm font-medium">Belum ada project untuk kamu</p>
+              <p className="text-xs text-muted-foreground">Project yang ditugaskan owner akan muncul di sini.</p>
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed px-4 py-10 text-center">
+              <p className="text-sm font-medium">Tidak ada project yang cocok</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11 md:h-9"
+                onClick={() => {
+                  setSearch("");
+                  setStatusFilter("all");
+                }}
+              >
+                Hapus filter
+              </Button>
+            </div>
+          ) : (
+            <ul className="space-y-2">
+              {filtered.map((p) => (
+                <li key={p.id}>
+                  <ProjectListItem project={p} selected={p.id === selectedId} onSelect={() => select(p.id)} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        {/* Detail project */}
+        <div
+          ref={detailRef}
+          tabIndex={-1}
+          aria-label="Detail project"
+          className={cn("min-w-0 p-4 outline-none md:p-6", !selected && "max-lg:hidden")}
+        >
+          {selected ? (
+            <div className="mx-auto max-w-3xl">
+              <ProjectDetail project={selected} onBack={clearSelection} />
+            </div>
+          ) : selectedId && !isLoading && !isError ? (
+            <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed px-4 py-12 text-center">
+              <p className="text-sm font-medium">Project tidak ditemukan</p>
+              <p className="text-xs text-muted-foreground">Mungkin project ini sudah tidak ditugaskan ke kamu.</p>
+              <Button type="button" variant="outline" className="h-11 md:h-9" onClick={clearSelection}>
+                Kembali ke daftar
+              </Button>
+            </div>
+          ) : (
+            <div className="hidden h-full min-h-64 flex-col items-center justify-center gap-2 text-center lg:flex">
+              <MousePointerClick className="size-6 text-muted-foreground" aria-hidden />
+              <p className="text-sm font-medium">Pilih project di sebelah kiri</p>
+              <p className="text-xs text-muted-foreground">Detail, brief, dan form update progres akan tampil di sini.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function DesignerWorkspacePage() {
-  const queryClient = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
-  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
-  const [updateDesc, setUpdateDesc] = useState("");
-  const [updateProgress, setUpdateProgress] = useState("");
-  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [submitFinalOpen, setSubmitFinalOpen] = useState(false);
-  const [submitFinalDesc, setSubmitFinalDesc] = useState("");
-  const [submitFinalFiles, setSubmitFinalFiles] = useState<UploadedFile[]>([]);
-  const [submittingFinal, setSubmittingFinal] = useState(false);
-
-  const { data, isLoading } = useQuery({
-    queryKey: ["designer-projects"],
-    staleTime: Infinity,
-    queryFn: async () => {
-      const res = await fetch("/api/designer/projects");
-      const data = await res.json();
-      return data.projects as Project[];
-    },
-  });
-
-  const projects = data ?? [];
-
-  const updateStatusMutation = useMutation({
-    mutationFn: async ({ projectId, newStatus }: { projectId: string; newStatus: ProjectStatus }) => {
-      const res = await fetch(`/api/projects/${projectId}/status`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!res.ok) throw new Error("Failed to update status");
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
-    },
-  });
-
-  const postUpdateMutation = useMutation({
-    mutationFn: async ({ projectId, payload }: { projectId: string; payload: { description: string; progress: number | null; attachmentIds: string[] } }) => {
-      const res = await fetch(`/api/designer/projects/${projectId}/updates`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Gagal posting update");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
-      setUpdateDialogOpen(false);
-      setUpdateDesc("");
-      setUpdateProgress("");
-      setUploadedFiles([]);
-    },
-    onError: (err: Error) => {
-      toast(err.message || "Gagal posting update", "error");
-    },
-  });
-
-  const submitFinalMutation = useMutation({
-    mutationFn: async ({ projectId, payload }: { projectId: string; payload: { description: string; attachmentIds: string[] } }) => {
-      const res = await fetch(`/api/designer/projects/${projectId}/submit-final`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Gagal submit final");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
-      setSubmitFinalOpen(false);
-      setSubmitFinalDesc("");
-      setSubmitFinalFiles([]);
-    },
-    onError: (err: Error) => {
-      toast(err.message || "Gagal submit final", "error");
-    },
-  });
-
-  function handleUpdateStatus(projectId: string, newStatus: ProjectStatus) {
-    updateStatusMutation.mutate({ projectId, newStatus });
-  }
-
-  function handlePostUpdate() {
-    if (!selectedProject || !updateDesc.trim()) return;
-    setSaving(true);
-    postUpdateMutation.mutate(
-      {
-        projectId: selectedProject.id,
-        payload: {
-          description: updateDesc.trim(),
-          progress: updateProgress ? parseInt(updateProgress) : null,
-          attachmentIds: uploadedFiles.map((f) => f.id),
-        },
-      },
-      {
-        onSettled: () => setSaving(false),
-      }
-    );
-  }
-
-  function handleSubmitFinal() {
-    if (!selectedProject || !submitFinalDesc.trim()) return;
-    setSubmittingFinal(true);
-    submitFinalMutation.mutate(
-      {
-        projectId: selectedProject.id,
-        payload: {
-          description: submitFinalDesc.trim(),
-          attachmentIds: submitFinalFiles.map((f) => f.id),
-        },
-      },
-      {
-        onSettled: () => setSubmittingFinal(false),
-      }
-    );
-  }
-
-  const filteredProjects = projects.filter((p) => {
-    const matchesSearch =
-      p.projectNumber.toLowerCase().includes(search.toLowerCase()) ||
-      p.clientName.toLowerCase().includes(search.toLowerCase());
-    const matchesStatus = statusFilter === "all" || p.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between p-6 border-b">
-        <div>
-          <h1 className="text-2xl font-semibold">Workspace</h1>
-          <p className="text-muted-foreground text-sm">Project yang assigned ke kamu</p>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-3 p-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Cari project..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9" />
-        </div>
-        <Select
-          value={statusFilter}
-          options={[
-            { value: "all", label: "Semua Status" },
-            { value: "BELUM_DIKERJAKAN", label: "Menunggu Brief" },
-            { value: "SEDANG_DIKERJAKAN", label: "Dikerjakan" },
-            { value: "SELESAI", label: "Selesai" },
-          ]}
-          onValueChange={(v) => { if (v) setStatusFilter(v); }}
-        >
-          <SelectTrigger className="w-44">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Semua Status</SelectItem>
-            <SelectItem value="BELUM_DIKERJAKAN">Menunggu Brief</SelectItem>
-            <SelectItem value="SEDANG_DIKERJAKAN">Dikerjakan</SelectItem>
-            <SelectItem value="SELESAI">Selesai</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="flex-1 overflow-auto p-6">
-        {filteredProjects.length === 0 ? (
-          <div className="text-center py-16 text-muted-foreground">
-            <p>Tidak ada project yang assigned</p>
-          </div>
-        ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {filteredProjects.map((project) => {
-              const st = statusMap[project.status] || statusMap.DRAFT;
-              const priority = priorityConfig[project.priority] || priorityConfig.NORMAL;
-              const latestUpdate = project.updates?.[0];
-              const pendingRevisions = project.revisions?.filter((r) => r.status === "PENDING") || [];
-
-              return (
-                <Card key={project.id} className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => setSelectedProject(project)}>
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <p className="text-xs text-muted-foreground">{project.projectNumber}</p>
-                        <CardTitle className="text-base">{project.clientName}</CardTitle>
-                        <p className="text-xs text-muted-foreground">{project.service.name}</p>
-                      </div>
-                      <Badge variant={st.variant}>{st.label}</Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className={`text-xs ${priority.class}`}>{priority.label}</Badge>
-                      {project.deadline && (
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock className="h-3 w-3" />
-                          {formatDate(project.deadline)}
-                        </div>
-                      )}
-                    </div>
-
-                    {latestUpdate && (
-                      <div className="flex items-start gap-2 pt-2 border-t">
-                        <TrendingUp className="h-3 w-3 text-green-600 mt-1 shrink-0" />
-                        <div>
-                          <p className="text-xs line-clamp-1">{latestUpdate.description}</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            {latestUpdate.progress !== null ? `${latestUpdate.progress}% · ` : ""}
-                            {formatDate(latestUpdate.createdAt)}
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {pendingRevisions.length > 0 && (
-                      <div className="flex items-center gap-2 pt-2 border-t">
-                        <AlertCircle className="h-3 w-3 text-yellow-600 shrink-0" />
-                        <p className="text-xs text-yellow-700 dark:text-yellow-400">
-                          {pendingRevisions.length}x revisi pending
-                        </p>
-                      </div>
-                    )}
-
-                    {project.brief && (
-                      <div className="flex items-center gap-2 pt-2 border-t">
-                        <FileText className="h-3 w-3 text-blue-600 shrink-0" />
-                        <p className="text-xs text-muted-foreground">Brief tersedia</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Project Detail Dialog */}
-      <Dialog open={!!selectedProject} onOpenChange={() => setSelectedProject(null)}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          {selectedProject && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{selectedProject.projectNumber} — {selectedProject.clientName}</DialogTitle>
-                <p className="text-sm text-muted-foreground">{selectedProject.service.name}</p>
-              </DialogHeader>
-
-              <Tabs defaultValue="brief" className="w-full">
-                <TabsList className="grid grid-cols-3">
-                  <TabsTrigger value="brief">Brief</TabsTrigger>
-                  <TabsTrigger value="progress">Progress</TabsTrigger>
-                  <TabsTrigger value="revisions">Revisi</TabsTrigger>
-                </TabsList>
-
-                {/* Brief Tab */}
-                <TabsContent value="brief" className="space-y-4">
-                  {!selectedProject.brief ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                      <p className="text-sm">Brief belum tersedia</p>
-                    </div>
-                  ) : (
-                    <BriefReader
-                      responses={selectedProject.brief.responses}
-                      serviceCode={selectedProject.service.code}
-                    />
-                  )}
-                </TabsContent>
-
-                {/* Progress Tab */}
-                <TabsContent value="progress" className="space-y-4">
-                  {/* Status change */}
-                  <div className="space-y-2">
-                    <Label className="text-sm">Ubah Status</Label>
-                    <div className="flex gap-2">
-                      {(["BELUM_DIKERJAKAN", "SEDANG_DIKERJAKAN", "SELESAI"] as ProjectStatus[]).map((s) => {
-                        const st = statusMap[s];
-                        return (
-                          <Button
-                            key={s}
-                            size="sm"
-                            variant={selectedProject.status === s ? "default" : "outline"}
-                            onClick={() => handleUpdateStatus(selectedProject.id, s)}
-                          >
-                            {st.label}
-                          </Button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Post update */}
-                  <div className="space-y-2">
-                    <Label className="text-sm">Post Update</Label>
-                    <Button size="sm" variant="outline" onClick={() => setUpdateDialogOpen(true)}>
-                      <Plus className="h-3 w-3 mr-1" /> Tambah Update
-                    </Button>
-                  </div>
-
-                  {/* Submit Final */}
-                  {!selectedProject.finalSubmittedAt && (
-                    <div className="space-y-2">
-                      <Label className="text-sm">Final Deliverable</Label>
-                      <Button
-                        size="sm"
-                        className="w-full"
-                        onClick={() => {
-                          setSubmitFinalDesc("");
-                          setSubmitFinalFiles([]);
-                          setSubmitFinalOpen(true);
-                        }}
-                      >
-                        <CheckCircle2 className="h-3 w-3 mr-1" />
-                        Submit Final Work
-                      </Button>
-                      <p className="text-xs text-muted-foreground">
-                        Kirim hasil akhir ke client untuk direview dan di-approve
-                      </p>
-                    </div>
-                  )}
-
-                  {selectedProject.finalSubmittedAt && !selectedProject.finalApprovedAt && (
-                    <div className="rounded-md border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950 p-3">
-                      <p className="text-sm font-medium text-green-800 dark:text-green-200">
-                        Final Submitted
-                      </p>
-                      <p className="text-xs text-green-700 dark:text-green-300 mt-1">
-                        Menunggu client approval
-                      </p>
-                    </div>
-                  )}
-
-                  {selectedProject.finalApprovedAt && (
-                    <div className="rounded-md border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950 p-3">
-                      <p className="text-sm font-medium text-blue-800 dark:text-blue-200">
-                        Final Approved
-                      </p>
-                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                        Project selesai. Approved {formatDate(selectedProject.finalApprovedAt)}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Update history */}
-                  <div className="space-y-2">
-                    <Label className="text-sm">Riwayat Update</Label>
-                    {selectedProject.updates.length === 0 ? (
-                      <p className="text-sm text-muted-foreground py-4 text-center">Belum ada update</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {selectedProject.updates.map((update) => (
-                          <div key={update.id} className="rounded-md border p-3">
-                            {update.progress !== null && (
-                              <div className="mb-2">
-                                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                                  <span>Progress</span>
-                                  <span>{update.progress}%</span>
-                                </div>
-                                <div className="h-2 bg-muted rounded-full overflow-hidden">
-                                  <div className="h-full bg-primary rounded-full" style={{ width: `${update.progress}%` }} />
-                                </div>
-                              </div>
-                            )}
-                            <p className="text-sm">{update.description}</p>
-                            {update.attachment && (
-                              <a
-                                href={`${process.env.NEXT_PUBLIC_STORAGE_URL || ""}/${update.attachment.storageKey}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                              >
-                                <Paperclip className="h-3 w-3" />
-                                {update.attachment.filename}
-                              </a>
-                            )}
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {update.author.name} · {formatDate(update.createdAt)}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </TabsContent>
-
-                {/* Revisions Tab */}
-                <TabsContent value="revisions" className="space-y-4">
-                  {selectedProject.revisions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground py-4 text-center">Belum ada revisi</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {selectedProject.revisions.map((rev) => (
-                        <div key={rev.id} className="rounded-md border p-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-sm font-medium">Revisi #{rev.number}</p>
-                            <Badge variant={rev.status === "PENDING" ? "secondary" : rev.status === "APPROVED" ? "default" : "destructive"}>
-                              {rev.status}
-                            </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">{rev.description}</p>
-                          <p className="text-xs text-muted-foreground mt-1">{formatDate(rev.requestedAt)}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Post Update Dialog */}
-      <Dialog open={updateDialogOpen} onOpenChange={(open) => {
-        if (!open) {
-          setUpdateDialogOpen(false);
-        } else {
-          setUpdateDesc("");
-          setUpdateProgress("");
-          setUploadedFiles([]);
-          setUpdateDialogOpen(true);
-        }
-      }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Post Update</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Progress (%)</Label>
-              <Input
-                type="number"
-                min="0"
-                max="100"
-                value={updateProgress}
-                onChange={(e) => setUpdateProgress(e.target.value)}
-                placeholder="0-100"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Deskripsi</Label>
-              <Textarea
-                value={updateDesc}
-                onChange={(e) => setUpdateDesc(e.target.value)}
-                placeholder="Update progress, deliverable, atau catatan..."
-                rows={3}
-              />
-            </div>
-            {selectedProject && (
-              <ProgressUploader
-                files={uploadedFiles}
-                onChange={setUploadedFiles}
-                maxFiles={5}
-                label="Lampiran File"
-                disabled={saving}
-                uploadCategory="progress"
-                projectId={selectedProject.id}
-              />
-            )}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setUpdateDialogOpen(false)}>Batal</Button>
-              <Button onClick={handlePostUpdate} disabled={saving || !updateDesc.trim()}>
-                {saving ? "Menyimpan..." : "Post Update"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Submit Final Dialog */}
-      <Dialog open={submitFinalOpen} onOpenChange={(open) => {
-        if (!open) {
-          setSubmitFinalOpen(false);
-          setSubmitFinalDesc("");
-          setSubmitFinalFiles([]);
-        } else {
-          setSubmitFinalDesc("");
-          setSubmitFinalFiles([]);
-          setSubmitFinalOpen(true);
-        }
-      }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Submit Final Work</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Kirim hasil akhir project. Client akan menerima notifikasi dan bisa approve atau request revisi.
-            </p>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-md border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950 p-3">
-              <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                Setelah submit final, client akan bisa approve atau request revisi (kuota 3x). Pastikan hasil kerja sudah final sebelum submit.
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Catatan Final</Label>
-              <Textarea
-                value={submitFinalDesc}
-                onChange={(e) => setSubmitFinalDesc(e.target.value)}
-                placeholder="Deskripsikan hasil akhir yang dikirimkan..."
-                rows={4}
-              />
-            </div>
-            {selectedProject && (
-              <ProgressUploader
-                files={submitFinalFiles}
-                onChange={setSubmitFinalFiles}
-                maxFiles={10}
-                label="File Final Deliverables"
-                disabled={submittingFinal}
-                uploadCategory="final"
-                projectId={selectedProject.id}
-              />
-            )}
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setSubmitFinalOpen(false)}>Batal</Button>
-              <Button onClick={handleSubmitFinal} disabled={submittingFinal || !submitFinalDesc.trim()}>
-                {submittingFinal ? "Mengirim..." : "Submit Final"}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </div>
+    <Suspense fallback={<div className="p-6"><ListSkeleton /></div>}>
+      <DesignerWorkspace />
+    </Suspense>
   );
 }
