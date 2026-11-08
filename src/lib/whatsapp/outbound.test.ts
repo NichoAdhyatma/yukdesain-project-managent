@@ -19,6 +19,7 @@ import {
   isWithinServiceWindow,
   offerMessage,
   sendManualReply,
+  sendSystemText,
   sendToClient,
   templateParam,
 } from "./outbound";
@@ -210,5 +211,25 @@ describe("sendManualReply", () => {
     const res = await sendManualReply(conv, "Halo", "u_owner");
     expect(res).toMatchObject({ ok: false, errorCode: "NOT_CONFIGURED" });
     expect(api.sendText).not.toHaveBeenCalled();
+  });
+});
+
+describe("sendSystemText (kabar otomatis ke klien, docs/CLIENT_NOTIFICATIONS.md)", () => {
+  const conversation = (hoursAgo: number) =>
+    db.waConversation.findUniqueOrThrow.mockResolvedValue({ id: "conv_1", waId: "6281234567890", lastInboundAt: new Date(Date.now() - hoursAgo * HOUR) });
+
+  it("Meta di luar 24 jam → tidak dikirim, tidak lewat template, tidak tersimpan", async () => {
+    conversation(30);
+    await expect(sendSystemText("conv_1", "Halo kak")).resolves.toEqual({ ok: false, via: null, errorCode: "OUTSIDE_SERVICE_WINDOW", messageId: null });
+    expect(api.sendText).not.toHaveBeenCalled();
+    expect(api.sendTemplate).not.toHaveBeenCalled();
+    expect(db.waMessage.create).not.toHaveBeenCalled();
+  });
+
+  it("dalam 24 jam → teks terkirim dan tersimpan sebagai OUTBOUND", async () => {
+    conversation(2);
+    await expect(sendSystemText("conv_1", "Halo kak")).resolves.toEqual({ ok: true, via: "text", messageId: "out_1" });
+    expect(api.sendText).toHaveBeenCalledWith("6281234567890", "Halo kak");
+    expect(db.waMessage.create.mock.calls[0][0].data).toMatchObject({ direction: "OUTBOUND", type: "text", body: "Halo kak", sentByBot: false, deliveryStatus: "sent" });
   });
 });
