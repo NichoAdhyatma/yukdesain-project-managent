@@ -217,7 +217,8 @@ function FinalSection({ project }: { project: DesignerProject }) {
 export function ProjectDetail({ project, onBack }: { project: DesignerProject; onBack: () => void }) {
   const priority = PRIORITY_STYLE[project.priority] ?? PRIORITY_STYLE.NORMAL;
   const progress = latestProgress(project.updates);
-  const pendingRevisions = project.revisions.filter((r) => r.status === "PENDING").length;
+  // Revisi yang belum ditandai selesai dikerjakan
+  const pendingRevisions = project.revisions.filter((r) => r.status === "PENDING" && !r.completedAt).length;
 
   return (
     <article aria-labelledby={`detail-${project.id}`} className="space-y-5">
@@ -307,7 +308,7 @@ export function ProjectDetail({ project, onBack }: { project: DesignerProject; o
         </TabsContent>
 
         <TabsContent value="revisions" className="pt-3">
-          <RevisionList revisions={project.revisions} />
+          <RevisionList projectId={project.id} revisions={project.revisions} closed={!!project.finalApprovedAt} />
         </TabsContent>
       </Tabs>
     </article>

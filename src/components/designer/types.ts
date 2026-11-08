@@ -26,6 +26,8 @@ export type DesignerRevision = {
   status: "PENDING" | "APPROVED" | "REJECTED";
   description: string;
   requestedAt: string;
+  /** Diisi saat desainer menandai revisi selesai dikerjakan (docs/CLIENT_NOTIFICATIONS.md) */
+  completedAt: string | null;
   attachments: DesignerAttachment[];
 };
 

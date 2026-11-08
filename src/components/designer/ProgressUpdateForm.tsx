@@ -6,6 +6,7 @@ import { CheckCircle2, AlertCircle, Loader2, Send, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ProgressUploader, type UploadedFile } from "@/components/ui/progress-uploader";
 import { toast } from "@/components/ui/toast";
@@ -18,7 +19,7 @@ import {
 } from "@/lib/projects/progress-update";
 import type { DesignerProject } from "./types";
 
-type Payload = { description: string; progress: number | null; attachmentIds: string[] };
+type Payload = { description: string; progress: number | null; attachmentIds: string[]; notifyClient: boolean };
 
 export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
   const queryClient = useQueryClient();
@@ -31,7 +32,9 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [triedSubmit, setTriedSubmit] = useState(false);
-  const [sent, setSent] = useState<{ progress: number | null } | null>(null);
+  const [sent, setSent] = useState<{ progress: number | null; notified: boolean } | null>(null);
+  // Kabari klien lewat WhatsApp (docs/CLIENT_NOTIFICATIONS.md); default menyala, desainer bisa mematikan per update.
+  const [notifyClient, setNotifyClient] = useState(true);
 
   const parsed = parseProgress(progress);
   const progressValue = parsed.ok ? parsed.value : null;
@@ -52,7 +55,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
     },
     onSuccess: (_data, payload) => {
       queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
-      setSent({ progress: payload.progress });
+      setSent({ progress: payload.progress, notified: payload.notifyClient });
       setDescription("");
       setFiles([]);
       setTriedSubmit(false);
@@ -83,6 +86,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
       description: description.trim(),
       progress: parsed.value,
       attachmentIds: files.map((f) => f.id),
+      notifyClient,
     });
   }
 
@@ -236,7 +240,27 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
         projectId={project.id}
       />
 
-      {/* 4. Kirim */}
+      {/* 4. Kabari klien */}
+      <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
+        <div className="space-y-0.5">
+          <Label htmlFor={`${formId}-notify`} className="text-sm font-medium">
+            Kabari klien lewat WhatsApp
+          </Label>
+          <p id={`${formId}-notify-help`} className="text-xs text-muted-foreground">
+            Klien menerima pesan berisi persen dan catatan ini. Beberapa update dalam 1 jam digabung jadi satu pesan.
+          </p>
+        </div>
+        <Switch
+          id={`${formId}-notify`}
+          checked={notifyClient}
+          onCheckedChange={edit(setNotifyClient)}
+          aria-describedby={`${formId}-notify-help`}
+          disabled={mutation.isPending}
+          className="mt-1"
+        />
+      </div>
+
+      {/* 5. Kirim */}
       <div className="space-y-3 border-t pt-4">
         {mutation.isError && (
           <div
@@ -257,7 +281,8 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
           >
             <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
             <p>
-              Update terkirim{sent.progress !== null ? ` dengan progres ${sent.progress}%` : ""}. Sudah masuk ke riwayat di bawah.
+              Update terkirim{sent.progress !== null ? ` dengan progres ${sent.progress}%` : ""}. Sudah masuk ke riwayat di bawah
+              {sent.notified ? ". Kabar ke klien lewat WhatsApp diproses." : "."}
             </p>
           </div>
         )}

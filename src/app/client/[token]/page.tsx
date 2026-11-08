@@ -54,7 +54,7 @@ type PaymentAccount = ClientPaymentAccountDto;
 
 type TimelineEvent = {
   id: string;
-  type: "brief_submitted" | "designer_assigned" | "progress" | "revision" | "final_submitted" | "final_approved";
+  type: "brief_submitted" | "designer_assigned" | "progress" | "revision" | "revision_done" | "final_submitted" | "final_approved";
   title: string;
   titleShort: string;
   description?: string;
@@ -71,6 +71,7 @@ const eventConfig: Record<TimelineEvent["type"], { icon: React.ElementType; colo
   designer_assigned: { icon: UserCheck, color: "text-purple-600", bgColor: "bg-purple-100", bgColorDark: "dark:bg-purple-900" },
   progress: { icon: TrendingUp, color: "text-green-600", bgColor: "bg-green-100", bgColorDark: "dark:bg-green-900" },
   revision: { icon: RefreshCw, color: "text-orange-600", bgColor: "bg-orange-100", bgColorDark: "dark:bg-orange-900" },
+  revision_done: { icon: CheckCircle2, color: "text-orange-600", bgColor: "bg-orange-100", bgColorDark: "dark:bg-orange-900" },
   final_submitted: { icon: Star, color: "text-amber-600", bgColor: "bg-amber-100", bgColorDark: "dark:bg-amber-900" },
   final_approved: { icon: CheckCircle2, color: "text-emerald-600", bgColor: "bg-emerald-100", bgColorDark: "dark:bg-emerald-900" },
 };
@@ -2022,6 +2023,18 @@ function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEve
       revisionNumber: rev.number,
       attachments: rev.attachments,
     });
+    // Desainer menandai revisi selesai dikerjakan (docs/CLIENT_NOTIFICATIONS.md)
+    if (rev.completedAt) {
+      events.push({
+        id: `revision-done-${rev.id}`,
+        type: "revision_done",
+        title: `Revisi #${rev.number} selesai`,
+        titleShort: `${shortTitles.revision} ${rev.number} selesai`,
+        description: "Revisi sudah dikerjakan desainer. Cek hasilnya di update terbaru.",
+        date: rev.completedAt,
+        revisionNumber: rev.number,
+      });
+    }
   }
 
   if (project.finalSubmittedAt) {
