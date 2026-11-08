@@ -2,25 +2,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   waMessage: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
-  waConversation: { findUnique: vi.fn(), findFirst: vi.fn(), upsert: vi.fn(), updateMany: vi.fn() },
+  waConversation: { findMany: vi.fn(), updateMany: vi.fn() },
 }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
-const resolveOwner = vi.hoisted(() => vi.fn());
-vi.mock("./owner/identity", () => ({ resolveOwner }));
+const owners = vi.hoisted(() => ({ listOwnerNumbers: vi.fn() }));
+vi.mock("./owner/identity", () => owners);
+const push = vi.hoisted(() => ({ notifyOwnersPush: vi.fn() }));
+vi.mock("@/lib/notifications/push", () => push);
 
 import { PHONE_MEDIA_BODY, handleKirimiEcho, isOwnEcho, isPhoneReplyWamid } from "./phone-takeover";
 
-const now = new Date("2026-11-07T09:00:00Z");
-const conversation = { id: "c1", waId: "628970000937", mode: "BOT", isSandbox: false };
-const echo = (body: string, to: { waId: string | null; lid: string | null } = { waId: "628970000937", lid: null }) => ({ to, body, msgId: "M1" });
+const now = new Date("2026-11-08T05:00:00Z");
+const conv = (id: string, over: object = {}) => ({ id, waId: `62812000000${id.length}${id}`, mode: "BOT", ownerActsAsClient: false, ...over });
+// Pantulan perangkat Kirimi D-CZIKM: `from` = nomor perangkat sendiri, tanpa nomor klien (2026-11-08).
+const echo = (body: string) => ({ to: { waId: "6281233828235", lid: null }, body, msgId: "M1" });
 
 beforeEach(() => {
   vi.resetAllMocks();
   db.waMessage.findUnique.mockResolvedValue(null);
   db.waMessage.findMany.mockResolvedValue([]);
-  db.waConversation.findUnique.mockResolvedValue(conversation);
+  db.waConversation.findMany.mockResolvedValue([]);
   db.waConversation.updateMany.mockResolvedValue({ count: 1 });
-  resolveOwner.mockResolvedValue(null);
+  owners.listOwnerNumbers.mockResolvedValue([{ id: "o1", name: "Rizal", waNumber: "6289700006937" }]);
 });
 
 describe("isOwnEcho (docs/WHATSAPP_CHANNEL_KIRIMI.md §10)", () => {
@@ -38,54 +41,72 @@ describe("isOwnEcho (docs/WHATSAPP_CHANNEL_KIRIMI.md §10)", () => {
   });
 });
 
-describe("handleKirimiEcho", () => {
-  it("pantulan balasan bot → diabaikan, mode tetap", async () => {
+describe("handleKirimiEcho: chat aktif + notifikasi (docs/WHATSAPP_CHANNEL_KIRIMI.md §10)", () => {
+  it("pantulan balasan bot/portal (dicocokkan ke semua chat) → diabaikan, tanpa chat baru", async () => {
     db.waMessage.findMany.mockResolvedValue([{ body: "Halo kak, mau desain apa?" }]);
     expect(await handleKirimiEcho(echo("Halo kak, mau desain apa?"), now)).toBe("own");
+    expect(db.waMessage.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.not.objectContaining({ conversationId: expect.anything() }) }));
     expect(db.waConversation.updateMany).not.toHaveBeenCalled();
     expect(db.waMessage.create).not.toHaveBeenCalled();
   });
 
-  it("admin mengetik dari HP → HUMAN dan pesan dicatat sebagai balasan admin", async () => {
+  it("admin mengetik dari HP, satu chat aktif → chat itu pindah ke admin dan pesannya dicatat", async () => {
+    db.waConversation.findMany.mockResolvedValue([conv("c1")]);
     expect(await handleKirimiEcho(echo("Siap kak, saya cek dulu"), now)).toBe("takeover");
     expect(db.waConversation.updateMany).toHaveBeenCalledWith({ where: { id: "c1", mode: "BOT" }, data: { mode: "HUMAN" } });
     expect(db.waMessage.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ conversationId: "c1", wamid: "kirimi:phone:M1", direction: "OUTBOUND", body: "Siap kak, saya cek dulu", sentByBot: false }),
     });
+    expect(push.notifyOwnersPush).not.toHaveBeenCalled();
+  });
+
+  it("chat aktif dicari dari pesan klien 15 menit terakhir, bukan Uji bot / nomor diblokir", async () => {
+    await handleKirimiEcho(echo("Siap kak"), now);
+    expect(db.waConversation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          isSandbox: false,
+          blockedAt: null,
+          messages: { some: { direction: "INBOUND", createdAt: { gte: new Date("2026-11-08T04:45:00Z") } } },
+        },
+      }),
+    );
+  });
+
+  it("chat instruksi owner tidak dihitung; owner yang tes #klien dihitung", async () => {
+    db.waConversation.findMany.mockResolvedValue([conv("c1"), conv("own", { waId: "6289700006937" })]);
+    expect(await handleKirimiEcho(echo("Siap kak"), now)).toBe("takeover");
+    db.waConversation.findMany.mockResolvedValue([conv("c1"), conv("own", { waId: "6289700006937", ownerActsAsClient: true })]);
+    expect(await handleKirimiEcho({ ...echo("Siap kak"), msgId: "M2" }, now)).toBe("ambiguous");
+  });
+
+  it("beberapa chat aktif → tidak menebak, owner diberi notifikasi untuk ambil alih manual", async () => {
+    db.waConversation.findMany.mockResolvedValue([conv("c1"), conv("c2")]);
+    expect(await handleKirimiEcho(echo("Siap kak"), now)).toBe("ambiguous");
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+    expect(db.waMessage.create).not.toHaveBeenCalled();
+    expect(push.notifyOwnersPush).toHaveBeenCalledWith(
+      "NEEDS_ADMIN",
+      expect.objectContaining({ title: "Balasan dari HP belum dicocokkan", url: "/wa-orders?tab=inbox" }),
+    );
+  });
+
+  it("tidak ada chat aktif → hanya dicatat di log, tanpa chat baru", async () => {
+    expect(await handleKirimiEcho(echo("Halo kak, revisi kemarin sudah jadi"), now)).toBe("no_active_chat");
+    expect(db.waMessage.create).not.toHaveBeenCalled();
+    expect(push.notifyOwnersPush).not.toHaveBeenCalled();
   });
 
   it("media dari HP dicatat dengan teks penanda", async () => {
+    db.waConversation.findMany.mockResolvedValue([conv("c1")]);
     await handleKirimiEcho(echo(""), now);
     expect(db.waMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ body: PHONE_MEDIA_BODY }) });
   });
 
-  it("kiriman ulang webhook → tidak dicatat dua kali", async () => {
+  it("kiriman ulang webhook → tidak diproses dua kali", async () => {
     db.waMessage.findUnique.mockResolvedValue({ id: "m1" });
     expect(await handleKirimiEcho(echo("Siap kak"), now)).toBe("duplicate");
-    expect(db.waMessage.create).not.toHaveBeenCalled();
-  });
-
-  it("pelanggan lama yang disapa admin lebih dulu → chat baru langsung mode HUMAN", async () => {
-    db.waConversation.findUnique.mockResolvedValue(null);
-    db.waConversation.upsert.mockResolvedValue({ ...conversation, id: "c2", mode: "HUMAN" });
-    db.waConversation.updateMany.mockResolvedValue({ count: 0 });
-    expect(await handleKirimiEcho(echo("Halo kak, revisi kemarin sudah jadi"), now)).toBe("already_human");
-    expect(db.waConversation.upsert).toHaveBeenCalledWith(expect.objectContaining({ create: { waId: "628970000937", mode: "HUMAN", waLid: null } }));
-    expect(db.waMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "c2" }) });
-  });
-
-  it("pantulan hanya LID → dicari lewat waLid; tidak dikenal → dilewati", async () => {
-    db.waConversation.findFirst.mockResolvedValue(conversation);
-    expect(await handleKirimiEcho(echo("Siap kak", { waId: null, lid: "123456789012345" }), now)).toBe("takeover");
-    expect(db.waConversation.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { waLid: "123456789012345", isSandbox: false } }));
-    db.waConversation.findFirst.mockResolvedValue(null);
-    expect(await handleKirimiEcho(echo("Siap kak", { waId: null, lid: "999999999999999" }), now)).toBe("no_conversation");
-  });
-
-  it("chat ke nomor owner tidak dialihkan", async () => {
-    resolveOwner.mockResolvedValue({ user: { id: "u1", name: "Owner" }, target: "PUBLISH" });
-    expect(await handleKirimiEcho(echo("tes"), now)).toBe("owner");
-    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+    expect(db.waConversation.findMany).not.toHaveBeenCalled();
   });
 });
 

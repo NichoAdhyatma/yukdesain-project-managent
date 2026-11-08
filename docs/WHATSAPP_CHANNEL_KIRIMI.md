@@ -99,25 +99,29 @@ Mulai go-live, perangkat Kirimi memakai **nomor admin studio** (bukan nomor uji)
 
 Cara kerja (`src/lib/whatsapp/phone-takeover.ts`):
 
-- Setiap pesan keluar dari perangkat memantul ke webhook sebagai event `message` dengan `isFromMe: true`; `from`
-  berisi nomor tujuan (62…), atau `…@lid`. Pembaca mengembalikan `kind: "echo"`.
-- Pesan masuk membawa `originLid` (angka LID polos); disimpan di `WaConversation.waLid` supaya pantulan yang hanya
-  membawa LID tetap bisa dipetakan ke percakapannya.
+- Setiap pesan keluar dari perangkat memantul ke webhook sebagai event `message` dengan `isFromMe: true`. Pembaca
+  mengembalikan `kind: "echo"`.
+- **Temuan 2026-11-08 (perangkat D-CZIKM, nomor admin):** pantulan **tidak membawa nomor klien**. `from` berisi nomor
+  perangkat sendiri, dan tidak ada field tujuan. Rancangan awal (memetakan pantulan ke chat lewat nomor/LID tujuan)
+  membuat chat palsu atas nama nomor admin, jadi diganti dengan pencocokan **chat aktif**.
 - Pantulan diproses di `after()` setelah jeda `ECHO_SETTLE_MS` (10 detik), karena pesan bot/portal baru tersimpan
-  setelah Kirimi menjawab. Kirimi tidak mengembalikan id pesan, jadi dicocokkan dari **isi**: sama persis dengan
-  pesan OUTBOUND percakapan itu dalam 10 menit terakhir (spasi dirapikan; toleransi kecil di ujung untuk teks 20+
-  karakter) → pantulan bot/portal, diabaikan.
-- Tidak cocok → diketik admin di HP: chat pindah ke HUMAN dan pesannya dicatat sebagai OUTBOUND
-  (`wamid kirimi:phone:<msgId>`, `sentByBot: false`). Inbox dan Order WA menampilkannya dengan label **Admin**, dan
-  AI ikut membacanya sebagai riwayat setelah chat dikembalikan ke bot. Foto/stiker dari HP dicatat sebagai
-  "[Media dikirim dari HP admin]".
-- Admin menyapa pelanggan lama lebih dulu (belum ada percakapan) → percakapan dibuat langsung dalam mode HUMAN,
-  jadi balasan pelanggan itu tidak dijawab bot.
-- Chat ke nomor owner tidak dialihkan (tetap jalur instruksi owner). Kiriman ulang webhook tidak dicatat dua kali.
+  setelah Kirimi menjawab. Isinya dicocokkan dengan pesan OUTBOUND **dari chat mana pun** dalam 10 menit terakhir
+  (spasi dirapikan; toleransi kecil di ujung untuk teks 20+ karakter). Cocok → pantulan bot/portal, diabaikan.
+- Tidak cocok → diketik admin di HP. Sistem mencari **chat aktif**: ada pesan klien dalam 15 menit terakhir
+  (`ACTIVE_CHAT_WINDOW_MS`), bukan Uji bot, bukan nomor diblokir, bukan chat instruksi owner (owner yang tes #klien
+  dihitung).
+  - **Tepat satu chat aktif** → chat itu pindah ke HUMAN dan pesannya dicatat sebagai OUTBOUND
+    (`wamid kirimi:phone:<msgId>`, `sentByBot: false`, label **Admin** di Inbox / Order WA, ikut dibaca AI setelah
+    chat dikembalikan ke bot). Foto/stiker dari HP dicatat sebagai "[Media dikirim dari HP admin]".
+  - **Lebih dari satu** → sistem tidak menebak. Owner menerima notifikasi "Balasan dari HP belum dicocokkan"
+    (kejadian "Chat menunggu admin") dan menekan **Ambil alih** di Inbox pada chat yang dibalas.
+  - **Tidak ada** (mis. admin chat ke kenalan) → hanya dicatat di log.
+- Kiriman ulang webhook tidak diproses dua kali.
 
 Batasan:
 
 - Bila admin membalas dalam beberapa detik pertama, bot bisa saja tetap mengirim satu balasan untuk pesan yang
   sedang diproses (jeda gabung pesan 5 detik + AI). Balasan berikutnya sudah diam.
 - AI bawaan Kirimi harus mati: balasannya juga memantul dan akan dianggap ketikan admin.
-- Pantulan yang hanya membawa LID tanpa percakapan yang dikenal dilewati (dicatat di log).
+- Admin yang menyapa pelanggan lama lebih dulu dari HP tidak bisa dikenali (pantulan tanpa nomor tujuan). Bila
+  pelanggan itu membalas, bot yang menjawab; ambil alih chat itu di Inbox bila perlu.

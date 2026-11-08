@@ -126,7 +126,8 @@ export async function POST(request: Request, { params }: Params) {
       try {
         const outcome = await handleKirimiEcho(echo, receivedAt);
         if (outcome !== "own" && outcome !== "duplicate") {
-          console.info(`[kirimi] pesan keluar dari HP ke ${maskPhone(echo.to.waId ?? "")}: ${outcome}`);
+          // Pantulan hanya membawa nomor perangkat sendiri, jadi tujuan tidak dicatat (docs/WHATSAPP_CHANNEL_KIRIMI.md §10).
+          console.info(`[kirimi] pesan keluar dari HP admin: ${outcome}`);
         }
       } catch (error) {
         console.error("[kirimi] gagal memproses pesan keluar dari HP:", (error as Error).name);

@@ -1,22 +1,28 @@
 import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
-import { resolveOwner } from "./owner/identity";
+import { notifyOwnersPush } from "@/lib/notifications/push";
+import { listOwnerNumbers } from "./owner/identity";
 
 // Admin membalas langsung dari HP nomor Kirimi (docs/WHATSAPP_CHANNEL_KIRIMI.md §10). Setiap pesan keluar dari
-// perangkat memantul ke webhook (isFromMe). Pantulan yang isinya sama dengan pesan yang baru dikirim bot / portal
-// diabaikan; selebihnya diketik admin di HP: chat pindah ke mode HUMAN dan pesannya dicatat di riwayat.
+// perangkat memantul ke webhook (isFromMe), tetapi pantulannya hanya membawa nomor perangkat sendiri, tanpa nomor
+// klien (dipastikan 2026-11-08). Karena itu:
+// - pantulan yang isinya sama dengan pesan bot/portal yang baru terkirim (chat mana pun) diabaikan;
+// - selebihnya diketik admin di HP: bila tepat satu chat aktif (pesan klien 15 menit terakhir), chat itu pindah ke
+//   mode HUMAN dan pesannya dicatat; bila lebih dari satu, sistem tidak menebak dan owner diberi notifikasi.
 
 /** Jeda sebelum mencocokkan: pesan bot/portal baru tersimpan setelah Kirimi menjawab, pantulannya bisa lebih dulu. */
 export const ECHO_SETTLE_MS = 10_000;
 /** Pesan keluar portal/bot yang dianggap "baru dikirim" saat mencocokkan pantulan. */
 const MATCH_WINDOW_MS = 10 * 60_000;
+/** Chat dianggap aktif bila klien mengirim pesan dalam rentang ini. */
+export const ACTIVE_CHAT_WINDOW_MS = 15 * 60_000;
 
 export const PHONE_REPLY_WAMID_PREFIX = "kirimi:phone:";
 export const PHONE_MEDIA_BODY = "[Media dikirim dari HP admin]";
 
 export type KirimiEcho = { to: { waId: string | null; lid: string | null }; body: string; msgId: string | null };
 
-export type EchoOutcome = "own" | "takeover" | "already_human" | "duplicate" | "owner" | "no_conversation";
+export type EchoOutcome = "own" | "takeover" | "already_human" | "duplicate" | "ambiguous" | "no_active_chat";
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -48,60 +54,64 @@ function echoWamid(echo: KirimiEcho, now: Date): string {
     .slice(0, 32)}`;
 }
 
-async function findConversation(to: KirimiEcho["to"]) {
-  const select = { id: true, waId: true, mode: true, isSandbox: true } as const;
-  if (to.waId) {
-    const byPhone = await prisma.waConversation.findUnique({ where: { waId: to.waId }, select });
-    if (byPhone) return byPhone;
-  }
-  if (to.lid) return prisma.waConversation.findFirst({ where: { waLid: to.lid, isSandbox: false }, select });
-  return null;
+/** Chat klien yang aktif: ada pesan klien dalam ACTIVE_CHAT_WINDOW_MS. Chat instruksi owner tidak dihitung. */
+async function activeChats(now: Date) {
+  const [chats, owners] = await Promise.all([
+    prisma.waConversation.findMany({
+      where: {
+        isSandbox: false,
+        blockedAt: null,
+        messages: { some: { direction: "INBOUND", createdAt: { gte: new Date(now.getTime() - ACTIVE_CHAT_WINDOW_MS) } } },
+      },
+      select: { id: true, waId: true, mode: true, ownerActsAsClient: true },
+    }),
+    listOwnerNumbers(),
+  ]);
+  const ownerNumbers = new Set(owners.map((o) => o.waNumber));
+  return chats.filter((c) => !ownerNumbers.has(c.waId) || c.ownerActsAsClient);
 }
 
 /**
  * Proses satu pantulan pesan keluar. Dipanggil setelah ECHO_SETTLE_MS supaya pesan bot/portal sudah tersimpan.
- * Chat yang belum ada (admin menyapa pelanggan lama lebih dulu) dibuat langsung dalam mode HUMAN.
+ * Pantulan tidak membawa nomor klien, jadi chat tujuan ditentukan dari chat yang sedang aktif.
  */
 export async function handleKirimiEcho(echo: KirimiEcho, now = new Date()): Promise<EchoOutcome> {
   const wamid = echoWamid(echo, now);
   if (await prisma.waMessage.findUnique({ where: { wamid }, select: { id: true } })) return "duplicate";
 
-  let conversation = await findConversation(echo.to);
-  if (conversation) {
-    const recent = await prisma.waMessage.findMany({
-      where: {
-        conversationId: conversation.id,
-        direction: "OUTBOUND",
-        createdAt: { gte: new Date(now.getTime() - MATCH_WINDOW_MS) },
-        NOT: { wamid: { startsWith: PHONE_REPLY_WAMID_PREFIX } },
-      },
-      select: { body: true },
+  // Pesan bot / portal dari chat mana pun yang baru terkirim.
+  const recent = await prisma.waMessage.findMany({
+    where: {
+      direction: "OUTBOUND",
+      createdAt: { gte: new Date(now.getTime() - MATCH_WINDOW_MS) },
+      NOT: { wamid: { startsWith: PHONE_REPLY_WAMID_PREFIX } },
+    },
+    select: { body: true },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+  });
+  if (isOwnEcho(echo.body, recent.map((m) => m.body))) return "own";
+
+  const chats = await activeChats(now);
+  if (chats.length === 0) return "no_active_chat";
+  if (chats.length > 1) {
+    // Tidak menebak: owner mengambil alih sendiri chat yang dibalas.
+    void notifyOwnersPush("NEEDS_ADMIN", {
+      title: "Balasan dari HP belum dicocokkan",
+      body: `Ada ${chats.length} chat aktif. Tekan "Ambil alih" di Inbox pada chat yang kamu balas, supaya bot berhenti.`,
+      url: "/wa-orders?tab=inbox",
+      tag: "PHONE_REPLY",
     });
-    if (isOwnEcho(echo.body, recent.map((m) => m.body))) return "own";
+    return "ambiguous";
   }
 
-  const waId = conversation?.waId ?? echo.to.waId;
-  if (!waId) return "no_conversation";
-  // Chat ke nomor owner tetap jalur instruksi owner; tidak dialihkan.
-  if (await resolveOwner({ waId, isSandbox: false })) return "owner";
-
-  conversation ??= await prisma.waConversation.upsert({
-    where: { waId },
-    create: { waId, mode: "HUMAN", waLid: echo.to.lid },
-    update: {},
-    select: { id: true, waId: true, mode: true, isSandbox: true },
-  });
-  if (conversation.isSandbox) return "no_conversation";
-
+  const [chat] = chats;
   // Tanpa notifikasi: admin sendiri yang sedang membalas.
-  const { count } = await prisma.waConversation.updateMany({
-    where: { id: conversation.id, mode: "BOT" },
-    data: { mode: "HUMAN" },
-  });
+  const { count } = await prisma.waConversation.updateMany({ where: { id: chat.id, mode: "BOT" }, data: { mode: "HUMAN" } });
   try {
     await prisma.waMessage.create({
       data: {
-        conversationId: conversation.id,
+        conversationId: chat.id,
         wamid,
         direction: "OUTBOUND",
         type: "text",
