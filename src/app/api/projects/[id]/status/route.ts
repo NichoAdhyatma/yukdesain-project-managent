@@ -1,6 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { notifyClientProjectEvent } from "@/lib/notifications/client-project-events";
+import { eventForStatusChange } from "@/lib/notifications/project-status-events";
 import { SERVICE_PUBLIC_SELECT } from "@/lib/services/service-dto";
 
 export async function PUT(
@@ -63,6 +65,10 @@ export async function PUT(
         newValue: { status },
       },
     });
+
+    // Kabar otomatis ke klien (docs/CLIENT_NOTIFICATIONS.md); gagal kirim tidak membatalkan perubahan status.
+    const clientEvent = eventForStatusChange(currentProject.status, status);
+    if (clientEvent) after(() => notifyClientProjectEvent(id, clientEvent).then(() => undefined));
 
     return NextResponse.json({ project });
   } catch (error) {

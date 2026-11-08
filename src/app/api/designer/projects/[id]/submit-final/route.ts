@@ -1,6 +1,7 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { notifyClientProjectEvent } from "@/lib/notifications/client-project-events";
 
 export async function POST(
   request: Request,
@@ -68,6 +69,8 @@ export async function POST(
         description: `📌 Final Deliverables Submitted: ${description.trim()}`,
         authorId: user.id,
         progress: 100,
+        // Klien dikabari lewat kejadian FINAL_SUBMITTED, bukan sebagai update progres.
+        notifyClient: false,
       },
     });
 
@@ -78,6 +81,8 @@ export async function POST(
         data: { category: "FINAL" },
       });
     }
+
+    after(() => notifyClientProjectEvent(id, { kind: "FINAL_SUBMITTED" }).then(() => undefined));
 
     return NextResponse.json({ project: updated }, { status: 200 });
   } catch (error) {
