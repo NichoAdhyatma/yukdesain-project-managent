@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { latestProgress, parseAttachmentIds, parseProgress } from "./progress-update";
+import { latestProgress, parseAttachmentIds, parseProgress, parseNotifyClient } from "./progress-update";
 
 describe("parseProgress", () => {
   it("kosong → null (update tanpa persen tetap boleh)", () => {
@@ -57,5 +57,18 @@ describe("latestProgress", () => {
   it("belum pernah diisi → null", () => {
     expect(latestProgress([])).toBeNull();
     expect(latestProgress([{ progress: null }])).toBeNull();
+  });
+});
+
+describe("parseNotifyClient (kabari klien, docs/CLIENT_NOTIFICATIONS.md)", () => {
+  it("kosong → true (default tercentang); boolean dipakai apa adanya", () => {
+    expect(parseNotifyClient(undefined)).toEqual({ ok: true, value: true });
+    expect(parseNotifyClient(null)).toEqual({ ok: true, value: true });
+    expect(parseNotifyClient(true)).toEqual({ ok: true, value: true });
+    expect(parseNotifyClient(false)).toEqual({ ok: true, value: false });
+  });
+  it("selain boolean ditolak", () => {
+    expect(parseNotifyClient("false").ok).toBe(false);
+    expect(parseNotifyClient(0).ok).toBe(false);
   });
 });

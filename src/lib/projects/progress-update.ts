@@ -46,3 +46,10 @@ export function latestProgress(updates: ReadonlyArray<{ progress: number | null 
   }
   return null;
 }
+
+/** "Kabari klien" (docs/CLIENT_NOTIFICATIONS.md): tidak dikirim = tercentang (true). */
+export function parseNotifyClient(input: unknown): ParseResult<boolean> {
+  if (input === null || input === undefined) return { ok: true, value: true };
+  if (typeof input === "boolean") return { ok: true, value: input };
+  return { ok: false, error: "Pilihan kabari klien tidak valid." };
+}

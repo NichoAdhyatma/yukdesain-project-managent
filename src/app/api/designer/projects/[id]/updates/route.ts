@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
-import { parseAttachmentIds, parseProgress } from "@/lib/projects/progress-update";
+import { parseAttachmentIds, parseNotifyClient, parseProgress } from "@/lib/projects/progress-update";
+import { notifyClientProjectEvent } from "@/lib/notifications/client-project-events";
 
 export async function POST(
   request: Request,
@@ -18,7 +19,7 @@ export async function POST(
     if (!body || typeof body !== "object") {
       return NextResponse.json({ error: "Data update tidak valid" }, { status: 400 });
     }
-    const { description, progress, attachmentIds } = body as Record<string, unknown>;
+    const { description, progress, attachmentIds, notifyClient } = body as Record<string, unknown>;
 
     // Verify designer is assigned to this project
     const assignment = await prisma.projectAssignment.findFirst({
@@ -36,6 +37,11 @@ export async function POST(
     const parsedProgress = parseProgress(progress);
     if (!parsedProgress.ok) {
       return NextResponse.json({ error: parsedProgress.error }, { status: 400 });
+    }
+
+    const parsedNotify = parseNotifyClient(notifyClient);
+    if (!parsedNotify.ok) {
+      return NextResponse.json({ error: parsedNotify.error }, { status: 400 });
     }
 
     const parsedAttachments = parseAttachmentIds(attachmentIds);
@@ -68,6 +74,7 @@ export async function POST(
           description: description.trim(),
           progress: parsedProgress.value,
           authorId: user.id,
+          notifyClient: parsedNotify.value,
         },
       });
 
@@ -86,6 +93,9 @@ export async function POST(
         },
       });
     });
+
+    // Kabar progres ke klien bila dicentang (docs/CLIENT_NOTIFICATIONS.md); jeda 60 menit diatur pengirim.
+    if (parsedNotify.value) after(() => notifyClientProjectEvent(id, { kind: "PROGRESS", updateId: update.id }).then(() => undefined));
 
     return NextResponse.json({ update }, { status: 201 });
   } catch (error) {
