@@ -26,6 +26,7 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
   // Hanya pratinjau; DP final dihitung server dengan persen Operasional yang sama.
   const dpPercent = intake.dpPercentForNewQuote;
   const dpPreview = price > 0 ? Math.ceil((price * dpPercent) / 100) : null;
+  const startingPrice = intake.service?.startingPrice ?? null;
 
   return (
     <Card>
@@ -51,7 +52,20 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="quote-price">Harga</Label>
-              <CurrencyInput id="quote-price" value={price} onChange={setPrice} placeholder="Rp0" />
+              <CurrencyInput
+                id="quote-price"
+                value={price}
+                onChange={setPrice}
+                placeholder="Rp0"
+                aria-describedby={startingPrice ? "quote-price-patokan" : undefined}
+              />
+              {/* Patokan dari menu Layanan (docs/SERVICES_CATALOG.md): bot mungkin sudah menyebutnya ke klien. */}
+              {startingPrice ? (
+                <p id="quote-price-patokan" className="text-xs text-muted-foreground">
+                  Patokan layanan: mulai <span className="tabular-nums">{formatRupiah(startingPrice)}</span>
+                  {intake.service?.priceNote ? ` (${intake.service.priceNote})` : ""}
+                </p>
+              ) : null}
               {fields.agreedPrice && <p className="text-sm text-destructive">{fields.agreedPrice}</p>}
             </div>
             <div className="space-y-2">

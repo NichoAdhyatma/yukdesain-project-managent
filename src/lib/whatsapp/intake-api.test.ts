@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db", () => ({ prisma: {} }));
 vi.mock("@/lib/storage", () => ({ getClient: () => ({}) }));
 
-import { toListItem } from "./intake-api";
+import { detailInclude, toListItem } from "./intake-api";
 
 const row = (waId: string) =>
   ({
@@ -25,5 +25,12 @@ describe("toListItem — tes owner (docs/WHATSAPP_OWNER_COMMANDS.md §9)", () =>
     expect(toListItem(row("6289700000000"), true, owners).ownerTest).toBe(true);
     expect(toListItem(row("6281234567890"), true, owners).ownerTest).toBe(false);
     expect(toListItem(row("6289700000000")).ownerTest).toBe(false);
+  });
+});
+
+describe("detailInclude: patokan harga mulai (docs/SERVICES_CATALOG.md)", () => {
+  it("detail order membawa harga mulai dan catatan harga layanan, tanpa catatan bot", () => {
+    expect(detailInclude.service.select).toMatchObject({ startingPrice: true, priceNote: true });
+    expect(detailInclude.service.select).not.toHaveProperty("botNotes");
   });
 });

@@ -22,7 +22,7 @@ Kriteria berhasil:
 
 | Topik | Keputusan |
 |---|---|
-| Harga di menu Layanan | **Bot boleh menyebut "harga mulai"** per layanan. Harga final tetap diisi admin setelah brief lengkap. Mengubah aturan BRD (§8). |
+| Harga di menu Layanan | **Bot boleh menyebut "harga mulai"** per layanan. Harga final tetap diisi admin setelah brief lengkap. Mengubah aturan BRD (§8). Bentuknya **satu angka + catatan singkat** per layanan (2026-11-08), bukan daftar varian. |
 | Gaya bahasa | **Pilihan + catatan**: sapaan, nada, panjang balasan, emoji, catatan singkat, 2–3 contoh balasan. |
 | Pendekatan | **Terstruktur per fitur, dimuat sesuai konteks** (inti selalu ada; detail layanan dan add-on hanya saat relevan). Bukan RAG. |
 | Operasional | Aturan inti tinggal di fitur portal, **dipakai sistem dan bot**. File `.md` hanya add-on. |
@@ -80,6 +80,7 @@ Kolom baru di `Service` (aditif):
 | Field | Tipe | Keterangan |
 |---|---|---|
 | `startingPrice` | Int? (rupiah, satuan sama dengan `agreedPrice`) | Kosong = bot tidak menyebut harga untuk layanan ini |
+| `priceNote` | String? ≤80 | Catatan singkat harga, dikutip bot bersama harga mulai (mis. "A3 mulai Rp200.000", "tergantung ukuran"). Keputusan owner 2026-11-08 |
 | `suitableFor` | String? ≤200 | "Cocok untuk …", dipakai bot saat klien bingung memilih |
 | `botNotes` | String? ≤300 | Catatan singkat khusus layanan ini untuk bot |
 
@@ -94,7 +95,7 @@ Bot:
 - Aturan prompt baru: boleh menyebut "mulai Rp…" persis sesuai data, selalu dengan kata "mulai" dan keterangan
   bahwa harga final dikirim tim setelah brief lengkap. Tetap dilarang: total, perkiraan di luar harga mulai,
   negosiasi, lama pengerjaan.
-- `reply-guard`: angka yang sama persis dengan `startingPrice` layanan aktif diizinkan (selain nilai aturan harga
+- `reply-guard`: angka yang sama persis dengan `startingPrice` layanan aktif, atau yang tertulis di `priceNote`-nya, diizinkan (selain nilai aturan harga
   terbit). Angka lain tetap dihapus sebelum harga final ada.
 - Order WA (panel harga) menampilkan harga mulai layanan sebagai patokan.
 - Menggantikan `02-pengetahuan-layanan.md`.

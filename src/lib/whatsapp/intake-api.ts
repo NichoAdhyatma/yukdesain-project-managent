@@ -144,7 +144,8 @@ export const detailInclude = {
       },
     },
   },
-  service: { select: { id: true, code: true, name: true } },
+  // Harga mulai = patokan di panel harga (docs/SERVICES_CATALOG.md); isian harga tidak diisi otomatis.
+  service: { select: { id: true, code: true, name: true, startingPrice: true, priceNote: true } },
   project: { select: { id: true, projectNumber: true } },
   paymentProofs: {
     orderBy: { createdAt: "desc" },

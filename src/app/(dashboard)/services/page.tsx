@@ -5,16 +5,10 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { EMPTY_SERVICE_FORM, ServiceForm, type ServiceFormValues } from "@/components/services/ServiceForm";
+import { SERVICE_BOT_LIMITS } from "@/lib/constants";
+import { formatRupiah } from "@/lib/whatsapp/format";
 import { Plus, Pencil, Trash2, Check, X, Loader2, AlertTriangle } from "lucide-react";
 
 type Service = {
@@ -24,26 +18,73 @@ type Service = {
   description: string | null;
   outputFormat: string | null;
   isActive: boolean;
+  startingPrice: number | null;
+  priceNote: string | null;
+  suitableFor: string | null;
+  botNotes: string | null;
 };
+
+/** Error dari API dengan pesan per field (validasi kolom bot). */
+class ServiceSaveError extends Error {
+  constructor(
+    message: string,
+    readonly fields: Record<string, string>,
+  ) {
+    super(message);
+  }
+}
+
+function toPayload(values: ServiceFormValues) {
+  return {
+    name: values.name.trim(),
+    description: values.description.trim(),
+    outputFormat: values.outputFormat.trim(),
+    startingPrice: values.startingPrice,
+    priceNote: values.priceNote,
+    suitableFor: values.suitableFor,
+    botNotes: values.botNotes,
+  };
+}
+
+// Urutan isian di form; fokus pindah ke isian pertama yang salah (sama dengan form Operasional studio).
+const FIELD_ORDER = ["name", "startingPrice", "priceNote", "suitableFor", "botNotes"];
+
+function focusFirstInvalid(fields: Record<string, string>) {
+  const first = FIELD_ORDER.find((k) => k in fields);
+  if (first) requestAnimationFrame(() => document.getElementById(`service-${first}`)?.focus());
+}
+
+function toFormValues(service: Service): ServiceFormValues {
+  return {
+    name: service.name,
+    description: service.description ?? "",
+    outputFormat: service.outputFormat ?? "",
+    startingPrice: service.startingPrice,
+    priceNote: service.priceNote ?? "",
+    suitableFor: service.suitableFor ?? "",
+    botNotes: service.botNotes ?? "",
+  };
+}
 
 export default function ServicesPage() {
   const queryClient = useQueryClient();
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", description: "", outputFormat: "" });
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [newService, setNewService] = useState({ name: "", description: "", outputFormat: "" });
-  const [isSaving, setIsSaving] = useState(false);
+  // null = dialog tertutup; id null = layanan baru
+  const [formTarget, setFormTarget] = useState<{ id: string | null } | null>(null);
+  const [formValues, setFormValues] = useState<ServiceFormValues>(EMPTY_SERVICE_FORM);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [deleteTargetName, setDeleteTargetName] = useState("");
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState("");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["services"],
     staleTime: Infinity,
     queryFn: async () => {
-      const res = await fetch("/api/services");
+      // no-store: GET /api/services di-cache browser 1 jam; setelah menyimpan, daftar harus langsung terbaru.
+      const res = await fetch("/api/services", { cache: "no-store" });
+      if (!res.ok) throw new Error("Gagal memuat layanan.");
       const data = await res.json();
       return data.services as Service[];
     },
@@ -51,58 +92,59 @@ export default function ServicesPage() {
 
   const services = data ?? [];
 
-  const createMutation = useMutation({
-    mutationFn: async (payload: { name: string; description: string; outputFormat: string }) => {
-      const res = await fetch("/api/services", {
-        method: "POST",
+  const saveMutation = useMutation({
+    mutationFn: async ({ id, values }: { id: string | null; values: ServiceFormValues }) => {
+      const res = await fetch(id ? `/api/services/${id}` : "/api/services", {
+        method: id ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        cache: "no-store",
+        body: JSON.stringify(toPayload(values)),
       });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Gagal membuat layanan.");
-      }
-      return res.json();
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new ServiceSaveError(body.error || "Gagal menyimpan layanan.", body.fields ?? {});
+      return body;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["services"] });
-      setNewService({ name: "", description: "", outputFormat: "" });
-      setIsCreateOpen(false);
+      setFormTarget(null);
     },
     onError: (err: Error) => {
-      setAlertMessage(err.message || "Gagal membuat layanan.");
+      if (err instanceof ServiceSaveError && Object.keys(err.fields).length > 0) {
+        setFormErrors(err.fields);
+        focusFirstInvalid(err.fields);
+        return;
+      }
+      setAlertMessage(err.message || "Gagal menyimpan layanan.");
       setAlertOpen(true);
     },
   });
 
-  const updateMutation = useMutation({
-    mutationFn: async ({ id, payload }: { id: string; payload: { name: string; description: string; outputFormat: string } }) => {
-      const res = await fetch(`/api/services/${id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Gagal menyimpan perubahan.");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["services"] });
-      setEditingId(null);
-    },
-    onError: (err: Error) => {
-      setAlertMessage(err.message || "Gagal menyimpan perubahan.");
-      setAlertOpen(true);
-      setIsSaving(false);
-    },
-  });
+  const openForm = (service: Service | null) => {
+    setFormValues(service ? toFormValues(service) : EMPTY_SERVICE_FORM);
+    setFormErrors({});
+    setFormTarget({ id: service?.id ?? null });
+  };
+
+  const tooLong =
+    formValues.priceNote.length > SERVICE_BOT_LIMITS.priceNoteMaxChars ||
+    formValues.suitableFor.length > SERVICE_BOT_LIMITS.suitableForMaxChars ||
+    formValues.botNotes.length > SERVICE_BOT_LIMITS.botNotesMaxChars;
+
+  const handleSave = () => {
+    if (!formTarget || !formValues.name.trim()) {
+      setFormErrors({ name: "Nama layanan wajib diisi" });
+      focusFirstInvalid({ name: "" });
+      return;
+    }
+    setFormErrors({});
+    saveMutation.mutate({ id: formTarget.id, values: formValues });
+  };
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, isActive }: { id: string; isActive: boolean }) => {
       const res = await fetch(`/api/services/${id}`, {
         method: "PUT",
+        cache: "no-store",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ isActive }),
       });
@@ -137,28 +179,6 @@ export default function ServicesPage() {
     },
   });
 
-  const handleStartEdit = (service: Service) => {
-    setEditingId(service.id);
-    setEditForm({
-      name: service.name,
-      description: service.description || "",
-      outputFormat: service.outputFormat || "",
-    });
-  };
-
-  const handleSaveEdit = () => {
-    if (!editingId) return;
-    setIsSaving(true);
-    updateMutation.mutate(
-      { id: editingId, payload: editForm },
-      { onSettled: () => setIsSaving(false) }
-    );
-  };
-
-  const handleCancelEdit = () => {
-    setEditingId(null);
-  };
-
   const handleToggleActive = (id: string, currentActive: boolean) => {
     toggleActiveMutation.mutate({ id, isActive: !currentActive });
   };
@@ -171,24 +191,13 @@ export default function ServicesPage() {
 
   const handleDeleteService = () => {
     if (!deleteTargetId) return;
-    setIsSaving(true);
-    deleteMutation.mutate(deleteTargetId, {
-      onSettled: () => setIsSaving(false),
-    });
-  };
-
-  const handleCreateService = () => {
-    if (!newService.name) return;
-    setIsSaving(true);
-    createMutation.mutate(newService, {
-      onSettled: () => setIsSaving(false),
-    });
+    deleteMutation.mutate(deleteTargetId);
   };
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center h-64" role="status" aria-label="Memuat layanan">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" aria-hidden="true" />
       </div>
     );
   }
@@ -196,148 +205,116 @@ export default function ServicesPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex flex-col gap-4 p-6 border-b border-border">
-        <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 p-4 md:p-6 border-b border-border">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold text-foreground">Services</h1>
-            <p className="text-muted-foreground">
-              Kelola katalog layanan desain
-            </p>
+            <p className="text-muted-foreground">Kelola katalog layanan desain dan yang dibaca bot WhatsApp</p>
           </div>
-          <div className="flex items-center gap-2">
-            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-              <DialogTrigger render={<Button><Plus className="w-4 h-4 mr-2" />Layanan Baru</Button>} />
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Tambah Layanan Baru</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="newName">Nama Layanan</Label>
-                    <Input
-                      id="newName"
-                      value={newService.name}
-                      onChange={(e) => setNewService((p) => ({ ...p, name: e.target.value }))}
-                      placeholder="Contoh: Logo Minimalis"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="newDesc">Deskripsi</Label>
-                    <Input
-                      id="newDesc"
-                      value={newService.description}
-                      onChange={(e) => setNewService((p) => ({ ...p, description: e.target.value }))}
-                      placeholder="Deskripsi layanan"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="newFormat">Format Output</Label>
-                    <Input
-                      id="newFormat"
-                      value={newService.outputFormat}
-                      onChange={(e) => setNewService((p) => ({ ...p, outputFormat: e.target.value }))}
-                      placeholder="Contoh: AI, PNG, SVG"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2 pt-2">
-                    <Button variant="outline" onClick={() => setIsCreateOpen(false)}>Batal</Button>
-                    <Button onClick={handleCreateService} disabled={isSaving || createMutation.isPending}>
-                      {isSaving || createMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
-                      Simpan
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-          </div>
+          <Button onClick={() => openForm(null)} className="max-md:h-11">
+            <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
+            Layanan Baru
+          </Button>
         </div>
       </div>
 
       {/* Services Grid */}
-      <div className="flex-1 overflow-auto p-6">
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {services.map((service) => (
-            <Card key={service.id} className={!service.isActive ? "opacity-60" : ""}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <Badge variant="outline" className="mb-2">{service.code}</Badge>
-                    {editingId === service.id ? (
-                      <Input
-                        value={editForm.name}
-                        onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
-                        className="font-semibold"
-                      />
-                    ) : (
+      <div className="flex-1 overflow-auto p-4 md:p-6">
+        {isError ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <p className="text-muted-foreground">Daftar layanan gagal dimuat.</p>
+            <Button variant="outline" className="max-md:h-11" onClick={() => refetch()}>
+              Coba lagi
+            </Button>
+          </div>
+        ) : services.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 py-16 text-center">
+            <p className="text-muted-foreground">Belum ada layanan. Tambahkan layanan pertama supaya bisa dipesan klien.</p>
+            <Button className="max-md:h-11" onClick={() => openForm(null)}>
+              <Plus className="w-4 h-4 mr-2" aria-hidden="true" />
+              Layanan Baru
+            </Button>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {services.map((service) => (
+              <Card key={service.id} className={!service.isActive ? "opacity-60" : ""}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <Badge variant="outline" className="mb-2">
+                        {service.code}
+                      </Badge>
                       <CardTitle className="text-lg">{service.name}</CardTitle>
+                    </div>
+                    <Badge variant={service.isActive ? "default" : "secondary"}>{service.isActive ? "Aktif" : "Nonaktif"}</Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <CardDescription className="line-clamp-2">{service.description || "Tidak ada deskripsi"}</CardDescription>
+                  <div className="text-sm text-muted-foreground">
+                    <span className="font-medium">Output:</span> {service.outputFormat || "-"}
+                  </div>
+                  <div className="text-sm">
+                    {service.startingPrice ? (
+                      <p>
+                        <span className="font-medium tabular-nums">Mulai {formatRupiah(service.startingPrice)}</span>
+                        {service.priceNote && <span className="text-muted-foreground"> · {service.priceNote}</span>}
+                      </p>
+                    ) : (
+                      <p className="text-muted-foreground">Harga mulai belum diisi</p>
                     )}
                   </div>
-                  <Badge variant={service.isActive ? "default" : "secondary"}>
-                    {service.isActive ? "Aktif" : "Nonaktif"}
-                  </Badge>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {editingId === service.id ? (
-                  <>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Deskripsi</Label>
-                      <Input
-                        value={editForm.description}
-                        onChange={(e) => setEditForm((p) => ({ ...p, description: e.target.value }))}
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Format Output</Label>
-                      <Input
-                        value={editForm.outputFormat}
-                        onChange={(e) => setEditForm((p) => ({ ...p, outputFormat: e.target.value }))}
-                      />
-                    </div>
-                    <div className="flex gap-2 pt-2">
-                      <Button size="sm" variant="outline" onClick={handleCancelEdit}>
-                        <X className="h-4 w-4 mr-1" /> Batal
-                      </Button>
-                      <Button size="sm" onClick={handleSaveEdit} disabled={isSaving || updateMutation.isPending}>
-                        {isSaving || updateMutation.isPending ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Check className="h-4 w-4 mr-1" />} Simpan
-                      </Button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <CardDescription className="line-clamp-2">
-                      {service.description || "Tidak ada deskripsi"}
-                    </CardDescription>
-                    <div className="text-sm text-muted-foreground">
-                      <span className="font-medium">Output:</span> {service.outputFormat || "-"}
-                    </div>
-                    <div className="flex gap-2 pt-2">
-                      <Button size="sm" variant="ghost" onClick={() => handleStartEdit(service)}>
-                        <Pencil className="h-4 w-4 mr-1" /> Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleToggleActive(service.id, service.isActive)}
-                      >
-                        {service.isActive ? "Nonaktifkan" : "Aktifkan"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => openDeleteConfirm(service.id, service.name)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" /> Hapus
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    <Button size="sm" variant="ghost" className="max-md:h-11" onClick={() => openForm(service)}>
+                      <Pencil className="h-4 w-4 mr-1" aria-hidden="true" /> Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="max-md:h-11"
+                      onClick={() => handleToggleActive(service.id, service.isActive)}
+                    >
+                      {service.isActive ? "Nonaktifkan" : "Aktifkan"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive max-md:h-11"
+                      onClick={() => openDeleteConfirm(service.id, service.name)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" aria-hidden="true" /> Hapus
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Form tambah / edit */}
+      <Dialog open={formTarget !== null} onOpenChange={(open) => !open && setFormTarget(null)}>
+        <DialogContent className="max-h-[90dvh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{formTarget?.id ? "Edit Layanan" : "Tambah Layanan Baru"}</DialogTitle>
+          </DialogHeader>
+          <ServiceForm idPrefix="service" values={formValues} onChange={setFormValues} errors={formErrors} />
+          <DialogFooter>
+            <Button variant="outline" className="max-md:h-11" onClick={() => setFormTarget(null)}>
+              <X className="h-4 w-4 mr-1" aria-hidden="true" /> Batal
+            </Button>
+            <Button className="max-md:h-11" onClick={handleSave} disabled={saveMutation.isPending || tooLong}>
+              {saveMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" aria-hidden="true" />
+              ) : (
+                <Check className="h-4 w-4 mr-1" aria-hidden="true" />
+              )}
+              Simpan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
@@ -353,8 +330,8 @@ export default function ServicesPage() {
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Batal</Button>
-            <Button variant="destructive" onClick={handleDeleteService} disabled={isSaving || deleteMutation.isPending}>
-              {isSaving || deleteMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            <Button variant="destructive" onClick={handleDeleteService} disabled={deleteMutation.isPending}>
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
               Hapus
             </Button>
           </DialogFooter>

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type Anthropic from "@anthropic-ai/sdk";
+import { OPERATIONS_DEFAULTS } from "@/lib/studio-operations";
 
 const create = vi.hoisted(() => vi.fn());
 const db = vi.hoisted(() => ({
@@ -8,6 +9,7 @@ const db = vi.hoisted(() => ({
   waConversation: { findUniqueOrThrow: vi.fn() },
   waOwnerQuery: { findMany: vi.fn(async () => []) },
   paymentAccount: { findMany: vi.fn() },
+  service: { findMany: vi.fn(async (): Promise<unknown[]> => []) },
 }));
 const guides = vi.hoisted(() => ({ getDraftGuide: vi.fn(), getPublishedGuide: vi.fn() }));
 const tools = vi.hoisted(() => ({ executeTool: vi.fn(), findActiveIntake: vi.fn() }));
@@ -234,6 +236,32 @@ describe("runAiTurn", () => {
     expect(state).not.toContain("999");
     expect(state).toContain("business_desc");
     expect(db.paymentAccount.findMany).not.toHaveBeenCalled();
+  });
+
+  it("katalog Layanan: daftar di system prompt, detail layanan order di STATE, angka untuk penjaga", async () => {
+    givenHistory([inbound("m_last", "mau logo")]);
+    db.service.findMany.mockResolvedValue([
+      { code: "SVC-01", name: "Logo Minimalis", description: null, outputFormat: "AI, PNG", startingPrice: 150000, priceNote: "termasuk 3 konsep", suitableFor: "brand modern", botNotes: "tanya media pemakaian" },
+    ]);
+    db.waIntake.findFirst.mockResolvedValue({
+      status: "COLLECTING",
+      clientName: null,
+      clientEmail: null,
+      briefDraft: {},
+      agreedPrice: null,
+      dpAmount: null,
+      deadline: null,
+      service: { code: "SVC-01", name: "Logo Minimalis" },
+    });
+    tools.findActiveIntake.mockResolvedValue(null);
+    create.mockResolvedValue(textResponse("ok"));
+    const result = await runAiTurn(params);
+    const system = create.mock.calls[0][0].system as { text: string }[];
+    expect(system[0].text).toContain("- Logo Minimalis (SVC-01): mulai Rp150.000 (termasuk 3 konsep)");
+    expect(system[0].text).not.toContain("tanya media pemakaian");
+    expect(stateOf()).toContain("Catatan internal untuk kamu (jangan dikutip ke klien): tanya media pemakaian");
+    expect(result.guardExtras.catalogGroups).toEqual([["150000", "termasuk 3 konsep"]]);
+    expect(result.guardExtras.policyNumbers).toContain(OPERATIONS_DEFAULTS.revisionNotice);
   });
 });
 

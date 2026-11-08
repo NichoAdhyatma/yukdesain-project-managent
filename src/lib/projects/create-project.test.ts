@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Prisma } from "@prisma/client";
 import { createProject, generateInvoiceNumber } from "./create-project";
+import { SERVICE_PUBLIC_SELECT } from "@/lib/services/service-dto";
 
 const ops = vi.hoisted(() => ({ getStudioOperations: vi.fn(async () => ({ revisionQuota: 5 })) }));
 vi.mock("@/lib/studio-operations", () => ops);
@@ -80,7 +81,7 @@ describe("createProject", () => {
         status: "DRAFT",
         paymentStatus: "PARTIALLY_PAID",
       },
-      include: { client: true, service: true, invoices: true },
+      include: { client: true, service: { select: SERVICE_PUBLIC_SELECT }, invoices: true },
     });
     expect(db.activityLog.create).toHaveBeenCalledWith({
       data: {
