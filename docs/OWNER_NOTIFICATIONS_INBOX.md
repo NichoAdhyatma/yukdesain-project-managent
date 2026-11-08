@@ -37,8 +37,17 @@ Klik notifikasi → membuka order atau chat yang bersangkutan di portal.
 Tab Notifications yang sekarang (Order Baru, Brief Submitted, Pembayaran) masih berupa tampilan tanpa fungsi; diganti
 dengan pengaturan yang benar-benar dipakai ini.
 
-**Tidak dikirim** untuk: Uji bot, order tes owner (#klien), nomor yang diblokir. Penerima: user OWNER yang sudah
+**Tidak dikirim** untuk: Uji bot, nomor yang diblokir, dan chat instruksi owner. Penerima: user OWNER yang sudah
 mengaktifkan notifikasi di perangkatnya (bisa beberapa perangkat).
+
+**Perubahan 2026-11-08** (owner melaporkan "Perlu harga" tidak masuk saat tes dari nomor owner):
+
+- Order tes owner (#klien) **tetap mengirim notifikasi**, judulnya diawali "[Tes]" (mis. "[Tes] Perlu harga"), supaya
+  owner bisa memastikan notifikasi masuk tanpa nomor kedua. Sebelumnya dilewati.
+- **Klien baru** ditentukan dari pesan masuk paling awal, bukan jumlah pesan: klien yang mengetik beruntun ("halo",
+  "mau logo") tetap memicu notifikasi walau pesan keduanya sudah tersimpan saat jeda gabung pesan selesai.
+- Setiap kejadian dicatat di log server: `[push] NEEDS_QUOTE terkirim ke 1/1 perangkat`, atau "tidak terkirim: tidak
+  ada perangkat …". Penolakan layanan push tetap dicatat sebagai error.
 
 **Biaya**: gratis (memakai layanan push bawaan browser: Google, Apple, Mozilla).
 

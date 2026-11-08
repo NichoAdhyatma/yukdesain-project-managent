@@ -24,6 +24,7 @@ const sub = (id: string) => ({ id, endpoint: `https://push.test/${id}`, p256dh: 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => undefined);
+  vi.spyOn(console, "info").mockImplementation(() => undefined);
   process.env.VAPID_PUBLIC_KEY = "B".repeat(87);
   process.env.VAPID_PRIVATE_KEY = "k".repeat(43);
   process.env.VAPID_SUBJECT = "mailto:hello@yukdesain.com";
@@ -64,5 +65,16 @@ describe("web push", () => {
     expect(await notifyOwnersPush("DP_PROOF", { title: "t", body: "b", url: "/" })).toBe(0);
     expect(db.webPushSubscription.delete).toHaveBeenCalledWith({ where: { id: "gone" } });
     expect(db.webPushSubscription.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it("setiap kejadian dicatat di log: terkirim ke berapa perangkat, atau tidak ada perangkat", async () => {
+    db.user.findMany.mockResolvedValue([{ notifyPrefs: null, pushSubscriptions: [sub("s1"), sub("s2")] }]);
+    wp.sendNotification.mockResolvedValueOnce({ statusCode: 201 }).mockRejectedValueOnce(new wp.WebPushError(500));
+    await notifyOwnersPush("NEEDS_QUOTE", { title: "Perlu harga", body: "Nico", url: "/" });
+    expect(console.info).toHaveBeenCalledWith("[push] NEEDS_QUOTE terkirim ke 1/2 perangkat");
+
+    db.user.findMany.mockResolvedValue([]);
+    await notifyOwnersPush("NEW_CLIENT", { title: "Klien baru chat", body: "x", url: "/" });
+    expect(console.info).toHaveBeenCalledWith("[push] NEW_CLIENT tidak terkirim: tidak ada perangkat owner yang berlangganan dan mengaktifkan kejadian ini");
   });
 });

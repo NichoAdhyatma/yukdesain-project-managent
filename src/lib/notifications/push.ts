@@ -67,10 +67,16 @@ export async function notifyOwnersPush(event: NotifyEvent, payload: PushPayload)
       select: { notifyPrefs: true, pushSubscriptions: { select: { id: true, endpoint: true, p256dh: true, auth: true } } },
     });
     const targets = owners.filter((o) => !disabledEvents(o.notifyPrefs).has(event)).flatMap((o) => o.pushSubscriptions);
-    if (targets.length === 0) return 0;
+    // Dicatat juga saat berhasil, supaya "notifikasi masuk atau tidak" bisa dipastikan dari log server.
+    if (targets.length === 0) {
+      console.info(`[push] ${event} tidak terkirim: tidak ada perangkat owner yang berlangganan dan mengaktifkan kejadian ini`);
+      return 0;
+    }
     const body = await encodePayload({ ...payload, tag: payload.tag ?? event });
     const results = await Promise.all(targets.map((sub) => sendOne(sub, body)));
-    return results.filter(Boolean).length;
+    const sent = results.filter(Boolean).length;
+    console.info(`[push] ${event} terkirim ke ${sent}/${targets.length} perangkat`);
+    return sent;
   } catch (error) {
     console.error(`[push] gagal mengirim ${event}:`, (error as Error).name);
     return 0;
