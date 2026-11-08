@@ -1,7 +1,11 @@
 "use client";
 
-import { FileText, MessageSquareWarning, History } from "lucide-react";
+import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CheckCircle2, FileText, Loader2, MessageSquareWarning, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
 import { ImageViewerGroup, ViewableImage } from "@/components/ui/image-viewer";
 import {
   REVISION_STATUS,
@@ -91,7 +95,7 @@ export function UpdateTimeline({ updates }: { updates: DesignerUpdate[] }) {
   );
 }
 
-export function RevisionList({ revisions }: { revisions: DesignerRevision[] }) {
+export function RevisionList({ projectId, revisions, closed }: { projectId: string; revisions: DesignerRevision[]; closed: boolean }) {
   if (revisions.length === 0) {
     return (
       <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
@@ -113,7 +117,13 @@ export function RevisionList({ revisions }: { revisions: DesignerRevision[] }) {
             <li key={rev.id} className="space-y-2.5 rounded-lg border p-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm font-semibold">Revisi #{rev.number}</p>
-                <Badge variant={st.variant}>{st.label}</Badge>
+                {rev.completedAt ? (
+                  <Badge variant="default">
+                    <CheckCircle2 aria-hidden /> Selesai dikerjakan
+                  </Badge>
+                ) : (
+                  <Badge variant={st.variant}>{st.label}</Badge>
+                )}
               </div>
               <p className="whitespace-pre-wrap break-words text-sm">{rev.description}</p>
               {images.length > 0 && (
@@ -134,11 +144,61 @@ export function RevisionList({ revisions }: { revisions: DesignerRevision[] }) {
               )}
               <p className="text-xs text-muted-foreground">
                 Diminta <time dateTime={rev.requestedAt}>{formatDate(rev.requestedAt)}</time>
+                {rev.completedAt && (
+                  <>
+                    {" · "}selesai <time dateTime={rev.completedAt}>{formatDate(rev.completedAt)}</time>
+                  </>
+                )}
               </p>
+              {!rev.completedAt && !closed && <CompleteRevisionButton projectId={projectId} revision={rev} />}
             </li>
           );
         })}
       </ol>
     </ImageViewerGroup>
+  );
+}
+
+/** Tandai revisi selesai dikerjakan; klien dikabari lewat WhatsApp (docs/CLIENT_NOTIFICATIONS.md). */
+function CompleteRevisionButton({ projectId, revision }: { projectId: string; revision: DesignerRevision }) {
+  const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/designer/projects/${projectId}/revisions/${revision.id}/complete`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Gagal menandai revisi. Coba lagi.");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
+      toast(`Revisi #${revision.number} ditandai selesai. Kabar ke klien lewat WhatsApp diproses.`, "success");
+    },
+    onError: (err: Error) => {
+      setConfirming(false);
+      toast(err.message, "error");
+    },
+  });
+
+  if (!confirming) {
+    return (
+      <Button type="button" variant="outline" size="sm" className="h-11 md:h-8" onClick={() => setConfirming(true)}>
+        <CheckCircle2 aria-hidden /> Tandai revisi selesai
+      </Button>
+    );
+  }
+  return (
+    <div role="group" aria-label={`Konfirmasi revisi #${revision.number} selesai`} className="space-y-2 rounded-md border bg-muted/40 p-3">
+      <p className="text-sm">Tandai revisi #{revision.number} selesai? Klien akan dikabari lewat WhatsApp.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" className="h-11 md:h-8" disabled={mutation.isPending} onClick={() => mutation.mutate()}>
+          {mutation.isPending ? <Loader2 className="animate-spin" aria-hidden /> : <CheckCircle2 aria-hidden />}
+          Ya, tandai selesai
+        </Button>
+        <Button type="button" size="sm" variant="ghost" className="h-11 md:h-8" disabled={mutation.isPending} onClick={() => setConfirming(false)}>
+          Batal
+        </Button>
+      </div>
+    </div>
   );
 }

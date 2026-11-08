@@ -1,4 +1,5 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
+import { notifyClientProjectEvent } from "@/lib/notifications/client-project-events";
 import { prisma } from "@/lib/db";
 
 export async function POST(
@@ -52,6 +53,8 @@ export async function POST(
         assignments: { include: { designer: { select: { id: true, name: true } } } },
       },
     });
+
+    after(() => notifyClientProjectEvent(updated.id, { kind: "COMPLETED" }).then(() => undefined));
 
     return NextResponse.json({ project: updated }, { status: 200 });
   } catch (error) {

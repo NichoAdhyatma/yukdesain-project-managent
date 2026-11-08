@@ -138,6 +138,7 @@ function rawLink(status: string, expiresAt: Date | null = null) {
           status: "PENDING",
           remainingQuota: 2,
           requestedAt: new Date("2026-10-04T00:00:00.000Z"),
+          completedAt: null,
           handledAt: null,
           attachments: [
             {
@@ -275,6 +276,7 @@ describe("GET /api/client-links/[token]", () => {
               status: "PENDING",
               description: "Warna lebih terang",
               requestedAt: "2026-10-04T00:00:00.000Z",
+              completedAt: null,
               attachments: [{ id: "att_2", filename: "ref.jpg", storageKey: "revision/proj_1/ref.jpg" }],
             },
           ],

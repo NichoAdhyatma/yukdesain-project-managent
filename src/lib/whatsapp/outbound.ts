@@ -171,6 +171,40 @@ export async function sendToClient(conversationId: string, message: OutboundMess
   }
 }
 
+/**
+ * Pesan sistem berupa teks saja (kabar otomatis ke klien, docs/CLIENT_NOTIFICATIONS.md). Tidak pernah lewat template:
+ * di saluran dengan jendela 24 jam (Meta) dan di luar jendela, pesan tidak dikirim dan tidak disimpan.
+ */
+export async function sendSystemText(conversationId: string, text: string): Promise<DeliveryResult> {
+  const conversation = await prisma.waConversation.findUniqueOrThrow({
+    where: { id: conversationId },
+    select: { id: true, waId: true, lastInboundAt: true },
+  });
+  const channel = await getChannel();
+  if (usesServiceWindow(channel) && !isWithinServiceWindow(conversation.lastInboundAt)) {
+    return { ok: false, via: null, errorCode: "OUTSIDE_SERVICE_WINDOW", messageId: null };
+  }
+  const store = (data: { wamid?: string; deliveryStatus: string; errorCode?: string }) =>
+    prisma.waMessage.create({
+      data: { conversationId, direction: "OUTBOUND", type: "text", body: text, sentByBot: false, ...data },
+      select: { id: true },
+    });
+  if (!isChannelConfigured(channel)) {
+    const saved = await store({ deliveryStatus: "failed", errorCode: "NOT_CONFIGURED" });
+    return { ok: false, via: null, errorCode: "NOT_CONFIGURED", messageId: saved.id };
+  }
+  try {
+    const wamid = await sendTextOnChannel(conversation.waId, text, channel);
+    const saved = await store({ wamid, deliveryStatus: "sent" });
+    return { ok: true, via: "text", messageId: saved.id };
+  } catch (error) {
+    const errorCode = deliveryErrorCode(error);
+    const saved = await store({ deliveryStatus: "failed", errorCode });
+    console.error(`[whatsapp] kabar sistem gagal ke ${maskPhone(conversation.waId)}: ${errorCode}`);
+    return { ok: false, via: "text", errorCode, messageId: saved.id };
+  }
+}
+
 // Batas teks bebas Cloud API (text.body).
 export const MANUAL_REPLY_MAX_LENGTH = 4096;
 

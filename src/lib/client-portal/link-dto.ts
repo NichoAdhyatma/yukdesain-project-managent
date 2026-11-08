@@ -63,6 +63,7 @@ export const clientLinkSelect = {
           status: true,
           description: true,
           requestedAt: true,
+          completedAt: true,
           attachments: { select: attachmentSelect },
         },
       },
@@ -126,6 +127,8 @@ export type ClientProjectDto = {
     status: string;
     description: string;
     requestedAt: string;
+    /** Desainer menandai revisi selesai dikerjakan */
+    completedAt: string | null;
     attachments: ClientAttachmentDto[];
   }>;
 };
@@ -208,6 +211,7 @@ export function toClientLinkDto(link: ClientLinkRow): ClientLinkDto {
         status: r.status,
         description: r.description,
         requestedAt: iso(r.requestedAt),
+        completedAt: isoOrNull(r.completedAt),
         attachments: r.attachments.map(toAttachment),
       })),
     },
