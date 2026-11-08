@@ -274,6 +274,7 @@ model Project {
   assignments ProjectAssignment[]
   updates    ProjectUpdate[]
   revisions  Revision[]
+  clientNotices ClientProjectNotice[]
   payments   Payment[]
   invoices   Invoice[]
   waIntake    WaIntake?
@@ -355,6 +356,7 @@ model ProjectUpdate {
   progress    Int?     // 0-100
   description String
   authorId    String
+  notifyClient Boolean @default(true) // desainer memilih kabari klien (docs/CLIENT_NOTIFICATIONS.md)
   createdAt   DateTime @default(now())
 
   // Relations
@@ -377,6 +379,8 @@ model Revision {
   description     String
   status          RevisionStatus  @default(PENDING)
   remainingQuota  Int             @default(2)  // After this revision: 2, 1, 0
+  completedAt     DateTime? // desainer menandai revisi selesai dikerjakan (docs/CLIENT_NOTIFICATIONS.md)
+  completedById   String?
   requestedAt     DateTime        @default(now())
   handledAt      DateTime?
 
@@ -807,4 +811,23 @@ model WaOwnerQuery {
   @@index([status, expiresAt])
   @@index([conversationId, status])
   @@map("wa_owner_queries")
+}
+
+// Kabar otomatis ke klien lewat WhatsApp (docs/CLIENT_NOTIFICATIONS.md). Satu baris per kejadian per project;
+// unik (projectId, event, refId) mencegah kabar ganda. status: SENDING | SENT | PENDING | SKIPPED | FAILED
+model ClientProjectNotice {
+  id        String    @id @default(cuid())
+  projectId String
+  event     String // STARTED | PROGRESS | FINAL_SUBMITTED | REVISION_DONE | COMPLETED
+  refId     String    @default("-") // ProjectUpdate.id / Revision.id; "-" untuk kejadian sekali per project
+  status    String
+  reason    String?
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, event, refId])
+  @@index([status, createdAt])
+  @@map("client_project_notices")
 }
