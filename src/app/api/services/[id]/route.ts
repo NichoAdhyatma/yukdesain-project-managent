@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
+import { parseServiceBotFields } from "@/lib/services/service-dto";
 
 export async function PUT(
   request: Request,
@@ -15,6 +16,10 @@ export async function PUT(
     const { id } = await params;
     const body = await request.json();
     const { name, description, outputFormat, isActive } = body;
+    const botFields = parseServiceBotFields(body);
+    if (!botFields.ok) {
+      return NextResponse.json({ error: "Data tidak valid", fields: botFields.fields }, { status: 400 });
+    }
 
     const service = await prisma.service.update({
       where: { id },
@@ -23,6 +28,7 @@ export async function PUT(
         ...(description !== undefined && { description }),
         ...(outputFormat !== undefined && { outputFormat }),
         ...(isActive !== undefined && { isActive }),
+        ...botFields.data,
       },
     });
 

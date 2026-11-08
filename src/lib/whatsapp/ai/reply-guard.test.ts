@@ -120,3 +120,52 @@ describe("stripPriceMentions — aturan harga owner (docs/WHATSAPP_OWNER_COMMAND
     expect(stripPriceMentions("Ada potongan Rp50.000 kak.").text).not.toContain("50.000");
   });
 });
+
+describe("stripPriceMentions: harga mulai dari katalog Layanan (docs/SERVICES_CATALOG.md §3)", () => {
+  // Katalog per layanan: Logo Rp150.000 "termasuk 2 konsep", Feed Rp300.000.
+  const catalogGroups = [["150000", "2"], ["300000"]];
+  const guard = (text: string, brief = "", allowed: string[] = [], policyNumbers: string[] = []) =>
+    stripPriceMentions(text, brief, allowed, { catalogGroups, policyNumbers });
+
+  it.each([
+    "Logo Minimalis mulai Rp150.000 ya kak.",
+    "Logo Minimalis mulai Rp150.000 (termasuk 2 konsep) ya kak.",
+    "Logo mulai 150 ribu ya kak.",
+    "Logo mulai 150k ya kak.",
+    "Logo mulai Rp150.000,- ya kak.",
+  ])("harga mulai persis (format apa pun) lolos: %s", (text) => {
+    expect(guard(text).changed).toBe(false);
+  });
+
+  it.each([
+    "Logo Minimalis mulai Rp120.000 ya kak.",
+    "Logo mulai 120k ya kak.",
+    "Logo mulai 120.000 ya kak.",
+    "Logo mulai IDR 120.000 ya kak.",
+    "Kalau 2 logo jadi Rp300.000 kak.",
+    "Totalnya Rp150.000 ya kak, langsung transfer aja.",
+    "Harganya 150 ribu kak.",
+  ])("harga karangan, total, atau tanpa kata mulai dihapus: %s", (text) => {
+    const r = guard(text);
+    expect(r.changed).toBe(true);
+    expect(r.text).toContain(PRICE_PLACEHOLDER);
+  });
+
+  it("lama pengerjaan tetap dihapus walau angkanya ada di katalog", () => {
+    expect(guard("Logo Minimalis mulai Rp150.000, selesai 2 hari kak.").changed).toBe(true);
+  });
+
+  it("aturan harga owner yang menyebut durasi tetap lolos", () => {
+    expect(guard("Paket express selesai 1 hari, tambahan 50% dari total.", "", ["50", "1"]).changed).toBe(false);
+  });
+
+  it("isi brief dengan format angka berbeda tetap lolos", () => {
+    expect(guard("Menu kopi susu Rp18.000 sudah aku catat ya kak.", '{"menu":"kopi susu 18rb"}').changed).toBe(false);
+  });
+
+  it("teks kebijakan / FAQ owner yang memuat nominal lolos, tapi tidak untuk durasi", () => {
+    expect(guard("Revisi ke-4 dst dikenakan Rp50.000 ya kak.", "", [], ["4", "50000"]).changed).toBe(false);
+    expect(guard("Desain selesai 4 hari kak.", "", [], ["4", "50000"]).changed).toBe(true);
+  });
+});
+

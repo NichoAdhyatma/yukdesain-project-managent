@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OPERATIONS_DEFAULTS } from "@/lib/studio-operations";
-import { buildStateBlock, buildSystemPrompt, type StateInput } from "./system-prompt";
+import { buildStateBlock, buildSystemPrompt, renderServiceCatalog, type StateInput } from "./system-prompt";
 
 const quoted = (dpPercent: number): StateInput => ({
   intake: {
@@ -29,7 +29,7 @@ describe("buildSystemPrompt: blok Kebijakan dari Operasional studio", () => {
   const ops = { ...OPERATIONS_DEFAULTS, dpPercent: 30, revisionQuota: 5, settlementNote: "Lunas sebelum file final dikirim." };
 
   it("memuat DP, pelunasan, kuota dan teks revisi, serta jam kerja", () => {
-    const prompt = buildSystemPrompt("YukDesain", null, ops);
+    const prompt = buildSystemPrompt("YukDesain", null, ops, []);
     expect(prompt).toContain("# Kebijakan studio");
     expect(prompt).toContain("DP 30%");
     expect(prompt).toContain("Lunas sebelum file final dikirim.");
@@ -41,18 +41,57 @@ describe("buildSystemPrompt: blok Kebijakan dari Operasional studio", () => {
   });
 
   it("project berjalan mengikuti kuota project dari tool, bukan angka Operasional saat ini", () => {
-    expect(buildSystemPrompt("YukDesain", null, ops)).toContain(
+    expect(buildSystemPrompt("YukDesain", null, ops, [])).toContain(
       "Untuk project yang sudah berjalan, kuota dan sisa revisi mengikuti data project dari tool (revisionQuota, revisionQuotaRemaining).",
     );
   });
 
   it("kuota 0 → tanpa revisi gratis, revisi dialihkan ke admin", () => {
-    const prompt = buildSystemPrompt("YukDesain", null, { ...ops, revisionQuota: 0 });
+    const prompt = buildSystemPrompt("YukDesain", null, { ...ops, revisionQuota: 0 }, []);
     expect(prompt).toContain("Tidak ada revisi gratis");
     expect(prompt).not.toContain("Revisi gratis 0x");
   });
 
   it("input sama → teks identik (prompt cache)", () => {
-    expect(buildSystemPrompt("YukDesain", null, ops)).toBe(buildSystemPrompt("YukDesain", null, ops));
+    expect(buildSystemPrompt("YukDesain", null, ops, [])).toBe(buildSystemPrompt("YukDesain", null, ops, []));
+  });
+});
+
+describe("Katalog Layanan untuk bot (docs/SERVICES_CATALOG.md)", () => {
+  const logo = {
+    code: "SVC-01",
+    name: "Logo Minimalis",
+    description: "Logo simpel",
+    outputFormat: "AI, PNG",
+    startingPrice: 150000,
+    priceNote: "termasuk 3 konsep",
+    suitableFor: "brand modern",
+    botNotes: "tanyakan logo dipakai di mana",
+  };
+  const ops = OPERATIONS_DEFAULTS;
+
+  it("satu baris per layanan dengan harga mulai, catatan harga, dan cocok untuk", () => {
+    expect(renderServiceCatalog([logo])).toContain("- Logo Minimalis (SVC-01): mulai Rp150.000 (termasuk 3 konsep). Cocok untuk: brand modern");
+  });
+
+  it("layanan tanpa harga mulai tidak menyebut angka", () => {
+    const text = renderServiceCatalog([{ ...logo, startingPrice: null, priceNote: null }]);
+    expect(text).toContain("harga dikirim tim setelah brief");
+    expect(text).not.toContain("mulai Rp");
+  });
+
+  it("system prompt memuat daftar Layanan dan aturan harga mulai", () => {
+    const prompt = buildSystemPrompt("YukDesain", null, ops, [logo]);
+    expect(prompt).toContain("# Layanan");
+    expect(prompt).toContain('Kamu boleh menyebut harga mulai sebuah layanan hanya persis seperti di daftar Layanan, selalu dengan kata "mulai"');
+    expect(prompt).not.toContain("tanyakan logo dipakai di mana");
+  });
+
+  it("STATE memuat detail layanan order dan yang perlu disiapkan klien", () => {
+    const base = quoted(50);
+    const state = buildStateBlock({ ...base, intake: { ...base.intake!, status: "COLLECTING", quote: null, serviceDetail: logo } });
+    expect(state).toContain("Yang perlu disiapkan klien:");
+    expect(state).toContain("nama brand/usaha");
+    expect(state).toContain("tanyakan logo dipakai di mana");
   });
 });

@@ -121,14 +121,16 @@ describe("executeTool", () => {
 });
 
 describe("list_services", () => {
-  it("hanya layanan aktif yang punya konfigurasi brief, tanpa harga", async () => {
+  it("hanya layanan aktif yang punya konfigurasi brief, dengan harga mulai tapi tanpa catatan bot", async () => {
     db.service.findMany.mockResolvedValue([
-      { code: "SVC-01", name: "Logo Minimalis", description: null, outputFormat: "PNG" },
-      { code: "SVC-99", name: "Layanan Lain", description: null, outputFormat: null },
+      { code: "SVC-01", name: "Logo Minimalis", description: null, outputFormat: "PNG", startingPrice: 150000, priceNote: null, suitableFor: "brand modern" },
+      { code: "SVC-99", name: "Layanan Lain", description: null, outputFormat: null, startingPrice: null, priceNote: null, suitableFor: null },
     ]);
     const r = await run("list_services", {});
     expect(r.data.services.map((s: { code: string }) => s.code)).toEqual(["SVC-01"]);
-    expect(db.service.findMany.mock.calls[0][0].select).not.toHaveProperty("price");
+    const select = db.service.findMany.mock.calls[0][0].select;
+    expect(select).toMatchObject({ startingPrice: true, priceNote: true, suitableFor: true, outputFormat: true });
+    expect(select).not.toHaveProperty("botNotes");
   });
 });
 

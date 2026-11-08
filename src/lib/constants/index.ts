@@ -209,6 +209,14 @@ export const WA_RATE_LIMITS = {
 } as const;
 
 // Panduan bot dari owner (docs/WHATSAPP_BOT_GUIDE.md §2)
+// Kolom pengetahuan bot di menu Layanan (docs/SERVICES_CATALOG.md).
+export const SERVICE_BOT_LIMITS = {
+  startingPriceMax: 100_000_000,
+  priceNoteMaxChars: 80,
+  suitableForMaxChars: 200,
+  botNotesMaxChars: 300,
+} as const;
+
 export const WA_BOT_GUIDE_LIMITS = {
   instructionsMaxChars: 4000,
   faqMaxItems: 30,

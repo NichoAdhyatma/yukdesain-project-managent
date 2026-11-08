@@ -213,6 +213,12 @@ model Service {
   description  String?
   outputFormat String?
   isActive     Boolean  @default(true)
+  // Pengetahuan bot dari menu Layanan (docs/superpowers/specs/2026-11-07-bot-knowledge-features-design.md §5).
+  // startingPrice kosong = bot tidak menyebut harga layanan ini; harga final tetap diisi admin.
+  startingPrice Int?
+  priceNote     String? // catatan singkat harga, dikutip bot bersama harga mulai
+  suitableFor   String? // "cocok untuk", dipakai bot saat klien bingung memilih
+  botNotes      String? // catatan internal untuk bot, tidak dikutip ke klien
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

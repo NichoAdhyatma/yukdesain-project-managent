@@ -38,6 +38,7 @@ import { ReceiptPDF } from "@/components/invoice/ReceiptPDF";
 import { ImageViewer } from "@/components/ui/image-viewer";
 import { SubmitProgressOverlay } from "@/components/ui/submit-progress-overlay";
 import { revisionQuotaRemaining } from "@/lib/revisions/quota";
+import { CLIENT_PROJECT_STATUS, workProgressPercent } from "@/lib/client-portal/project-progress";
 import { REVISION_NOTICE } from "@/lib/constants";
 import type { ClientLinkDto, ClientPaymentAccountDto } from "@/lib/client-portal/link-dto";
 
@@ -87,44 +88,44 @@ const projectStatusConfig: Record<string, {
   description: string;
 }> = {
   DRAFT: {
-    label: "Draft",
+    label: CLIENT_PROJECT_STATUS.DRAFT.label,
     icon: FileText,
     color: "text-gray-500",
     bgColor: "bg-gray-100",
     bgColorDark: "dark:bg-gray-800/60",
     textColor: "text-gray-700",
     textColorDark: "dark:text-gray-200",
-    description: "Project sedang dibuat"
+    description: CLIENT_PROJECT_STATUS.DRAFT.description
   },
   BELUM_DIKERJAKAN: {
-    label: "Menunggu Brief",
+    label: CLIENT_PROJECT_STATUS.BELUM_DIKERJAKAN.label,
     icon: Clock,
     color: "text-yellow-600",
     bgColor: "bg-yellow-100",
     bgColorDark: "dark:bg-yellow-900",
     textColor: "text-yellow-800",
     textColorDark: "dark:text-white",
-    description: "Menunggu brief dari client"
+    description: CLIENT_PROJECT_STATUS.BELUM_DIKERJAKAN.description
   },
   SEDANG_DIKERJAKAN: {
-    label: "Sedang Dikerjakan",
+    label: CLIENT_PROJECT_STATUS.SEDANG_DIKERJAKAN.label,
     icon: TrendingUp,
     color: "text-blue-600",
     bgColor: "bg-blue-100",
     bgColorDark: "dark:bg-blue-900",
     textColor: "text-blue-800",
     textColorDark: "dark:text-white",
-    description: "Designer sedang mengerjakan project"
+    description: CLIENT_PROJECT_STATUS.SEDANG_DIKERJAKAN.description
   },
   SELESAI: {
-    label: "Selesai",
+    label: CLIENT_PROJECT_STATUS.SELESAI.label,
     icon: CheckCircle2,
     color: "text-emerald-600",
     bgColor: "bg-emerald-100",
     bgColorDark: "dark:bg-emerald-900",
     textColor: "text-emerald-800",
     textColorDark: "dark:text-white",
-    description: "Project telah selesai"
+    description: CLIENT_PROJECT_STATUS.SELESAI.description
   },
 };
 
@@ -182,9 +183,10 @@ function formatCurrency(amount: number) {
 
 // ── Hero Status Banner ─────────────────────────────────────────────────────────
 
-function HeroBanner({ project, paymentPct, deadlineStr, statusCfg, paymentCfg }: {
+function HeroBanner({ project, workPct, deadlineStr, statusCfg, paymentCfg }: {
   project: NonNullable<ClientLink["project"]>;
-  paymentPct: number;
+  /** Progres pengerjaan dari update desainer (bukan pembayaran) */
+  workPct: number;
   deadlineStr: string;
   statusCfg: typeof projectStatusConfig[string];
   paymentCfg: typeof paymentStatusConfig[string];
@@ -221,13 +223,13 @@ function HeroBanner({ project, paymentPct, deadlineStr, statusCfg, paymentCfg }:
         {/* Progress */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground font-medium">Progress</span>
-            <span className="font-semibold text-foreground">{paymentPct}%</span>
+            <span className="text-muted-foreground font-medium">Progres pengerjaan</span>
+            <span className="font-semibold text-foreground tabular-nums">{workPct}%</span>
           </div>
           <div className="h-2 bg-muted/50 rounded-full overflow-hidden">
             <div
               className="h-full bg-primary rounded-full transition-all duration-500"
-              style={{ width: `${paymentPct}%` }}
+              style={{ width: `${workPct}%` }}
             />
           </div>
         </div>
@@ -1764,6 +1766,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const statusCfg = projectStatusConfig[project.status] || projectStatusConfig.DRAFT;
   const paymentCfg = paymentStatusConfig[project.paymentStatus] || paymentStatusConfig.UNPAID;
   const paidPct = Math.round((project.paidAmount / project.agreedPrice) * 100);
+  const workPct = workProgressPercent(project);
 
   const timelineEvents = buildTimeline(project);
   const deadlineStr = project.deadline ? formatDate(project.deadline) : "-";
@@ -1802,7 +1805,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         {/* Hero Banner — status + progress + deadline */}
         <HeroBanner
           project={project}
-          paymentPct={paidPct}
+          workPct={workPct}
           deadlineStr={deadlineStr}
           statusCfg={statusCfg}
           paymentCfg={paymentCfg}
@@ -1834,7 +1837,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             </div>
           </CardHeader>
           <CardContent>
-            <HorizontalTimeline events={timelineEvents} activeProgress={paidPct} />
+            <HorizontalTimeline events={timelineEvents} activeProgress={workPct} />
           </CardContent>
         </Card>
 

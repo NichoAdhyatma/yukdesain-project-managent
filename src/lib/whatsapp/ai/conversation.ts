@@ -6,7 +6,9 @@ import { getStudioOperations } from "@/lib/studio-operations";
 import { mimeFromStorageKey, readPrivateMedia } from "../media";
 import { aiWritableBriefFields, imageTargetFields, missingRequiredFields, type BriefDraft } from "./brief-schema";
 import { buildStateBlock, buildSystemPrompt } from "./system-prompt";
+import type { GuardExtras } from "./reply-guard";
 import { allowedPriceNumbers, getDraftGuide, getPublishedGuide } from "./bot-guide";
+import { getBotServiceCatalog, servicePriceGroups, type BotService } from "./service-catalog";
 import { ACTIVE_INTAKE_STATUSES, snapshotDpPercent } from "../intake";
 import { DP_PERCENT } from "@/lib/constants";
 import { getAiConfig, getAnthropicClient } from "./ai-config";
@@ -26,6 +28,8 @@ export type AiTurnResult = {
   briefText: string;
   // Nilai aturan harga owner di panduan yang dipakai giliran ini (untuk reply-guard)
   allowedPriceNumbers: string[];
+  // Penjaga harga (reply-guard GuardExtras): teks kebijakan/FAQ owner dan katalog Layanan per layanan
+  guardExtras: GuardExtras;
   toolsCalled: string[];
 };
 
@@ -85,7 +89,7 @@ async function buildMessages(rows: HistoryRow[]) {
   return { messages, pendingImageIds: pending.map((r) => r.id) };
 }
 
-async function buildState(conversationId: string, pendingImageMessageIds: string[]) {
+async function buildState(conversationId: string, pendingImageMessageIds: string[], services: BotService[]) {
   const intake = await prisma.waIntake.findFirst({
     where: { conversationId, status: { in: ACTIVE_INTAKE_STATUSES } },
     orderBy: { createdAt: "desc" },
@@ -122,6 +126,7 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
     intake: intake && {
       status: intake.status,
       service: intake.service,
+      serviceDetail: services.find((s) => s.code === intake.service?.code) ?? null,
       clientName: intake.clientName,
       clientEmail: intake.clientEmail,
       briefDraft: draft,
@@ -188,12 +193,14 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
     select: { isSandbox: true },
   });
   const guide = isSandbox ? await getDraftGuide() : ((await getPublishedGuide())?.guide ?? null);
+  const services = await getBotServiceCatalog();
+  const ops = await getStudioOperations();
   // Aturan statis + panduan owner (di-cache; berubah hanya saat panduan diterbitkan) lalu
   // STATE dinamis. Keduanya di system prompt: kanal operator yang terpisah dari teks klien
   // dan didukung semua model Claude.
   const system: Anthropic.TextBlockParam[] = [
-    { type: "text", text: buildSystemPrompt(studio.name, guide, await getStudioOperations()), cache_control: { type: "ephemeral" } },
-    { type: "text", text: await buildState(params.conversationId, pendingImageIds) },
+    { type: "text", text: buildSystemPrompt(studio.name, guide, ops, services), cache_control: { type: "ephemeral" } },
+    { type: "text", text: await buildState(params.conversationId, pendingImageIds, services) },
   ];
 
   const toolsCalled: string[] = [];
@@ -221,6 +228,11 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
         intakeStatus: finalIntake?.status ?? null,
         briefText: JSON.stringify(finalIntake?.briefDraft ?? {}),
         allowedPriceNumbers: allowedPriceNumbers(guide),
+        guardExtras: {
+          // Bot diminta mengutip teks ini apa adanya; nominal di dalamnya bukan harga karangan.
+          policyNumbers: [ops.revisionNotice, ops.settlementNote, ...(guide?.faqs ?? []).map((f) => f.answer)],
+          catalogGroups: servicePriceGroups(services),
+        },
         toolsCalled,
       };
     }
