@@ -1,7 +1,7 @@
 "use client";
 
 import { SERVICE_BRIEF_CONFIGS } from "./types";
-import { ImageViewer } from "@/components/ui/image-viewer";
+import { ImageViewerGroup, ViewableImage } from "@/components/ui/image-viewer";
 import { FileText } from "lucide-react";
 
 type BriefResponseItem = { questionId: string; question: string; answer: string };
@@ -33,12 +33,13 @@ function ImageField({ label, url }: { label: string; url: string }) {
   return (
     <div className="space-y-1">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <ImageViewer
-        src={url}
-        alt={label}
-        containerClassName="relative w-fit"
-        imgClassName="max-w-[200px] max-h-[200px] object-contain rounded-lg border bg-muted/50"
-      />
+      <div className="relative w-fit">
+        <ViewableImage
+          src={url}
+          alt={label}
+          imgClassName="max-w-[200px] max-h-[200px] object-contain rounded-lg border bg-muted/50"
+        />
+      </div>
     </div>
   );
 }
@@ -55,7 +56,7 @@ function JsonTableField({ label, data }: { label: string; data: unknown }) {
           {data.map((item: { id: string; name: string; price?: string; image?: string; caption?: string }, idx: number) => (
             <div key={item.id || idx} className="rounded-lg border overflow-hidden">
               {item.image && (
-                <ImageViewer
+                <ViewableImage
                   src={item.image}
                   alt={item.name || `Menu ${idx + 1}`}
                   imgClassName="w-full aspect-square object-cover"
@@ -117,12 +118,13 @@ function JsonTableField({ label, data }: { label: string; data: unknown }) {
           {data.map((item: { id?: string; imageUrl?: string; description?: string }, idx: number) =>
             item.imageUrl ? (
               <div key={item.id || idx} className="space-y-1">
-                <ImageViewer
-                  src={item.imageUrl}
-                  alt={item.description || `Referensi ${idx + 1}`}
-                  containerClassName="rounded-lg overflow-hidden border"
-                  imgClassName="w-full h-32 object-cover"
-                />
+                <div className="rounded-lg overflow-hidden border">
+                  <ViewableImage
+                    src={item.imageUrl}
+                    alt={item.description || `Referensi ${idx + 1}`}
+                    imgClassName="w-full h-32 object-cover"
+                  />
+                </div>
                 {item.description && (
                   <p className="text-xs text-muted-foreground">{item.description}</p>
                 )}
@@ -167,12 +169,13 @@ function ImageGalleryField({ label, data }: { label: string; data: unknown }) {
 
           return (
             <div key={item.url || item.imageUrl || idx} className="space-y-1">
-              <ImageViewer
-                src={imgSrc}
-                alt={caption || `Referensi ${idx + 1}`}
-                containerClassName="rounded-lg overflow-hidden border"
-                imgClassName="w-full h-28 object-cover"
-              />
+              <div className="rounded-lg overflow-hidden border">
+                <ViewableImage
+                  src={imgSrc}
+                  alt={caption || `Referensi ${idx + 1}`}
+                  imgClassName="w-full h-28 object-cover"
+                />
+              </div>
               {caption && (
                 <p className="text-xs text-muted-foreground leading-snug">{caption}</p>
               )}
@@ -193,12 +196,13 @@ function LogoGalleryField({ label, data }: { label: string; data: unknown }) {
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
         {data.map((item: { url: string; caption?: string }, idx: number) => (
           <div key={item.url || idx} className="space-y-1">
-            <ImageViewer
-              src={item.url}
-              alt={item.caption || `Logo ${idx + 1}`}
-              containerClassName="rounded-lg overflow-hidden border"
-              imgClassName="w-full h-32 object-contain bg-muted/50"
-            />
+            <div className="rounded-lg overflow-hidden border">
+              <ViewableImage
+                src={item.url}
+                alt={item.caption || `Logo ${idx + 1}`}
+                imgClassName="w-full h-32 object-contain bg-muted/50"
+              />
+            </div>
             {item.caption && (
               <p className="text-xs text-muted-foreground leading-snug">{item.caption}</p>
             )}
@@ -318,7 +322,7 @@ export function BriefReader({ responses, serviceCode }: BriefReaderProps) {
   }
 
   return (
-    <div className="space-y-6">
+    <ImageViewerGroup className="space-y-6">
       {/* Logo / Image Fields */}
       {logoFields.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -376,6 +380,6 @@ export function BriefReader({ responses, serviceCode }: BriefReaderProps) {
           </p>
         </div>
       )}
-    </div>
+    </ImageViewerGroup>
   );
 }

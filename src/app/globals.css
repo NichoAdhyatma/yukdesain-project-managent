@@ -141,3 +141,56 @@
 .priority-high { --priority-color: oklch(0.60 0.18 45); }
 .priority-normal { --priority-color: oklch(0.50 0.10 250); }
 .priority-low { --priority-color: oklch(0.50 0.08 180); }
+
+/* ===== Viewer gambar (viewer.js), lihat src/components/ui/image-viewer.tsx =====
+   Tombol toolbar dibuat 44px supaya nyaman disentuh, dan baris toolbar boleh
+   turun ke baris kedua di layar sempit (375px) alih-alih terpotong. */
+.yd-viewer.viewer-backdrop {
+  background-color: rgba(0, 0, 0, 0.82);
+}
+.yd-viewer .viewer-toolbar > ul {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: calc(100vw - 16px);
+  margin: 0 auto 8px;
+}
+.yd-viewer .viewer-toolbar > ul > li {
+  float: none;
+  width: 44px;
+  height: 44px;
+  margin: 0;
+}
+.yd-viewer .viewer-toolbar > ul > li + li {
+  margin-left: 0;
+}
+.yd-viewer .viewer-toolbar > ul > li::before {
+  margin: 12px;
+}
+.yd-viewer .viewer-button {
+  width: 104px;
+  height: 104px;
+  right: -52px;
+  top: -52px;
+}
+.yd-viewer .viewer-button::before {
+  bottom: 20px;
+  left: 20px;
+}
+.yd-viewer .viewer-title {
+  font-size: 13px;
+  max-width: calc(100% - 32px);
+}
+.yd-viewer [tabindex="0"]:focus-visible,
+.yd-viewer .viewer-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.6);
+}
+@media (prefers-reduced-motion: reduce) {
+  .yd-viewer .viewer-transition,
+  .yd-viewer.viewer-transition {
+    transition: none !important;
+  }
+}

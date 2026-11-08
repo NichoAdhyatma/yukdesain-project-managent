@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useId } from "react";
 import { Label } from "@/components/ui/label";
-import { Upload, Loader2, X, Paperclip } from "lucide-react";
+import { Upload, Loader2, X, FileText, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface UploadedFile {
@@ -18,10 +18,14 @@ interface ProgressUploaderProps {
   onChange: (files: UploadedFile[]) => void;
   maxFiles?: number;
   label?: string;
+  /** Teks bantuan di bawah label. */
+  hint?: string;
   disabled?: boolean;
   uploadCategory?: "progress" | "final" | "revision" | "logo";
-  /** If provided, files will be uploaded immediately with this projectId. Otherwise, stores metadata only. */
+  /** Wajib supaya file langsung terunggah dan terhubung ke project. */
   projectId?: string;
+  /** Dipanggil saat status unggah berubah, supaya form bisa menahan tombol kirim. */
+  onUploadingChange?: (uploading: boolean) => void;
 }
 
 const ACCEPTED_TYPES = [
@@ -32,7 +36,7 @@ const ACCEPTED_TYPES = [
   "image/svg+xml",
   "application/pdf",
 ];
-const MAX_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_SIZE = 50 * 1024 * 1024; // 50MB, sama dengan batas /api/upload
 
 function formatSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -45,59 +49,50 @@ export function ProgressUploader({
   onChange,
   maxFiles = 5,
   label = "Lampiran File",
+  hint,
   disabled = false,
   uploadCategory = "progress",
   projectId,
+  onUploadingChange,
 }: ProgressUploaderProps) {
   const [uploading, setUploading] = useState(false);
   const [dragging, setDragging] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [current, setCurrent] = useState<{ done: number; total: number } | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
+  const hintId = `${inputId}-hint`;
 
   const uploadFile = useCallback(
-    async (file: File): Promise<UploadedFile | null> => {
+    async (file: File): Promise<UploadedFile> => {
       if (!ACCEPTED_TYPES.includes(file.type)) {
-        alert(`Tipe file ${file.type} tidak didukung`);
-        return null;
+        throw new Error(`${file.name}: tipe file tidak didukung. Pakai JPG, PNG, GIF, WEBP, SVG, atau PDF.`);
       }
       if (file.size > MAX_SIZE) {
-        alert("Ukuran file maksimal 50MB");
-        return null;
+        throw new Error(`${file.name}: ukuran ${formatSize(file.size)}, maksimal 50 MB.`);
       }
-
       if (!projectId) {
-        alert("Project ID tidak tersedia");
-        return null;
+        throw new Error("Project belum dipilih.");
       }
 
-      try {
-        const formData = new FormData();
-        formData.append("file", file);
-        formData.append("projectId", projectId);
-        formData.append("category", uploadCategory);
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("projectId", projectId);
+      formData.append("category", uploadCategory);
 
-        const res = await fetch("/api/upload", {
-          method: "POST",
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const data = await res.json();
-          throw new Error(data.error || "Upload gagal");
-        }
-
-        const { attachmentId, publicUrl } = await res.json();
-        return {
-          id: attachmentId,
-          filename: file.name,
-          size: file.size,
-          mimeType: file.type,
-          publicUrl,
-        };
-      } catch (err) {
-        alert(err instanceof Error ? err.message : "Upload gagal");
-        return null;
+      const res = await fetch("/api/upload", { method: "POST", body: formData });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(`${file.name}: ${data.error || "upload gagal"}. Coba lagi.`);
       }
+      const { attachmentId, publicUrl } = await res.json();
+      return {
+        id: attachmentId,
+        filename: file.name,
+        size: file.size,
+        mimeType: file.type,
+        publicUrl,
+      };
     },
     [projectId, uploadCategory]
   );
@@ -108,128 +103,187 @@ export function ProgressUploader({
       const remaining = maxFiles - files.length;
       if (remaining <= 0) return;
 
-      setUploading(true);
-      const toUpload = Array.from(fileList).slice(0, remaining);
+      const picked = Array.from(fileList);
+      const toUpload = picked.slice(0, remaining);
+      const nextErrors: string[] = [];
+      if (picked.length > remaining) {
+        nextErrors.push(`Maksimal ${maxFiles} file. ${picked.length - remaining} file tidak diunggah.`);
+      }
 
+      setErrors([]);
+      setUploading(true);
+      onUploadingChange?.(true);
+
+      // Kumpulkan hasil di variabel lokal. Memanggil onChange([...files, x]) di dalam
+      // loop memakai `files` lama, jadi hanya file terakhir yang tersimpan.
+      let accumulated = files;
       for (let i = 0; i < toUpload.length; i++) {
-        setProgress(((i + 1) / toUpload.length) * 100);
-        const uploaded = await uploadFile(toUpload[i]);
-        if (uploaded) {
-          onChange([...files, uploaded]);
+        setCurrent({ done: i, total: toUpload.length });
+        try {
+          const uploaded = await uploadFile(toUpload[i]);
+          accumulated = [...accumulated, uploaded];
+          onChange(accumulated);
+        } catch (err) {
+          nextErrors.push(err instanceof Error ? err.message : "Upload gagal. Coba lagi.");
         }
       }
 
+      setErrors(nextErrors);
+      setCurrent(null);
       setUploading(false);
-      setProgress(0);
+      onUploadingChange?.(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     },
-    [files, maxFiles, onChange, uploadFile]
+    [files, maxFiles, onChange, onUploadingChange, uploadFile]
   );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
       setDragging(false);
-      if (!disabled) handleFiles(e.dataTransfer.files);
+      if (!disabled && !uploading) handleFiles(e.dataTransfer.files);
     },
-    [handleFiles, disabled]
+    [handleFiles, disabled, uploading]
   );
 
   const removeFile = (id: string) => {
     onChange(files.filter((f) => f.id !== id));
   };
 
-  const removeUnuploadedFile = async (id: string) => {
-    onChange(files.filter((f) => f.id !== id));
-  };
+  const canAdd = files.length < maxFiles && !disabled;
 
   return (
     <div className="space-y-2">
       {label && (
-        <div className="flex items-center justify-between">
-          <Label className="text-sm font-medium">{label}</Label>
-          {files.length > 0 && (
-            <span className="text-xs text-muted-foreground">{files.length}/{maxFiles}</span>
-          )}
+        <div className="flex items-center justify-between gap-2">
+          <Label htmlFor={inputId} className="text-sm font-medium">
+            {label}
+          </Label>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {files.length}/{maxFiles}
+          </span>
         </div>
       )}
+      {hint && (
+        <p id={hintId} className="text-xs text-muted-foreground">
+          {hint}
+        </p>
+      )}
 
-      {/* Drop zone */}
-      {files.length < maxFiles && !disabled && (
-        <div
-          onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      <input
+        ref={fileInputRef}
+        id={inputId}
+        type="file"
+        accept={ACCEPTED_TYPES.join(",")}
+        multiple={maxFiles > 1}
+        className="sr-only"
+        onChange={(e) => handleFiles(e.target.files)}
+        disabled={!canAdd || uploading}
+        aria-describedby={hint ? hintId : undefined}
+        tabIndex={-1}
+      />
+
+      {canAdd && (
+        <button
+          type="button"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          aria-describedby={hint ? hintId : undefined}
           className={cn(
-            "border-2 border-dashed rounded-lg p-4 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors",
+            "flex min-h-24 w-full flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed p-4 text-center transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-progress",
             dragging
               ? "border-primary bg-primary/5"
               : "border-muted-foreground/25 hover:border-muted-foreground/50 hover:bg-muted/30"
           )}
         >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept={ACCEPTED_TYPES.join(",")}
-            multiple
-            className="hidden"
-            onChange={(e) => handleFiles(e.target.files)}
-            disabled={disabled}
-          />
           {uploading ? (
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            <Loader2 className="size-5 animate-spin text-muted-foreground" aria-hidden />
           ) : (
-            <Upload className="h-5 w-5 text-muted-foreground" />
+            <Upload className="size-5 text-muted-foreground" aria-hidden />
           )}
-          <p className="text-xs text-muted-foreground text-center">
-            {uploading ? `Mengupload... ${Math.round(progress)}%` : "Klik atau drag file ke sini"}
-          </p>
+          <span className="text-sm font-medium">
+            {uploading && current
+              ? `Mengunggah file ${current.done + 1} dari ${current.total}…`
+              : "Pilih file"}
+          </span>
+          {!uploading && (
+            <span className="text-xs text-muted-foreground">
+              Ketuk untuk memilih, atau seret file ke sini. JPG, PNG, GIF, WEBP, SVG, atau PDF, maks. 50 MB.
+            </span>
+          )}
+        </button>
+      )}
+
+      <div aria-live="polite" className="sr-only">
+        {uploading && current ? `Mengunggah file ${current.done + 1} dari ${current.total}` : ""}
+      </div>
+
+      {errors.length > 0 && (
+        <div role="alert" className="space-y-1 rounded-md border border-destructive/30 bg-destructive/5 p-2.5">
+          {errors.map((msg) => (
+            <p key={msg} className="flex items-start gap-1.5 text-xs text-destructive">
+              <AlertCircle className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              {msg}
+            </p>
+          ))}
         </div>
       )}
 
-      {/* File list */}
       {files.length > 0 && (
-        <div className="space-y-1">
-          {files.map((file) => (
-            <div
-              key={file.id}
-              className="flex items-center justify-between rounded-md border px-3 py-2 text-sm"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Paperclip className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className="truncate">{file.filename}</span>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {formatSize(file.size)}
-                </span>
-                {file.publicUrl && (
-                  <a
-                    href={file.publicUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-primary shrink-0 hover:underline"
+        <ul className="space-y-2">
+          {files.map((file) => {
+            const isImage = file.mimeType.startsWith("image/") && !!file.publicUrl;
+            return (
+              <li key={file.id} className="flex items-center gap-3 rounded-lg border p-2 text-sm">
+                <div className="flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md bg-muted">
+                  {isImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={file.publicUrl} alt="" className="size-full object-cover" />
+                  ) : (
+                    <FileText className="size-5 text-muted-foreground" aria-hidden />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium" title={file.filename}>
+                    {file.filename}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatSize(file.size)}
+                    {file.publicUrl && (
+                      <>
+                        {" · "}
+                        <a
+                          href={file.publicUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          Buka
+                        </a>
+                      </>
+                    )}
+                  </p>
+                </div>
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => removeFile(file.id)}
+                    aria-label={`Hapus ${file.filename}`}
+                    className="flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors outline-none hover:bg-muted hover:text-destructive focus-visible:ring-3 focus-visible:ring-ring/50"
                   >
-                    Lihat
-                  </a>
+                    <X className="size-4" aria-hidden />
+                  </button>
                 )}
-              </div>
-              {!disabled && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (file.id.startsWith("local-")) {
-                      removeUnuploadedFile(file.id);
-                    } else {
-                      removeFile(file.id);
-                    }
-                  }}
-                  className="text-muted-foreground hover:text-destructive ml-2 shrink-0"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </div>
   );
