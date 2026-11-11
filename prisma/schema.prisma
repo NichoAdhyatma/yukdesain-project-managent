@@ -586,6 +586,14 @@ model StudioSettings {
   waBotGuideDraft     Json?
   waBotMonthlyReplyCap  Int     @default(2000) // rem bulanan, docs/WHATSAPP_SPAM_GUARD.md §3
   waBotCapNotifiedMonth String? // "YYYY-MM" (WIB): owner sudah diberi tahu rem aktif bulan ini
+  // Pemakaian AI (docs/AI_PROVIDERS.md). providerKey: "env:ANTHROPIC" | "env:GATEWAY" | "db:<AiProvider.id>".
+  // null = jalur lama (waAiProvider + kolom model di atas).
+  aiChatProviderKey     String?
+  aiChatModel           String?
+  aiProofProviderKey    String?
+  aiProofModel          String?
+  aiFallbackProviderKey String?
+  aiFallbackModel       String?
   // Operasional studio (docs/STUDIO_OPERATIONS.md): dibaca portal dan bot. Teks null = default di src/lib/studio-operations.ts
   opsDpPercent         Int     @default(50)
   opsRevisionQuota     Int     @default(3)
@@ -836,4 +844,37 @@ model ClientProjectNotice {
   @@unique([projectId, event, refId])
   @@index([status, createdAt])
   @@map("client_project_notices")
+}
+
+// ============================================
+// PROVIDER AI (docs/superpowers/specs/2026-11-11-ai-provider-adapter-design.md)
+// ============================================
+
+model AiProvider {
+  id               String   @id @default(cuid())
+  name             String
+  format           String // ANTHROPIC | OPENAI
+  baseUrl          String
+  apiKeyCiphertext String // AES-256-GCM (src/lib/ai/key-crypto.ts); tidak pernah dikirim ke browser
+  apiKeyLast4      String
+  createdById      String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("ai_providers")
+}
+
+model AiModelTest {
+  id                String   @id @default(cuid())
+  providerKey       String // env:ANTHROPIC | env:GATEWAY | db:<AiProvider.id>
+  model             String
+  connectionOk      Boolean
+  toolsOk           Boolean
+  imageOk           Boolean
+  details           Json // pesan per langkah, sudah disamarkan
+  credentialVersion String // tes batal bila berbeda dari provider sekarang
+  testedAt          DateTime @default(now())
+
+  @@index([providerKey, model])
+  @@map("ai_model_tests")
 }
