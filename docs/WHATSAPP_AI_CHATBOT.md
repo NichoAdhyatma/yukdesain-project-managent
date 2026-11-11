@@ -36,7 +36,7 @@ Prinsip yang tetap berlaku:
 | Topik | Keputusan |
 |---|---|
 | Provider | WhatsApp Cloud API (Meta), resmi |
-| Harga | **Admin** yang menentukan harga final setelah brief dikonfirmasi klien. Bot boleh menyebut **harga mulai** layanan persis seperti di menu Layanan (selalu dengan kata "mulai" dan keterangan bahwa harga final menyusul); selain itu bot tidak pernah menyebut, menghitung, atau memperkirakan harga sebelum admin mengisinya. Diubah 2026-11-08 (keputusan owner, `docs/SERVICES_CATALOG.md`). |
+| Harga | **Admin** yang mengonfirmasi harga order di Order WA (isian awal dari katalog). Bot boleh menyebut harga katalog sebelum brief lengkap, persis seperti di menu Layanan: harga **pasti** tanpa "mulai", harga **mulai** dengan "mulai". Hitungan paket/jumlah hanya dari tool `calculate_price` (server); gabungan layanan, diskon, dan express lewat owner. Lama pengerjaan hanya estimasi katalog. Diubah 2026-11-11 (keputusan owner, `docs/SERVICES_CATALOG.md` §5); sebelumnya 2026-11-08. |
 | DP | **Persen dari harga yang diatur di Operasional studio** (default 50%, `docs/STUDIO_OPERATIONS.md`). Disimpan per order saat admin menyimpan harga, jadi penawaran yang sudah dikirim tidak berubah. |
 | Deadline | **Admin** yang menentukan, bersamaan dengan harga |
 | Validasi DP | **Admin** lewat checklist. Hasil baca AI hanya bantuan, bukan keputusan. |
@@ -465,7 +465,8 @@ Semua tool divalidasi zod. Semua aturan akses dan transisi status dicek di serve
 
 | Tool | Input | Aturan |
 |---|---|---|
-| `list_services` | – | `Service` aktif: `code`, `name`, `description`, `outputFormat`. Tanpa harga. |
+| `list_services` | – | `Service` aktif dengan konfigurasi brief: `code`, `name`, `description`, `outputFormat`, harga (mode, harga, catatan, paket, harga per unit), estimasi, cocok untuk. Tanpa `botNotes`. |
+| `calculate_price` | `service_code`, `package?`, `units?` | Hanya membaca katalog aktif. Total + rincian dari `calculatePrice`; dicatat untuk penjaga harga giliran itu. Satu layanan saja (`docs/SERVICES_CATALOG.md` §5.2). |
 | `start_intake` | `serviceCode` | Buat `WaIntake` `COLLECTING` jika belum ada intake aktif; jika ada dan masih `COLLECTING`, ganti layanan (briefDraft dikosongkan setelah konfirmasi klien). |
 | `update_brief_draft` | `fields: Partial<BriefResponses>` | Hanya kunci yang ada di `requiredFields`/`optionalFields` layanan tersebut (`brief-schema.ts`). Merge ke `briefDraft`. Jika status `AWAITING_QUOTE` → kembali ke `COLLECTING` (brief berubah, wajib konfirmasi ulang). Ditolak jika `QUOTED`/`DP_REVIEW` → arahkan ke admin. Return: field wajib yang masih kosong. |
 | `attach_image_to_brief` | `messageId`, `target` (`reference_items_json` \| `logos_json` \| `vendor_logo_url` \| `brand_logo_url` \| `box_references_json` \| `cart_references_json`), `caption` | `messageId` harus milik percakapan ini dan bertipe image. Target harus valid untuk layanan. Salin ke bucket publik, tambahkan item ke JSON dengan bentuk **sama persis** dengan yang dihasilkan `ServiceBriefForm` (cek `types.ts`: `ReferenceItem`, `LogoItemBrief`, dst.). |
