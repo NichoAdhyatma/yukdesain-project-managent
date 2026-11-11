@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { amountsOf } from "./reply-guard";
+import { amountsOf, moneyAmounts } from "./reply-guard";
 import { prisma } from "@/lib/db";
 import { SERVICE_BOT_LIMITS as LIMITS } from "@/lib/constants";
 import { getBriefConfig } from "./brief-schema";
@@ -150,19 +150,27 @@ export function servicePriceGroups(
     ]);
 }
 
-/** Angka untuk penjaga harga: harga layanan FIXED dan angka estimasi semua layanan (spec §4.3). */
-export function serviceGuardNumbers(services: Pick<BotService, "priceMode" | "startingPrice" | "packages" | "unitPricing" | "estimate">[]): {
-  fixedPrices: string[];
-  estimateDays: string[];
-} {
-  const fixed = services
+/**
+ * Angka untuk penjaga harga, per layanan (spec §4.3): nominal layanan FIXED (harga, paket, tambahan per unit, nominal
+ * di catatan harga/paket) dan angka estimasi. `activeServiceCode`: order sudah punya layanan → estimasi hanya layanan itu.
+ */
+export function serviceGuardNumbers(
+  services: Pick<BotService, "code" | "priceMode" | "startingPrice" | "priceNote" | "packages" | "unitPricing" | "estimate">[],
+  activeServiceCode?: string | null,
+): { fixedGroups: string[][]; estimateGroups: string[][] } {
+  const unique = (list: string[]) => [...new Set(list)];
+  const fixedGroups = services
     .filter((s) => s.priceMode === "FIXED")
-    .flatMap((s) => [
-      ...(s.startingPrice ? [s.startingPrice] : []),
-      ...s.packages.map((p) => p.price),
-      ...(s.unitPricing ? [s.unitPricing.includedUnits, s.unitPricing.extraUnitPrice, s.unitPricing.minUnits ?? 0].filter((n) => n > 0) : []),
-    ])
-    .map(String);
-  const days = services.flatMap((s) => (s.estimate ? amountsOf(s.estimate) : []));
-  return { fixedPrices: [...new Set(fixed)], estimateDays: [...new Set(days)] };
+    .map((s) =>
+      unique([
+        ...(s.startingPrice ? [String(s.startingPrice)] : []),
+        ...s.packages.map((p) => String(p.price)),
+        ...(s.unitPricing ? [String(s.unitPricing.extraUnitPrice)] : []),
+        ...moneyAmounts([s.priceNote ?? "", ...s.packages.map((p) => p.note ?? "")].join(" ")),
+      ]),
+    )
+    .filter((g) => g.length > 0);
+  const scoped = activeServiceCode && services.some((s) => s.code === activeServiceCode) ? services.filter((s) => s.code === activeServiceCode) : services;
+  const estimateGroups = scoped.map((s) => (s.estimate ? unique(amountsOf(s.estimate)) : [])).filter((g) => g.length > 0);
+  return { fixedGroups, estimateGroups };
 }

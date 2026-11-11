@@ -9,7 +9,7 @@ import { buildStateBlock, buildSystemPrompt } from "./system-prompt";
 import type { GuardExtras } from "./reply-guard";
 import { allowedPriceNumbers, getDraftGuide, getPublishedGuide } from "./bot-guide";
 import { getBotServiceCatalog, serviceGuardNumbers, servicePriceGroups, type BotService } from "./service-catalog";
-import { amountsOf } from "./reply-guard";
+import { moneyAmounts } from "./reply-guard";
 import { ACTIVE_INTAKE_STATUSES, snapshotDpPercent } from "../intake";
 import { DP_PERCENT } from "@/lib/constants";
 import { getAiTargets } from "./ai-config";
@@ -234,8 +234,9 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
           // Bot diminta mengutip teks ini apa adanya; nominal di dalamnya bukan harga karangan.
           policyNumbers: [ops.revisionNotice, ops.settlementNote, ...(guide?.faqs ?? []).map((f) => f.answer)],
           catalogGroups: servicePriceGroups(services),
-          ...serviceGuardNumbers(services),
-          calculatedTotals: [...new Set([...ctx.calculatedTotals.map(String), ...ctx.calculatedBreakdowns.flatMap(amountsOf)])],
+          ...serviceGuardNumbers(services, finalIntake?.service?.code),
+          // Hanya nominal uang dari rincian ("5 item" bukan harga), supaya angka biasa tidak ikut diloloskan.
+          calculatedTotals: [...new Set([...ctx.calculatedTotals.map(String), ...ctx.calculatedBreakdowns.flatMap(moneyAmounts)])],
         },
         toolsCalled,
       };

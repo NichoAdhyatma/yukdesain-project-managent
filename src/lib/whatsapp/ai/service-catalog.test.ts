@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({ service: { findMany: vi.fn() } }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 
-import { getBotServiceCatalog, serviceBotFieldsSchema, servicePriceGroups, type BotService } from "./service-catalog";
+import { getBotServiceCatalog, serviceBotFieldsSchema, servicePriceGroups,
+  serviceGuardNumbers, type BotService } from "./service-catalog";
 
 const svc = (over: Partial<BotService>): BotService => ({
   code: "SVC-01",
@@ -100,5 +101,19 @@ describe("Bagian A: mode harga, paket, unit, estimasi (docs/superpowers/specs/20
       ["125000", "85000"],
       ["50000", "85000", "50000"],
     ]);
+  });
+});
+
+describe("serviceGuardNumbers (review akhir Plan A)", () => {
+  it("per layanan; angka uang dari catatan harga/paket ikut, jumlah biasa tidak", () => {
+    const banner = svc({ code: "SVC-04", priceMode: "FIXED", startingPrice: 135000, priceNote: "ukuran A3 Rp200.000", estimate: "3 hari" });
+    const poster = svc({ code: "SVC-03", priceMode: "FIXED", startingPrice: 135000, unitPricing: { unitLabel: "item", includedUnits: 35, extraUnitPrice: 5000, minUnits: 5 } });
+    const auto = svc({ code: "SVC-13", priceMode: "FIXED", startingPrice: 1250000, packages: [{ name: "UMKM Starter", price: 1250000, note: "8 desain feed, cetak Rp50.000" }] });
+    const logo = svc({ code: "SVC-01", priceMode: "STARTING", startingPrice: 150000, estimate: "5-7 hari" });
+    expect(serviceGuardNumbers([banner, poster, auto, logo])).toEqual({
+      fixedGroups: [["135000", "200000"], ["135000", "5000"], ["1250000", "50000"]],
+      estimateGroups: [["3"], ["5", "7"]],
+    });
+    expect(serviceGuardNumbers([banner, logo], "SVC-01").estimateGroups).toEqual([["5", "7"]]);
   });
 });

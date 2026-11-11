@@ -114,23 +114,30 @@ Total dan rincian hasil tool dicatat per giliran (`ctx.calculatedTotals` / `calc
 
 ### 5.4 Penjaga harga (tambahan atas §3)
 
-- Angka layanan `FIXED` (harga, paket, jumlah termasuk, tambahan per unit, minimal) lolos **tanpa** kata "mulai",
-  tetap tanpa kata total.
-- Angka hasil `calculate_price` pada giliran itu (total + rincian) lolos, termasuk dengan kata "total"/"jadi".
-- Lama pengerjaan: angka sebelum "hari/minggu/jam/bulan" wajib dari `estimate` salah satu layanan (atau brief /
-  aturan harga owner); angka lain di kalimat yang sama diperiksa seperti harga.
+- Yang diperiksa hanya **nominal uang** (Rp/IDR, rb/jt/k, angka berpemisah ribuan), **persen**, dan **angka lama
+  pengerjaan**. Angka biasa ("8 desain feed", "35 item") bukan harga, jadi kutipan paket apa adanya tidak terhapus.
+- Nominal layanan `FIXED` (harga, paket, tambahan per unit, nominal di catatan harga/paket) lolos **tanpa** kata
+  "mulai", tetap tanpa kata total, dan semua nominal di satu kalimat harus dari **satu** layanan.
+- Nominal hasil `calculate_price` pada giliran itu (total + nominal rincian) lolos, termasuk dengan kata "total"/"jadi".
+- Kalimat **diskon/potongan/promo/cashback** dan **persen** hanya lolos bila angkanya dari brief, aturan harga owner,
+  atau teks kebijakan; tidak pernah dari katalog atau kalkulator.
+- Lama pengerjaan: semua angka durasi ("3 hari", "5-7 hari", "1 sampai 2 hari") harus dari estimasi **satu** layanan;
+  bila order sudah punya layanan, hanya estimasi layanan itu. Kalimat dengan kata percepatan (express, kilat,
+  dipercepat, lebih cepat) dihapus kecuali angkanya dari aturan harga owner.
 - Layanan yang dipindah owner dari pasti ke mulai langsung mengikuti katalog baru pada giliran berikutnya.
 
 | Kalimat bot (Banner Rp135.000 pasti, estimasi 3 hari) | Hasil |
 |---|---|
 | "Desain banner Rp135.000 ya, Kak." | lolos |
+| "Paket UMKM Starter Rp1.250.000: 8 desain feed dan 8 story." | lolos |
 | "Banner Rp135.000, estimasi 3 hari ya, Kak." | lolos |
 | "Totalnya Rp160.000 ya, Kak." (hasil `calculate_price` giliran itu) | lolos |
-| "Totalnya Rp170.000 ya, Kak." | dihapus |
-| "Selesai 1 hari kak." | dihapus |
+| "Totalnya Rp170.000 ya, Kak." / "Diskon 5% ya kak." | dihapus |
+| "Selesai 1 hari kak." / "Bisa dipercepat jadi 3 hari kak." | dihapus |
 
-Batasan yang diterima: penjaga hanya mencocokkan angka durasi, bukan konteksnya. Kalimat seperti "revisi 3 hari"
-lolos bila ada layanan berestimasi "3 hari", karena angkanya sama.
+Batasan yang diterima: penjaga tidak mencocokkan nama layanan di kalimat, jadi harga pasti layanan lain yang disebut
+utuh ("Logo Rp350.000" padahal Rp350.000 milik layanan lain) tidak ditolak; dan angka durasi dicocokkan tanpa konteks,
+jadi "revisi 3 hari" lolos bila ada estimasi "3 hari".
 
 ### 5.5 Order WA dan form brief
 

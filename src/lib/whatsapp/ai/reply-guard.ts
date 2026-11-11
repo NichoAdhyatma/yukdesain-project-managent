@@ -45,43 +45,49 @@ export type GuardExtras = {
   policyNumbers?: string[];
   /** Angka katalog per layanan (harga mulai + catatan harga): hanya untuk kalimat "mulai …" satu layanan. */
   catalogGroups?: string[][];
-  /** Angka layanan berharga pasti (harga, paket, jumlah termasuk, tambahan per unit): lolos tanpa "mulai", tanpa kata total. */
-  fixedPrices?: string[];
-  /** Total + rincian calculate_price pada giliran ini: lolos termasuk kalimat "total"/"jadi". */
+  /** Nominal layanan berharga pasti, per layanan (harga, paket, tambahan per unit, nominal di catatan): tanpa "mulai", tanpa kata total. */
+  fixedGroups?: string[][];
+  /** Total + nominal rincian calculate_price pada giliran ini: lolos termasuk kalimat "total"/"jadi". */
   calculatedTotals?: string[];
-  /** Angka estimasi layanan ("3 hari" → "3"): satu-satunya lama pengerjaan yang boleh disebut. */
-  estimateDays?: string[];
+  /** Angka estimasi per layanan ("5-7 hari" → ["5","7"]): satu-satunya lama pengerjaan yang boleh disebut. */
+  estimateGroups?: string[][];
 };
 
-// Angka yang langsung diikuti satuan waktu: "3 hari", "5-7 hari", "2 minggu".
-const DURATION_NUMBERS = /(\d+)\s?(?:[-–]\s?(\d+)\s?)?(?:hari|minggu|jam|bulan)/gi;
+// Nominal uang: "Rp…", "IDR …", "…rb/ribu/k/jt/juta", "150.000". Angka biasa ("8 desain", "35 item") bukan harga.
+const MONEY = /(?:rp\.?\s?|idr\s?)\d[\d.,]*|\d[\d.,]*\s?(?:rb|ribu|k|jt|juta)\b|\b\d{1,3}(?:\.\d{3})+\b/gi;
+const PERCENT = /(\d+(?:[.,]\d+)?)\s?%/g;
+// Potongan harga: hanya dari aturan harga owner / brief / teks kebijakan, tidak pernah dari katalog atau kalkulator.
+const DISCOUNT_WORD = /\b(diskon|potongan|promo|cashback|surcharge)\b/i;
+// Percepatan selalu lewat owner (spec §2): kalimat lama pengerjaan dengan kata ini hanya lolos dari aturan owner.
+const EXPRESS = /\b(express|ekspres|kilat|dipercepat|percepat|lebih cepat)\b/i;
+// Angka yang diikuti satuan waktu: "3 hari", "5-7 hari", "1 sampai 2 hari".
+const DURATION_NUMBERS = /(\d+)\s?(?:(?:-|–|sampai|hingga|s\/d|atau)\s?(\d+)\s?)?(?:hari|minggu|jam|bulan)/gi;
+
+export function moneyAmounts(text: string): string[] {
+  return [...text.matchAll(MONEY)].flatMap((m) => amountsOf(m[0]));
+}
+
+function percentAmounts(text: string): string[] {
+  return [...text.matchAll(PERCENT)].map((m) => String(Number(m[1].replace(",", "."))));
+}
 
 function durationNumbers(sentence: string): string[] {
   return [...sentence.matchAll(DURATION_NUMBERS)].flatMap((m) => [m[1], ...(m[2] ? [m[2]] : [])].map((n) => String(Number(n))));
-}
-
-function withoutOnce(list: string[], remove: string[]): string[] {
-  const out = [...list];
-  for (const r of remove) {
-    const i = out.indexOf(r);
-    if (i >= 0) out.splice(i, 1);
-  }
-  return out;
 }
 
 /**
  * Buang kalimat yang menyebut harga/lama pengerjaan, lalu tambahkan kalimat
  * standar sekali. Dipakai hanya sebelum admin memberi harga.
  *
+ * Yang diperiksa: nominal uang, persen, dan angka lama pengerjaan (angka biasa seperti "8 desain" bukan harga).
  * Angka yang diizinkan, dibandingkan sebagai nilai rupiah (amountsOf):
  * - `briefText` (isi brief klien) dan `allowedNumbers` (aturan harga owner): kalimat apa pun.
  * - `policyNumbers` (teks kebijakan / FAQ owner): bukan kalimat lama pengerjaan.
- * - `catalogGroups` (menu Layanan): wajib kata "mulai", tanpa kata total, dan semua angka sisanya dari satu
- *   layanan, supaya bot tidak menghitung total atau mencampur harga layanan lain.
- * - `fixedPrices` (layanan berharga pasti): tanpa syarat "mulai", tetap tanpa kata total.
+ * - Kalimat diskon/potongan dan persen: hanya dua sumber di atas.
  * - `calculatedTotals` (hasil calculate_price giliran ini): boleh dengan kata total.
- * - Lama pengerjaan: angka sebelum "hari/minggu/…" wajib dari `estimateDays` (atau brief/aturan owner);
- *   angka lain di kalimat itu diperiksa seperti harga, tanpa teks kebijakan.
+ * - `fixedGroups` (layanan berharga pasti): tanpa syarat "mulai", tanpa kata total, semua nominal dari satu layanan.
+ * - `catalogGroups` (menu Layanan): wajib kata "mulai", tanpa kata total, semua nominal dari satu layanan.
+ * - Lama pengerjaan: semua angka durasi dari estimasi satu layanan (`estimateGroups`), tanpa kata percepatan.
  */
 export function stripPriceMentions(
   text: string,
@@ -92,28 +98,35 @@ export function stripPriceMentions(
 ): { text: string; changed: boolean } {
   const always = new Set([...amountsOf(briefText), ...allowedNumbers.flatMap(amountsOf)]);
   const policy = new Set((extras.policyNumbers ?? []).flatMap(amountsOf));
-  const groups = (extras.catalogGroups ?? []).map((g) => new Set(g.flatMap(amountsOf)));
-  const fixed = new Set((extras.fixedPrices ?? []).flatMap(amountsOf));
+  const toSets = (groups: string[][] | undefined) => (groups ?? []).map((g) => new Set(g.flatMap(amountsOf)));
+  const groups = toSets(extras.catalogGroups);
+  const fixedGroups = toSets(extras.fixedGroups);
+  const estimateGroups = toSets(extras.estimateGroups);
   const calculated = new Set((extras.calculatedTotals ?? []).flatMap(amountsOf));
-  const estimate = new Set((extras.estimateDays ?? []).flatMap(amountsOf));
-  const pricesAllowed = (sentence: string, numbers: string[]) => {
-    if (numbers.length === 0) return true;
-    if (numbers.some((n) => calculated.has(n)) && numbers.every((n) => calculated.has(n) || fixed.has(n))) return true;
+  const oneGroup = (sets: Set<string>[], numbers: string[]) => sets.some((g) => numbers.every((n) => g.has(n)));
+
+  const pricesAllowed = (sentence: string, money: string[]) => {
+    if (money.length === 0) return true;
+    if (money.some((n) => calculated.has(n)) && money.every((n) => calculated.has(n) || fixedGroups.some((g) => g.has(n)))) return true;
     if (TOTAL.test(sentence)) return false;
-    if (numbers.every((n) => fixed.has(n))) return true;
-    return STARTING.test(sentence) && groups.some((g) => numbers.every((n) => g.has(n)));
+    if (oneGroup(fixedGroups, money)) return true;
+    return STARTING.test(sentence) && oneGroup(groups, money);
   };
   const allowedSentence = (sentence: string) => {
-    const numbers = amountsOf(sentence);
-    if (numbers.length === 0) return false;
-    const rest = numbers.filter((n) => !always.has(n));
-    if (rest.length === 0) return true;
-    if (DURATION.test(sentence)) {
-      const durations = durationNumbers(sentence).filter((n) => !always.has(n));
-      if (durations.some((n) => !estimate.has(n))) return false;
-      return pricesAllowed(sentence, withoutOnce(rest, durations));
+    if (amountsOf(sentence).length === 0) return false;
+    const notAlways = (n: string) => !always.has(n);
+    const money = moneyAmounts(sentence).filter(notAlways);
+    const percents = percentAmounts(sentence).filter(notAlways);
+    const isDuration = DURATION.test(sentence);
+    if (isDuration) {
+      const durations = durationNumbers(sentence).filter(notAlways);
+      if (durations.length > 0 && (EXPRESS.test(sentence) || !oneGroup(estimateGroups, durations))) return false;
     }
-    return pricesAllowed(sentence, rest.filter((n) => !policy.has(n)));
+    // Kalimat lama pengerjaan tidak memakai teks kebijakan (mis. "revisi 4" bukan "4 hari").
+    const fromPolicy = (n: string) => !isDuration && policy.has(n);
+    if (percents.some((n) => !fromPolicy(n))) return false;
+    if (DISCOUNT_WORD.test(sentence)) return money.every(fromPolicy);
+    return pricesAllowed(sentence, money.filter((n) => !fromPolicy(n)));
   };
   // Pisah kalimat hanya di tanda baca yang diikuti spasi/baris baru, supaya
   // pemisah ribuan ("Rp500.000") tidak memecah kalimat.

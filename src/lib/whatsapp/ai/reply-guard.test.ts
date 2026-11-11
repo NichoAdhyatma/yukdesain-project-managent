@@ -171,12 +171,22 @@ describe("stripPriceMentions: harga mulai dari katalog Layanan (docs/SERVICES_CA
 
 
 describe("stripPriceMentions: harga pasti, hasil kalkulator, estimasi (spec 2026-11-11 §4.3)", () => {
-  const extras = { fixedPrices: ["135000", "35", "5000"], calculatedTotals: [] as string[], estimateDays: ["3"], catalogGroups: [["150000"]] };
+  // Per layanan: Banner Rp135.000 pasti; Poster Menu Rp135.000 + Rp5.000 per item; Auto Pilot paket Rp1.250.000.
+  const extras = {
+    fixedGroups: [["135000"], ["135000", "5000"], ["1250000"]],
+    calculatedTotals: [] as string[],
+    estimateGroups: [["3"], ["5", "7"]],
+    catalogGroups: [["150000"]],
+  };
   const guard = (text: string, over: Partial<typeof extras> = {}) => stripPriceMentions(text, "", [], { ...extras, ...over });
 
   it("harga pasti katalog lolos tanpa kata mulai", () => {
     expect(guard("Desain banner Rp135.000 ya, Kak.").changed).toBe(false);
     expect(guard("Poster menu Rp135.000 termasuk 35 item, tambahan Rp5.000 per item ya, Kak.").changed).toBe(false);
+  });
+
+  it("kutipan paket dengan jumlah desain (angka biasa) tetap lolos", () => {
+    expect(guard("Paket UMKM Starter Rp1.250.000: 8 desain feed dan 8 story ya kak.").changed).toBe(false);
   });
 
   it("harga pasti dengan kata total tetap dihapus kecuali dari kalkulator", () => {
@@ -186,21 +196,32 @@ describe("stripPriceMentions: harga pasti, hasil kalkulator, estimasi (spec 2026
   });
 
   it("rincian kalkulator lolos", () => {
-    expect(
-      guard("Rp135.000 (sampai 35 item) + 5 item × Rp5.000 = Rp160.000 ya, Kak.", { calculatedTotals: ["160000", "135000", "35", "5", "5000"] }).changed,
-    ).toBe(false);
+    expect(guard("Rp135.000 (sampai 35 item) + 5 item × Rp5.000 = Rp160.000 ya, Kak.", { calculatedTotals: ["160000", "135000", "5000"] }).changed).toBe(false);
   });
 
-  it("estimasi dari katalog lolos, lama lain dihapus", () => {
+  it("diskon / potongan / persen karangan dihapus walau angkanya ada di katalog atau rincian", () => {
+    expect(guard("Kakak dapat diskon 5% ya.").changed).toBe(true);
+    expect(guard("Diskon 35% khusus hari ini kak.").changed).toBe(true);
+    expect(guard("Ada potongan Rp5.000 per item ya kak.").changed).toBe(true);
+    expect(guard("Diskon 3% juga ya kak.", { calculatedTotals: ["160000", "135000", "5000", "3"] }).changed).toBe(true);
+  });
+
+  it("harga dari dua layanan pasti berbeda tidak boleh dicampur dalam satu kalimat", () => {
+    expect(guard("Banner Rp1.250.000 dengan tambahan Rp5.000 ya kak.").changed).toBe(true);
+  });
+
+  it("estimasi dari satu layanan lolos, lama lain / campuran / percepatan dihapus", () => {
     expect(guard("Estimasi pengerjaan 3 hari ya, Kak.").changed).toBe(false);
     expect(guard("Banner Rp135.000, estimasi 3 hari ya, Kak.").changed).toBe(false);
+    expect(guard("Estimasi 5-7 hari ya kak.").changed).toBe(false);
     expect(guard("Selesai 1 hari kak.").changed).toBe(true);
-    expect(guard("Estimasi 5-7 hari ya kak.").changed).toBe(true);
-    expect(guard("Estimasi 5-7 hari ya kak.", { estimateDays: ["5", "7"] }).changed).toBe(false);
+    expect(guard("Estimasi 3-7 hari ya kak.").changed).toBe(true);
+    expect(guard("Logo bisa selesai 1 sampai 3 hari kak.").changed).toBe(true);
+    expect(guard("Bisa dipercepat jadi 3 hari kak.").changed).toBe(true);
   });
 
   it("layanan pindah ke mode mulai: harga tanpa kata mulai dihapus", () => {
-    expect(guard("Banner Rp135.000 ya, Kak.", { fixedPrices: [], catalogGroups: [["135000"]] }).changed).toBe(true);
-    expect(guard("Banner mulai Rp135.000 ya, Kak.", { fixedPrices: [], catalogGroups: [["135000"]] }).changed).toBe(false);
+    expect(guard("Banner Rp135.000 ya, Kak.", { fixedGroups: [], catalogGroups: [["135000"]] }).changed).toBe(true);
+    expect(guard("Banner mulai Rp135.000 ya, Kak.", { fixedGroups: [], catalogGroups: [["135000"]] }).changed).toBe(false);
   });
 });
