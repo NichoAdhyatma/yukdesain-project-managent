@@ -1,11 +1,11 @@
 import { prisma } from "@/lib/db";
 import { getWhatsAppEnv, isFonnteConfigured, isKirimiConfigured, isWhatsAppConfigured } from "./env";
-import { WhatsAppApiError, markAsRead, sendTemplate, sendText } from "./client-api";
-import { FonnteApiError, fonnteSendText } from "./fonnte";
-import { KirimiApiError, kirimiSendText } from "./kirimi";
+import { WhatsAppApiError, markAsRead, sendImage, sendTemplate, sendText } from "./client-api";
+import { FonnteApiError, fonnteSendImage, fonnteSendText } from "./fonnte";
+import { KirimiApiError, kirimiSendImage, kirimiSendText } from "./kirimi";
 
 // Saluran WhatsApp aktif (docs/WHATSAPP_CHANNEL_FONNTE.md, docs/WHATSAPP_CHANNEL_KIRIMI.md): META = Cloud API resmi
-// (aturan 24 jam & template), FONNTE / KIRIMI = gateway scan QR (selalu teks). Dipilih owner di Settings.
+// (aturan 24 jam & template), FONNTE / KIRIMI = gateway scan QR (teks dan gambar dari URL). Dipilih owner di Settings.
 
 export type WaChannel = "META" | "FONNTE" | "KIRIMI";
 export const WA_CHANNELS: WaChannel[] = ["META", "FONNTE", "KIRIMI"];
@@ -37,6 +37,32 @@ export async function sendTextOnChannel(to: string, body: string, channel?: WaCh
   return isQrChannel(active) ? qrSendText(active, to, body) : sendText(to, body);
 }
 
+/** Pesan bebas (teks/gambar) di Meta di luar jendela 24 jam: tidak dikirim. */
+export class OutsideServiceWindowError extends Error {
+  constructor() {
+    super("Di luar jendela layanan 24 jam");
+    this.name = "OutsideServiceWindowError";
+  }
+}
+
+/**
+ * Kirim gambar dari URL publik (QRIS di invoice, spec 2026-11-11 §5). Kirimi: send-message + media_url; Fonnte: url;
+ * Meta: pesan image. `withinServiceWindow: false` di Meta → OutsideServiceWindowError (gambar tidak punya template).
+ */
+export async function sendImageOnChannel(
+  to: string,
+  imageUrl: string,
+  caption: string,
+  channel?: WaChannel,
+  opts: { withinServiceWindow?: boolean } = {},
+): Promise<string> {
+  const active = channel ?? (await getChannel());
+  if (active === "KIRIMI") return kirimiSendImage(to, imageUrl, caption);
+  if (active === "FONNTE") return fonnteSendImage(to, imageUrl, caption);
+  if (opts.withinServiceWindow === false) throw new OutsideServiceWindowError();
+  return sendImage(to, imageUrl, caption);
+}
+
 /**
  * Pesan yang di Meta butuh template di luar 24 jam. Fonnte tidak punya template → kirim teksnya.
  * `via` dipakai untuk mencatat jenis pesan.
@@ -64,5 +90,6 @@ export function deliveryErrorCode(error: unknown): string {
   if (error instanceof WhatsAppApiError) return error.code ?? String(error.status);
   if (error instanceof FonnteApiError) return "FONNTE_FAILED";
   if (error instanceof KirimiApiError) return "KIRIMI_FAILED";
+  if (error instanceof OutsideServiceWindowError) return "OUTSIDE_WINDOW";
   return "SEND_FAILED";
 }

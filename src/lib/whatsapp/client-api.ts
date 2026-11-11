@@ -61,6 +61,11 @@ export function sendText(to: string, body: string, env?: GraphEnv): Promise<stri
   return sendMessage({ to, type: "text", text: { body, preview_url: false } }, env);
 }
 
+/** Kirim gambar dari URL publik (https). Hanya valid di dalam jendela layanan 24 jam. Return wamid. */
+export function sendImage(to: string, imageUrl: string, caption: string, env?: GraphEnv): Promise<string> {
+  return sendMessage({ to, type: "image", image: { link: imageUrl, caption } }, env);
+}
+
 /** Kirim message template yang sudah disetujui Meta. Return wamid. */
 export function sendTemplate(
   to: string,

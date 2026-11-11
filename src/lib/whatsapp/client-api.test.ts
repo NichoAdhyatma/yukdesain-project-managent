@@ -5,6 +5,7 @@ import {
   downloadMediaContent,
   getMediaInfo,
   markAsRead,
+  sendImage,
   sendTemplate,
   sendText,
 } from "./client-api";
@@ -132,5 +133,19 @@ describe("downloadMediaContent", () => {
     });
     fetchMock.mockResolvedValueOnce(new Response(stream));
     await expect(downloadMediaContent("https://cdn.test/m", 10, env)).rejects.toBeInstanceOf(MediaTooLargeError);
+  });
+});
+
+describe("sendImage (Meta)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  it("pesan image dengan link dan caption", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ messages: [{ id: "wamid.IMG" }] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await sendImage("6281234567890", "https://cdn.example.com/qris.png", "QRIS BCA", env)).toBe("wamid.IMG");
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toMatchObject({
+      to: "6281234567890",
+      type: "image",
+      image: { link: "https://cdn.example.com/qris.png", caption: "QRIS BCA" },
+    });
   });
 });
