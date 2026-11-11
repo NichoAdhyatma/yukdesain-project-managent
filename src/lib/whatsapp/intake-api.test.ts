@@ -33,4 +33,8 @@ describe("detailInclude: patokan harga mulai (docs/SERVICES_CATALOG.md)", () => 
     expect(detailInclude.service.select).toMatchObject({ startingPrice: true, priceNote: true });
     expect(detailInclude.service.select).not.toHaveProperty("botNotes");
   });
+
+  it("detail order membawa kolom katalog untuk harga awal (spec 2026-11-11 §4.3)", () => {
+    expect(detailInclude.service.select).toMatchObject({ priceMode: true, packages: true, unitPricing: true });
+  });
 });

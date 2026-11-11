@@ -3,17 +3,16 @@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CurrencyInput } from "@/components/ui/currency-input";
 import { SERVICE_BOT_LIMITS as LIMITS } from "@/lib/constants";
+import { EMPTY_UNIT, ServicePricingFields, type PricingValues } from "./ServicePricingFields";
 
 // Form layanan untuk tambah dan edit (docs/SERVICES_CATALOG.md). Bagian "Untuk bot WhatsApp" dibaca bot:
-// harga mulai boleh disebut ke klien, catatan untuk bot tidak.
+// harga (pasti / mulai, paket, per unit) dan estimasi boleh disebut ke klien, catatan untuk bot tidak.
 
-export type ServiceFormValues = {
+export type ServiceFormValues = PricingValues & {
   name: string;
   description: string;
   outputFormat: string;
-  startingPrice: number | null;
   priceNote: string;
   suitableFor: string;
   botNotes: string;
@@ -23,7 +22,11 @@ export const EMPTY_SERVICE_FORM: ServiceFormValues = {
   name: "",
   description: "",
   outputFormat: "",
+  priceMode: "FIXED",
   startingPrice: null,
+  packages: [],
+  unit: EMPTY_UNIT,
+  estimate: "",
   priceNote: "",
   suitableFor: "",
   botNotes: "",
@@ -137,33 +140,16 @@ export function ServiceForm({ idPrefix, values, onChange, errors }: Props) {
       <fieldset className="space-y-4 rounded-lg border border-border p-4">
         <legend className="px-1 text-sm font-medium">Untuk bot WhatsApp</legend>
         <p className="-mt-2 text-xs text-muted-foreground">
-          Bot membaca bagian ini saat melayani klien. Harga final tetap kamu isi di Order WA setelah brief lengkap.
+          Bot membaca bagian ini saat melayani klien. Harga order tetap kamu konfirmasi di Order WA; isian harga di sana terisi dari sini.
         </p>
 
-        <div className="space-y-1.5">
-          <Label htmlFor={id("startingPrice")}>
-            Harga mulai <span className="font-normal text-muted-foreground">(opsional)</span>
-          </Label>
-          <CurrencyInput
-            id={id("startingPrice")}
-            value={values.startingPrice ?? undefined}
-            onChange={(n) => set("startingPrice", n > 0 ? n : null)}
-            placeholder="Contoh: 150000"
-            className="max-md:h-11"
-            aria-describedby={`${id("startingPrice")}-help${errors.startingPrice ? ` ${id("startingPrice")}-error` : ""}`}
-            aria-invalid={!!errors.startingPrice}
-          />
-          <p id={`${id("startingPrice")}-help`} className="text-xs text-muted-foreground">
-            Bot menyebutnya sebagai &quot;mulai Rp…&quot;. Kosongkan jika bot tidak boleh menyebut harga layanan ini.
-          </p>
-          <FieldError id={`${id("startingPrice")}-error`} message={errors.startingPrice} />
-        </div>
+        <ServicePricingFields id={id} values={values} onChange={(patch) => onChange({ ...values, ...patch })} errors={errors} />
 
         {textField(
           "priceNote",
           "Catatan harga",
           LIMITS.priceNoteMaxChars,
-          "Ikut disebut bot bersama harga mulai.",
+          "Ikut disebut bot bersama harga.",
           false,
           "Contoh: ukuran A3 mulai Rp200.000",
         )}

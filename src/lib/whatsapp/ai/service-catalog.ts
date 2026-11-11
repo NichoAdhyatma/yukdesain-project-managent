@@ -121,16 +121,15 @@ export async function getBotServiceCatalog(): Promise<BotService[]> {
 
 type ServiceRow = Omit<BotService, "priceMode" | "packages" | "unitPricing"> & { priceMode: string; packages: unknown; unitPricing: unknown };
 
-/** Normalkan kolom Json dari DB (data lama / tidak valid → kosong). */
-export function toBotService(row: ServiceRow): BotService {
+/** Normalkan kolom Json harga dari DB (data lama / tidak valid → kosong). */
+export function normalizePricing(row: { packages: unknown; unitPricing: unknown }): Pick<BotService, "packages" | "unitPricing"> {
   const packages = z.array(servicePackageSchema).safeParse(row.packages ?? []);
   const unit = unitPricingSchema.safeParse(row.unitPricing);
-  return {
-    ...row,
-    priceMode: row.priceMode === "FIXED" ? "FIXED" : "STARTING",
-    packages: packages.success ? packages.data : [],
-    unitPricing: row.unitPricing && unit.success ? unit.data : null,
-  };
+  return { packages: packages.success ? packages.data : [], unitPricing: row.unitPricing && unit.success ? unit.data : null };
+}
+
+export function toBotService(row: ServiceRow): BotService {
+  return { ...row, priceMode: row.priceMode === "FIXED" ? "FIXED" : "STARTING", ...normalizePricing(row) };
 }
 
 /**

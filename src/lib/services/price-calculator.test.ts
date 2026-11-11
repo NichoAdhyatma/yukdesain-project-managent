@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { BotService } from "@/lib/whatsapp/ai/service-catalog";
-import { calculatePrice } from "./price-calculator";
+import { calculatePrice, suggestQuotePrice } from "./price-calculator";
 
 const svc = (over: Partial<BotService>): BotService => ({
   code: "SVC-01",
@@ -78,5 +78,26 @@ describe("calculatePrice (spec §4.2)", () => {
   it("rincian menyebut harga dasar dan tambahan", () => {
     const r = calculatePrice(posterMenu, { units: 40 });
     expect(r.ok && r.breakdown).toBe("Rp135.000 (sampai 35 item) + 5 item × Rp5.000 = Rp160.000");
+  });
+});
+
+describe("suggestQuotePrice: isian awal harga Order WA (spec §4.3)", () => {
+  const row = (s: BotService) => ({ startingPrice: s.startingPrice, packages: s.packages, unitPricing: s.unitPricing });
+
+  it("paket dari brief", () => {
+    expect(suggestQuotePrice(row(photobooth), { package_choice: "Photostrips 4R" })).toMatchObject({ total: 50000 });
+  });
+
+  it("unit dari brief: halaman, varian, atau jumlah item menu", () => {
+    expect(suggestQuotePrice(row(bukuMenu), { page_count: 6 })).toMatchObject({ total: 540000 });
+    expect(suggestQuotePrice(row(stickerLabel), { variant_count: "3" })).toMatchObject({ total: 295000 });
+    expect(suggestQuotePrice(row(posterMenu), { menu_items_json: Array.from({ length: 40 }, () => ({})) })).toMatchObject({ total: 160000 });
+  });
+
+  it("tidak bisa dihitung → harga mulai; tanpa harga → null", () => {
+    expect(suggestQuotePrice(row(photobooth), {})).toMatchObject({ total: 85000 });
+    expect(suggestQuotePrice(row(bukuMenu), {})).toBeNull();
+    expect(suggestQuotePrice(null, {})).toBeNull();
+    expect(suggestQuotePrice({ startingPrice: 150000, packages: "rusak", unitPricing: { x: 1 } }, {})).toMatchObject({ total: 150000 });
   });
 });

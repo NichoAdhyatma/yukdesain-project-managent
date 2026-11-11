@@ -1,5 +1,5 @@
 import { formatRupiah } from "@/lib/whatsapp/format";
-import type { BotService } from "@/lib/whatsapp/ai/service-catalog";
+import { normalizePricing, type BotService } from "@/lib/whatsapp/ai/service-catalog";
 
 // Kalkulator harga katalog (spec 2026-11-11-kb-merge-design §4.2). Satu layanan saja:
 // gabungan beberapa layanan, diskon, dan express tetap lewat owner/admin.
@@ -45,4 +45,30 @@ function withUnits(base: number, baseLabel: string, unit: BotService["unitPricin
   const extraLabel = `${extra} ${unit.unitLabel} × ${formatRupiah(unit.extraUnitPrice)}`;
   const parts = base === 0 ? [extraLabel] : extra === 0 ? [baseLabel] : [`${baseLabel} (sampai ${unit.includedUnits} ${unit.unitLabel})`, extraLabel];
   return { ok: true, total, breakdown: `${parts.join(" + ")} = ${formatRupiah(total)}` };
+}
+
+/** Jumlah unit dari brief: halaman / varian / pose, atau banyaknya item menu. */
+function unitsFromBrief(draft: Record<string, unknown>): number | undefined {
+  for (const key of ["page_count", "variant_count", "pose_count"]) {
+    const n = Number(draft[key]);
+    if (Number.isInteger(n) && n > 0) return n;
+  }
+  const items = draft.menu_items_json;
+  return Array.isArray(items) && items.length > 0 ? items.length : undefined;
+}
+
+/**
+ * Isian awal harga di panel Order WA (spec §4.3): dari kalkulator dengan paket/unit di brief,
+ * atau harga mulai layanan bila tidak bisa dihitung. Admin tetap yang menyimpan.
+ */
+export function suggestQuotePrice(
+  service: { startingPrice: number | null; packages: unknown; unitPricing: unknown } | null,
+  draft: Record<string, unknown>,
+): { total: number; breakdown: string } | null {
+  if (!service) return null;
+  const pricing = { startingPrice: service.startingPrice, ...normalizePricing(service) };
+  const packageName = typeof draft.package_choice === "string" ? draft.package_choice : undefined;
+  const result = calculatePrice(pricing, { packageName, units: unitsFromBrief(draft) });
+  if (result.ok) return { total: result.total, breakdown: result.breakdown };
+  return service.startingPrice ? { total: service.startingPrice, breakdown: `Harga layanan ${formatRupiah(service.startingPrice)}` } : null;
 }

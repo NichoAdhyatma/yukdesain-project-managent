@@ -70,7 +70,7 @@ export type PaymentExtraction = {
 export type WaIntakeDetail = {
   id: string;
   status: WaIntakeStatus;
-  service: { id: string; code: string; name: string; startingPrice: number | null; priceNote: string | null } | null;
+  service: { id: string; code: string; name: string; startingPrice: number | null; priceNote: string | null; priceMode: string } | null;
   clientName: string | null;
   clientEmail: string | null;
   brief: {
@@ -80,7 +80,15 @@ export type WaIntakeDetail = {
     confirmedAt: string | null;
     editedByAdmin: boolean;
   };
-  quote: { agreedPrice: number | null; dpAmount: number | null; dpPercent: number | null; deadline: string | null; quotedAt: string | null };
+  quote: {
+    agreedPrice: number | null;
+    dpAmount: number | null;
+    dpPercent: number | null;
+    deadline: string | null;
+    quotedAt: string | null;
+    /** Isian awal harga dari katalog Layanan + brief (paket/unit) */
+    suggested: { total: number; breakdown: string } | null;
+  };
   /** DP % dari Operasional studio untuk penawaran yang akan disimpan */
   dpPercentForNewQuote: number;
   pricingRulesApplied: PricingRuleApplied[];
