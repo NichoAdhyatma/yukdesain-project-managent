@@ -16,7 +16,7 @@ function renderPolicies(ops: StudioOperations): string {
       ? `- Revisi gratis ${ops.revisionQuota}x per project, diajukan lewat link portal project (bukan lewat chat). Saat menjelaskan revisi, sampaikan apa adanya: "${ops.revisionNotice}". Permintaan revisi di atas ${ops.revisionQuota}x dialihkan ke admin (request_human_handoff).`
       : "- Tidak ada revisi gratis. Permintaan revisi dialihkan ke admin (request_human_handoff).";
   return `# Kebijakan studio
-- Pengerjaan dimulai setelah DP ${ops.dpPercent}% dari harga yang dikirim tim kami. ${ops.settlementNote}
+- Pengerjaan dimulai setelah DP dibayar sesuai invoice dari tim kami. ${ops.settlementNote}
 ${revision}
 - Untuk project yang sudah berjalan, kuota dan sisa revisi mengikuti data project dari tool (revisionQuota, revisionQuotaRemaining).
 - Jam kerja tim desain: ${formatWorkingHours(ops)}. Sebutkan saat klien menanyakan progres, revisi, atau kapan desainnya dikerjakan. Kamu tetap melayani chat di luar jam itu.`;
@@ -71,7 +71,7 @@ function renderServiceDetail(service: BotService): string[] {
 
 export function buildSystemPrompt(studioName: string, guide: BotGuide | null, ops: StudioOperations, services: BotService[]): string {
   const guideSection = renderGuideSection(guide, studioName);
-  const rules = `Kamu adalah asisten WhatsApp ${studioName}, studio desain grafis. Kamu melayani klien yang ingin memesan desain: memilih layanan, menggali brief, dan menjelaskan pembayaran DP order ini.
+  const rules = `Kamu adalah asisten WhatsApp ${studioName}, studio desain grafis. Kamu melayani klien yang ingin memesan desain: memilih layanan, menggali brief, dan membantu pembayaran order ini sesuai invoice dari tim kami.
 
 # Topik
 Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, dan status order. Untuk topik lain (pertanyaan umum, tugas sekolah, coding, berita, dll.) tolak singkat dan ramah, lalu arahkan kembali ke layanan desain.
@@ -102,7 +102,7 @@ Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, 
 - Saat STATE berisi jawaban tim yang belum disampaikan, sampaikan ke klien dengan bahasamu sendiri (catatan internal jangan dikutip mentah). Jika bisa dan catatan menyebut layanan yang ada di list_services, lanjutkan order dengan layanan itu. Jika bisa tapi tidak ada layanan yang cocok, panggil request_human_handoff supaya admin melanjutkan. Jika tidak bisa, sampaikan dengan sopan dan tawarkan layanan lain yang ada.
 
 # Setelah ada harga (status QUOTED)
-Jelaskan layanan, harga, DP (persen dan nominal), deadline, dan rekening persis seperti di STATE, tanpa mengubah angka. Minta klien mengirim foto/screenshot bukti transfer DP.
+Invoice dan metode pembayaran sudah dikirim tim kami (nomor invoice ada di STATE). Jangan menyebut nominal atau persen DP, jangan mengirim rekening: jika klien bertanya, arahkan ke invoice yang sudah kami kirim. Harga dan deadline boleh disebut persis seperti di STATE. Minta klien mengirim foto/screenshot bukti transfer DP.
 Jika klien mengirim gambar yang terlihat seperti bukti transfer, panggil submit_payment_proof dengan messageId dari STATE, lalu sampaikan: "Bukti sudah kami terima, sedang dicek tim kami." Jika ragu gambar itu bukti transfer atau bukan, tanyakan dulu. Jangan mengomentari isi bukti transfer (nominal, penerima, tanggal) ke klien; pengecekan sepenuhnya oleh tim kami. Bukti dalam bentuk PDF atau dokumen belum bisa dibaca; minta screenshot.
 
 # Status project yang sudah berjalan
@@ -158,7 +158,7 @@ const STATUS_NOTES: Record<WaIntakeStatus, string> = {
   COLLECTING: "Brief sedang dikumpulkan.",
   AWAITING_QUOTE:
     "Brief sudah dikonfirmasi klien dan menunggu harga dari tim. Jangan sebut harga/deadline. Jika klien mengubah brief, simpan perubahannya (status kembali ke pengumpulan brief) lalu minta konfirmasi ulang.",
-  QUOTED: "Harga sudah dikirim. Bantu klien membayar DP dan minta bukti transfer.",
+  QUOTED: "Invoice sudah dikirim tim. Arahkan klien ke invoice untuk nominal DP dan metode bayar, lalu minta bukti transfer.",
   DP_REVIEW:
     'Bukti transfer sudah diterima dan sedang dicek tim. Jawab: "Bukti sudah kami terima, sedang dicek tim kami." Brief tidak bisa diubah lewat chat lagi; arahkan ke admin.',
   APPROVED: "Order sudah menjadi project.",
@@ -175,11 +175,10 @@ export type StateInput = {
     missingRequired: BriefKey[];
     writableFields: BriefKey[];
     imageTargets: BriefKey[];
-    quote: null | { agreedPrice: number; dpAmount: number; dpPercent: number; deadline: Date };
+    quote: null | { agreedPrice: number; dpAmount: number; dpPercent: number; deadline: Date; invoiceNumber?: string | null };
     // Layanan order dari katalog (docs/SERVICES_CATALOG.md); null = layanan nonaktif / belum dipilih
     serviceDetail?: BotService | null;
   };
-  paymentAccounts: { name: string; accountNumber: string; accountHolder: string }[];
   // Aturan harga owner yang sudah dicatat untuk order ini (docs/WHATSAPP_OWNER_COMMANDS.md §6)
   pricingRulesApplied?: { ruleId: string; name: string }[];
   // Pertanyaan ke owner (§5): menunggu, atau sudah dijawab tapi belum disampaikan ke klien
@@ -211,16 +210,10 @@ export function buildStateBlock(input: StateInput): string {
       lines.push(`- Target gambar untuk attach_image_to_brief: ${intake.imageTargets.length ? intake.imageTargets.join(", ") : "tidak ada"}`);
     }
     if (intake.quote && (intake.status === "QUOTED" || intake.status === "DP_REVIEW")) {
+      // Tanpa DP dan rekening: keduanya hanya ada di invoice yang dikirim tim (spec 2026-11-11 §5).
       lines.push(
-        `- Harga: ${rupiah(intake.quote.agreedPrice)}; DP ${intake.quote.dpPercent}%: ${rupiah(intake.quote.dpAmount)}; deadline: ${tanggal(intake.quote.deadline)}`,
+        `- Harga: ${rupiah(intake.quote.agreedPrice)}; deadline: ${tanggal(intake.quote.deadline)}${intake.quote.invoiceNumber ? `; invoice: ${intake.quote.invoiceNumber}` : ""}`,
       );
-      if (intake.status === "QUOTED") {
-        lines.push(
-          input.paymentAccounts.length
-            ? `- Rekening studio: ${input.paymentAccounts.map((a) => `${a.name} ${a.accountNumber} a.n. ${a.accountHolder}`).join(" | ")}`
-            : "- Rekening studio belum diatur; minta klien menunggu info rekening dari tim (request_human_handoff).",
-        );
-      }
     }
   }
 

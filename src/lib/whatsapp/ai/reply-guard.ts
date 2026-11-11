@@ -137,6 +137,21 @@ export function stripPriceMentions(
   return { text: body ? `${body}\n\n${PRICE_PLACEHOLDER}` : PRICE_PLACEHOLDER, changed: true };
 }
 
+export const DP_PLACEHOLDER = "Nominal DP dan cara pembayarannya ada di invoice yang sudah kami kirim ya kak.";
+const DP_WORD = /\b(dp|uang muka(nya)?|down ?payment)\b/i;
+
+/**
+ * Setelah invoice terkirim (QUOTED / DP_REVIEW), bot merujuk invoice dan tidak menyebut nominal atau persen DP
+ * (spec 2026-11-11-kb-merge-design §5). Kalimat yang memuat kata DP dan angka uang/persen dibuang.
+ */
+export function stripDpMentions(text: string): { text: string; changed: boolean } {
+  const parts = text.split(/(?<=[.!?])(?=\s)|(?<=\n)/);
+  const kept = parts.filter((p) => !(DP_WORD.test(p) && (moneyAmounts(p).length > 0 || percentAmounts(p).length > 0)));
+  if (kept.length === parts.length) return { text, changed: false };
+  const body = kept.join("").trim();
+  return { text: body ? `${body}\n\n${DP_PLACEHOLDER}` : DP_PLACEHOLDER, changed: true };
+}
+
 // Batas teks WhatsApp 4096 karakter.
 export const WA_TEXT_LIMIT = 4000;
 

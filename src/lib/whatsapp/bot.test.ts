@@ -41,7 +41,7 @@ vi.mock("./spam-guard", async (orig) => ({
 
 import { WhatsAppApiError } from "./client-api";
 import { BOT_REPLIES, handleInboundMessage } from "./bot";
-import { PRICE_PLACEHOLDER } from "./ai/reply-guard";
+import { DP_PLACEHOLDER, PRICE_PLACEHOLDER } from "./ai/reply-guard";
 
 function givenMessage(type: string, body = "halo", mode = "BOT") {
   db.waMessage.findUniqueOrThrow.mockResolvedValue({
@@ -240,12 +240,21 @@ describe("handleInboundMessage", () => {
     expect(sentBodies()).toEqual([PRICE_PLACEHOLDER]);
   });
 
-  it("setelah QUOTED: angka dari STATE boleh disebut", async () => {
+  it("setelah QUOTED: harga dari STATE boleh disebut", async () => {
     givenMessage("text");
-    const reply = "Harga Rp2.500.000, DP Rp1.250.000 ya kak.";
+    const reply = "Harga order Rp2.500.000 sesuai invoice ya kak.";
     aiReply(reply, "QUOTED");
     await handleInboundMessage("msg_1");
     expect(sentBodies()).toEqual([reply]);
+  });
+
+  it.each(["QUOTED", "DP_REVIEW"])("status %s: nominal DP dari bot dihapus, merujuk invoice", async (status) => {
+    givenMessage("text");
+    aiReply("DP-nya Rp75.000 ya kak. Kirim bukti transfernya di sini ya.", status);
+    await handleInboundMessage("msg_1");
+    const [sent] = sentBodies();
+    expect(sent).not.toContain("75.000");
+    expect(sent).toContain(DP_PLACEHOLDER);
   });
 
   it("balasan berisi markup tool-call → tidak dikirim, fallback sibuk + HUMAN", async () => {

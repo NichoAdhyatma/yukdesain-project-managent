@@ -103,6 +103,7 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       dpAmount: true,
       dpPercent: true,
       deadline: true,
+      invoiceNumber: true,
       pricingRulesApplied: true,
       service: { select: { code: true, name: true } },
     },
@@ -112,14 +113,6 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
     orderBy: { createdAt: "asc" },
     select: { question: true, status: true, approved: true, note: true },
   });
-  const paymentAccounts =
-    intake?.status === "QUOTED"
-      ? await prisma.paymentAccount.findMany({
-          where: { isActive: true },
-          select: { name: true, accountNumber: true, accountHolder: true },
-          orderBy: { order: "asc" },
-        })
-      : [];
 
   const code = intake?.service?.code;
   const draft = (intake?.briefDraft as BriefDraft) ?? {};
@@ -141,10 +134,10 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
               dpAmount: intake.dpAmount,
               dpPercent: snapshotDpPercent(intake) ?? DP_PERCENT,
               deadline: intake.deadline,
+              invoiceNumber: intake.invoiceNumber,
             }
           : null,
     },
-    paymentAccounts,
     pricingRulesApplied: Array.isArray(intake?.pricingRulesApplied)
       ? (intake.pricingRulesApplied as { ruleId: string; name: string }[])
       : [],

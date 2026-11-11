@@ -12,16 +12,28 @@ const quoted = (dpPercent: number): StateInput => ({
     missingRequired: [],
     writableFields: [],
     imageTargets: [],
-    quote: { agreedPrice: 150000, dpAmount: 75000, dpPercent, deadline: new Date("2026-11-20T00:00:00Z") },
+    quote: { agreedPrice: 150000, dpAmount: 75000, dpPercent, deadline: new Date("2026-11-20T00:00:00Z"), invoiceNumber: "INV-WA-20261111-AB12" },
   },
-  paymentAccounts: [],
   pendingImageMessageIds: [],
 });
 
-describe("buildStateBlock: DP dari snapshot order (docs/STUDIO_OPERATIONS.md)", () => {
-  it("memakai persen order, bukan nilai Operasional saat ini", () => {
-    expect(buildStateBlock(quoted(50))).toContain("DP 50%: Rp75.000");
-    expect(buildStateBlock(quoted(30))).toContain("DP 30%: Rp75.000");
+describe("buildStateBlock QUOTED: invoice, tanpa DP dan rekening (spec 2026-11-11 §5)", () => {
+  it("memuat harga, deadline, dan nomor invoice; tidak memuat DP maupun rekening", () => {
+    const state = buildStateBlock(quoted(50));
+    expect(state).toContain("Rp150.000");
+    expect(state).toContain("20 November 2026");
+    expect(state).toContain("INV-WA-20261111-AB12");
+    expect(state).not.toContain("Rp75.000");
+    expect(state).not.toMatch(/\bDP\s*\d|DP \d+%|Rekening/i);
+  });
+});
+
+describe("prompt setelah ada harga: bot merujuk invoice", () => {
+  it("tidak menyebut DP, tidak mengirim rekening", () => {
+    const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+    expect(prompt).toContain("Invoice dan metode pembayaran sudah dikirim tim kami");
+    expect(prompt).toContain("Jangan menyebut nominal atau persen DP, jangan mengirim rekening");
+    expect(prompt).not.toContain("DP (persen dan nominal)");
   });
 });
 
@@ -31,7 +43,8 @@ describe("buildSystemPrompt: blok Kebijakan dari Operasional studio", () => {
   it("memuat DP, pelunasan, kuota dan teks revisi, serta jam kerja", () => {
     const prompt = buildSystemPrompt("YukDesain", null, ops, []);
     expect(prompt).toContain("# Kebijakan studio");
-    expect(prompt).toContain("DP 30%");
+    expect(prompt).toContain("Pengerjaan dimulai setelah DP dibayar sesuai invoice dari tim kami.");
+    expect(prompt).not.toContain("DP 30%");
     expect(prompt).toContain("Lunas sebelum file final dikirim.");
     expect(prompt).toContain("Revisi gratis 5x per project");
     expect(prompt).toContain(OPERATIONS_DEFAULTS.revisionNotice);

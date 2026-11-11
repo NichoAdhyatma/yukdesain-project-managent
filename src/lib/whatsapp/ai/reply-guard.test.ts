@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PRICE_PLACEHOLDER, WA_TEXT_LIMIT, clampReply, mentionsPriceOrDeadline, stripPriceMentions } from "./reply-guard";
+import { DP_PLACEHOLDER, stripDpMentions, PRICE_PLACEHOLDER, WA_TEXT_LIMIT, clampReply, mentionsPriceOrDeadline, stripPriceMentions } from "./reply-guard";
 
 describe("mentionsPriceOrDeadline", () => {
   it.each([
@@ -223,5 +223,22 @@ describe("stripPriceMentions: harga pasti, hasil kalkulator, estimasi (spec 2026
   it("layanan pindah ke mode mulai: harga tanpa kata mulai dihapus", () => {
     expect(guard("Banner Rp135.000 ya, Kak.", { fixedGroups: [], catalogGroups: [["135000"]] }).changed).toBe(true);
     expect(guard("Banner mulai Rp135.000 ya, Kak.", { fixedGroups: [], catalogGroups: [["135000"]] }).changed).toBe(false);
+  });
+});
+
+describe("stripDpMentions: setelah invoice, bot tidak menyebut DP (spec 2026-11-11 §5)", () => {
+  it("kalimat DP dengan nominal atau persen dihapus, kalimat lain tetap", () => {
+    const r = stripDpMentions("DP-nya Rp75.000 ya kak. Setelah transfer, kirim bukti transfernya di sini ya.");
+    expect(r.changed).toBe(true);
+    expect(r.text).not.toContain("75.000");
+    expect(r.text).toContain("kirim bukti transfernya");
+    expect(r.text).toContain(DP_PLACEHOLDER);
+    expect(stripDpMentions("Uang mukanya 50% dari total kak.").changed).toBe(true);
+    expect(stripDpMentions("Transfer DP 30 ribu dulu ya kak.").changed).toBe(true);
+  });
+
+  it("tanpa angka atau tanpa kata DP tidak diubah", () => {
+    expect(stripDpMentions("Silakan bayar DP sesuai invoice yang sudah kami kirim ya kak.").changed).toBe(false);
+    expect(stripDpMentions("Harga order Rp150.000 sesuai invoice ya kak.").changed).toBe(false);
   });
 });
