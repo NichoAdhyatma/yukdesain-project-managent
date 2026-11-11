@@ -3,8 +3,8 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getStudioSettings } from "@/lib/studio";
 import { maskPhone } from "../phone";
-import { getAiConfig, getAnthropicClient } from "./ai-config";
-import { modelRequestOptions } from "./model-profile";
+import { getAiTargets } from "./ai-config";
+import { createChatWithFallback } from "@/lib/ai/fallback";
 import { EMPTY_GUIDE, botGuideSchema, describeRuleValue, getDraftGuide, getPublishedGuide, type BotGuide } from "./bot-guide";
 import { createProposal, findPendingProposal, isNoChange } from "../owner/proposals";
 import { answerOwnerQuery } from "../owner/query-store";
@@ -198,8 +198,8 @@ export async function runOwnerAiTurn(p: {
   conversationId: string;
   repliedQueryId: string | null;
 }): Promise<OwnerTurnResult> {
-  const [config, studio, current, pending, queries, history] = await Promise.all([
-    getAiConfig(),
+  const [targets, studio, current, pending, queries, history] = await Promise.all([
+    getAiTargets(),
     getStudioSettings(),
     guideFor(p.owner),
     findPendingProposal(p.conversationId),
@@ -211,7 +211,6 @@ export async function runOwnerAiTurn(p: {
       select: { direction: true, body: true },
     }),
   ]);
-  const client = getAnthropicClient(config);
   const openIds = new Set(queries.map((q) => q.id));
 
   const messages: Anthropic.MessageParam[] = history
@@ -236,13 +235,11 @@ export async function runOwnerAiTurn(p: {
   const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [] };
 
   for (let round = 0; ; round++) {
-    const response = await client.messages.create({
-      model: config.model,
-      max_tokens: Math.max(config.maxTokens, 1500),
+    const { message: response } = await createChatWithFallback(targets, {
+      max_tokens: Math.max(targets.maxTokens, 1500),
       system,
       tools: OWNER_TOOLS,
       tool_choice: round < MAX_TOOL_ROUNDS ? { type: "auto" } : { type: "none" },
-      ...modelRequestOptions(config.model),
       messages,
     });
     if (response.stop_reason === "refusal") throw new Error("AI_REFUSAL");

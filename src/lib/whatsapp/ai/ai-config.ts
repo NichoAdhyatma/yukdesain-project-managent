@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { getAiEnv, getProviderEnv, type AiProvider } from "../env";
+import { aiModelIdSchema, resolveProvider } from "@/lib/ai/providers";
+import type { AiTarget } from "@/lib/ai/fallback";
 
 // Konfigurasi AI efektif: provider dan model dari Settings (DB) jika dipilih owner, selain itu
 // default dari env. API key selalu dari env dan tidak pernah disimpan di DB.
@@ -16,11 +18,8 @@ export type AiConfig = {
   maxTokens: number;
 };
 
-// Hanya model Claude (keputusan owner: AI = Claude, format Anthropic Messages API).
-export const aiModelSchema = z
-  .string()
-  .trim()
-  .regex(/^claude-[a-z0-9][a-z0-9.@-]{2,80}$/, 'Harus ID model Claude, mis. "claude-haiku-5-5"');
+// Semua model yang lulus tes (keputusan owner 2026-11-11, docs/AI_PROVIDERS.md); sebelumnya hanya claude-….
+export const aiModelSchema = aiModelIdSchema;
 
 export const aiProviderSchema = z.enum(["ANTHROPIC", "GATEWAY"]);
 
@@ -32,6 +31,12 @@ export class AiNotConfiguredError extends Error {
 }
 
 const settingsSelect = {
+  aiChatProviderKey: true,
+  aiChatModel: true,
+  aiProofProviderKey: true,
+  aiProofModel: true,
+  aiFallbackProviderKey: true,
+  aiFallbackModel: true,
   waAiProvider: true,
   waAiModel: true,
   waAiExtractionModel: true,
@@ -40,6 +45,12 @@ const settingsSelect = {
 } as const;
 
 export type AiSettingsRow = {
+  aiChatProviderKey?: string | null;
+  aiChatModel?: string | null;
+  aiProofProviderKey?: string | null;
+  aiProofModel?: string | null;
+  aiFallbackProviderKey?: string | null;
+  aiFallbackModel?: string | null;
   waAiProvider: string;
   waAiModel: string | null;
   waAiExtractionModel: string | null;
@@ -81,10 +92,33 @@ export async function getAiConfig(): Promise<AiConfig> {
   };
 }
 
-/** Provider aktif punya key: Uji bot / Uji koneksi bisa jalan. */
+/**
+ * Target AI per pemakaian (docs/AI_PROVIDERS.md). Kolom pemakaian kosong = jalur lama: provider env pilihan
+ * (waAiProvider) dengan model pilihan owner atau default env. Provider baru dibuka saat dipanggil (fallback.ts).
+ */
+export async function getAiTargets(): Promise<{ chat: AiTarget; proof: AiTarget; fallback: AiTarget | null; maxTokens: number }> {
+  const row = await getAiSettingsRow();
+  const legacyProvider = providerOf(row);
+  const env = getProviderEnv(legacyProvider);
+  const overrides = modelOverrides(row, legacyProvider);
+  const legacyKey = `env:${legacyProvider}`;
+  const pick = (key: string | null | undefined, model: string | null | undefined): AiTarget | null =>
+    key && model ? { providerKey: key, model } : null;
+  return {
+    chat: pick(row?.aiChatProviderKey, row?.aiChatModel) ?? { providerKey: legacyKey, model: overrides.model || env.defaultModel },
+    proof: pick(row?.aiProofProviderKey, row?.aiProofModel) ?? {
+      providerKey: legacyKey,
+      model: overrides.extractionModel || env.defaultExtractionModel,
+    },
+    fallback: pick(row?.aiFallbackProviderKey, row?.aiFallbackModel),
+    maxTokens: getAiEnv().WA_AI_MAX_TOKENS,
+  };
+}
+
+/** Provider Chat bisa dipakai (key ada / bisa dibuka): Uji bot bisa jalan. */
 export async function isAiReady(): Promise<boolean> {
   try {
-    await getAiConfig();
+    await resolveProvider((await getAiTargets()).chat.providerKey);
     return true;
   } catch {
     return false;

@@ -28,9 +28,19 @@ const aiConfig = vi.hoisted(() => ({
   maxTokens: 800,
 }));
 vi.mock("./ai-config", () => ({
-  getAiConfig: async () => aiConfig,
-  getAnthropicClient: () => ({ messages: { create } }),
+  getAiTargets: async () => ({
+    chat: { providerKey: "env:ANTHROPIC", model: aiConfig.model },
+    proof: { providerKey: "env:ANTHROPIC", model: aiConfig.extractionModel },
+    fallback: null,
+    maxTokens: aiConfig.maxTokens,
+  }),
 }));
+// Jalur adapter asli (createChatWithFallback + opsi Claude), dengan provider dan client tiruan.
+vi.mock("@/lib/ai/providers", async (orig) => ({
+  ...(await orig<typeof import("@/lib/ai/providers")>()),
+  resolveProvider: async () => ({ key: "env:ANTHROPIC", name: "Anthropic", format: "ANTHROPIC", baseUrl: aiConfig.baseUrl, builtIn: true, credentialVersion: "v", apiKey: "k" }),
+}));
+vi.mock("@/lib/ai/client", async (orig) => ({ ...(await orig<typeof import("@/lib/ai/client")>()), getAiClient: () => ({ create }) }));
 vi.mock("../media", () => media);
 vi.mock("./bot-guide", async (orig) => ({ ...(await orig<typeof import("./bot-guide")>()), ...guides }));
 vi.mock("./tools", async (orig) => ({ ...(await orig<typeof import("./tools")>()), ...tools }));

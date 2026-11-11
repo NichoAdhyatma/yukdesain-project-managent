@@ -6,6 +6,8 @@ const env = vi.hoisted(() => ({
   AI_GATEWAY_API_KEY: "gw-key" as string | undefined,
 }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
+const providers = vi.hoisted(() => ({ resolveProvider: vi.fn() }));
+vi.mock("@/lib/ai/providers", async (orig) => ({ ...(await orig<typeof import("@/lib/ai/providers")>()), ...providers }));
 vi.mock("../env", () => ({
   getAiEnv: () => ({ WA_AI_MAX_TOKENS: 800 }),
   getProviderEnv: (provider: "ANTHROPIC" | "GATEWAY") =>
@@ -14,7 +16,7 @@ vi.mock("../env", () => ({
       : { provider, label: "Anthropic (resmi)", baseUrl: "https://api.anthropic.com", apiKey: env.ANTHROPIC_API_KEY ?? null, defaultModel: "claude-haiku-5-5", defaultExtractionModel: "claude-sonnet-5-5" },
 }));
 
-import { AiNotConfiguredError, aiModelSchema, getAiConfig, getAnthropicClient, isAiReady } from "./ai-config";
+import { AiNotConfiguredError, aiModelSchema, getAiConfig, getAiTargets, getAnthropicClient, isAiReady } from "./ai-config";
 
 const row = (over: Record<string, unknown> = {}) => ({
   waAiProvider: "ANTHROPIC",
@@ -65,7 +67,10 @@ describe("getAiConfig", () => {
     env.AI_GATEWAY_API_KEY = undefined;
     db.studioSettings.findUnique.mockResolvedValue(row({ waAiProvider: "GATEWAY" }));
     await expect(getAiConfig()).rejects.toBeInstanceOf(AiNotConfiguredError);
+    // resolveProvider asli menolak provider env tanpa key.
+    providers.resolveProvider.mockRejectedValue(new Error("API key belum diisi"));
     expect(await isAiReady()).toBe(false);
+    expect(providers.resolveProvider).toHaveBeenCalledWith("env:GATEWAY");
   });
 });
 
@@ -87,7 +92,40 @@ describe("validasi model", () => {
     (m) => expect(aiModelSchema.safeParse(m).success).toBe(true),
   );
 
-  it.each(["gpt-5.5", "gemini-3.5-flash", "claude", "CLAUDE-HAIKU", "claude-haiku 5", ""])("model ditolak: %j", (m) => {
+  // Sejak 2026-11-11 semua model yang lulus tes boleh dipakai (docs/AI_PROVIDERS.md).
+  it.each(["gpt-5.5", "gemini-3.5-flash", "openai/gpt-4.1-mini", "llama3.1:8b"])("model non-Claude diterima: %j", (m) => {
+    expect(aiModelSchema.safeParse(m).success).toBe(true);
+  });
+
+  it.each(["claude-haiku 5", "", "-awal-strip"])("ID model tidak valid ditolak: %j", (m) => {
     expect(aiModelSchema.safeParse(m).success).toBe(false);
+  });
+});
+
+describe("getAiTargets / isAiReady (docs/AI_PROVIDERS.md)", () => {
+  it("kolom pemakaian kosong → jalur lama (provider env pilihan + model default)", async () => {
+    db.studioSettings.findUnique.mockResolvedValue(row({ waAiProvider: "GATEWAY" }));
+    const t = await getAiTargets();
+    expect(t.chat).toEqual({ providerKey: "env:GATEWAY", model: "claude-sonnet-4-6" });
+    expect(t.proof).toEqual({ providerKey: "env:GATEWAY", model: "claude-sonnet-4-6" });
+    expect(t.fallback).toBeNull();
+  });
+
+  it("pemakaian dipilih → provider portal", async () => {
+    db.studioSettings.findUnique.mockResolvedValue(
+      row({ aiChatProviderKey: "db:p1", aiChatModel: "openai/gpt-4.1-mini", aiFallbackProviderKey: "env:ANTHROPIC", aiFallbackModel: "claude-haiku-5-5" }),
+    );
+    const t = await getAiTargets();
+    expect(t.chat).toEqual({ providerKey: "db:p1", model: "openai/gpt-4.1-mini" });
+    expect(t.fallback).toEqual({ providerKey: "env:ANTHROPIC", model: "claude-haiku-5-5" });
+  });
+
+  it("isAiReady mengikuti provider Chat yang dipilih, bukan hanya key env lama", async () => {
+    env.ANTHROPIC_API_KEY = undefined;
+    db.studioSettings.findUnique.mockResolvedValue(row({ aiChatProviderKey: "db:p1", aiChatModel: "m" }));
+    providers.resolveProvider.mockResolvedValue({ key: "db:p1" });
+    expect(await isAiReady()).toBe(true);
+    providers.resolveProvider.mockRejectedValue(new Error("hilang"));
+    expect(await isAiReady()).toBe(false);
   });
 });

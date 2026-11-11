@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const create = vi.hoisted(() => vi.fn());
-vi.mock("./ai-config", () => ({ getAnthropicClient: () => ({ messages: { create } }) }));
+vi.mock("@/lib/ai/providers", async (orig) => ({
+  ...(await orig<typeof import("@/lib/ai/providers")>()),
+  resolveProvider: async () => ({ key: "env:ANTHROPIC", name: "Anthropic", format: "ANTHROPIC", baseUrl: "https://x", builtIn: true, credentialVersion: "v", apiKey: "k" }),
+}));
+vi.mock("@/lib/ai/client", async (orig) => ({ ...(await orig<typeof import("@/lib/ai/client")>()), getAiClient: () => ({ create }) }));
 
 import { computeProofFlags, extractPaymentProof, normalizeReference, type PaymentExtraction } from "./extract-payment-proof";
 
-const config = { provider: "ANTHROPIC" as const, label: "Anthropic", apiKey: "k", model: "m", extractionModel: "claude-sonnet-5-5", baseUrl: "https://x", maxTokens: 800 };
+const config = { providerKey: "env:ANTHROPIC", model: "claude-sonnet-5-5" };
 const image = { data: Buffer.from("IMG"), mimeType: "image/jpeg" as const };
 
 const good: PaymentExtraction = {
