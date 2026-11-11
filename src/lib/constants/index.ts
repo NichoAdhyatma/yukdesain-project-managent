@@ -215,6 +215,11 @@ export const SERVICE_BOT_LIMITS = {
   priceNoteMaxChars: 80,
   suitableForMaxChars: 200,
   botNotesMaxChars: 300,
+  packagesMax: 6,
+  packageNameMaxChars: 40,
+  packageNoteMaxChars: 120,
+  unitLabelMaxChars: 20,
+  estimateMaxChars: 40,
 } as const;
 
 export const WA_BOT_GUIDE_LIMITS = {

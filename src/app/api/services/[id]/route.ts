@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
-import { parseServiceBotFields } from "@/lib/services/service-dto";
+import { parseServiceBotFields, toServiceWriteData } from "@/lib/services/service-dto";
 
 export async function PUT(
   request: Request,
@@ -28,7 +28,7 @@ export async function PUT(
         ...(description !== undefined && { description }),
         ...(outputFormat !== undefined && { outputFormat }),
         ...(isActive !== undefined && { isActive }),
-        ...botFields.data,
+        ...toServiceWriteData(botFields.data),
       },
     });
 

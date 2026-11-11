@@ -67,6 +67,10 @@ describe("Katalog Layanan untuk bot (docs/SERVICES_CATALOG.md)", () => {
     priceNote: "termasuk 3 konsep",
     suitableFor: "brand modern",
     botNotes: "tanyakan logo dipakai di mana",
+    priceMode: "STARTING" as const,
+    packages: [],
+    unitPricing: null,
+    estimate: null,
   };
   const ops = OPERATIONS_DEFAULTS;
 

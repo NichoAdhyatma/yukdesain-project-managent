@@ -14,11 +14,15 @@ const svc: Service = {
   priceNote: "termasuk 3 konsep",
   suitableFor: "brand modern",
   botNotes: "jangan janji 1 hari",
+  priceMode: "FIXED",
+  packages: null,
+  unitPricing: null,
+  estimate: "3 hari",
   createdAt: new Date("2026-11-08T00:00:00Z"),
   updatedAt: new Date("2026-11-08T00:00:00Z"),
 };
 
-const BOT_KEYS = ["startingPrice", "priceNote", "suitableFor", "botNotes"];
+const BOT_KEYS = ["startingPrice", "priceNote", "suitableFor", "botNotes", "priceMode", "packages", "unitPricing", "estimate"];
 
 describe("toServiceDto (khusus owner, spec §10)", () => {
   it("bukan owner: tanpa kolom bot", () => {
@@ -65,3 +69,16 @@ describe("SERVICE_PUBLIC_SELECT: data layanan di payload project (desainer ikut 
     expect(files).toEqual([]);
   });
 });
+
+describe("parseServiceBotFields: paket dan unit (Bagian A)", () => {
+  it("harga mulai diisi otomatis dari paket termurah", () => {
+    const r = parseServiceBotFields({ packages: [{ name: "Newspaper", price: 85000 }, { name: "Photostrips 4R", price: 50000 }] });
+    expect(r.ok && r.data.startingPrice).toBe(50000);
+  });
+
+  it("harga mulai 0 hanya bila ada harga per unit", () => {
+    expect(parseServiceBotFields({ startingPrice: 0 }).ok).toBe(false);
+    expect(parseServiceBotFields({ startingPrice: 0, unitPricing: { unitLabel: "halaman", includedUnits: 0, extraUnitPrice: 90000, minUnits: 5 } }).ok).toBe(true);
+  });
+});
+

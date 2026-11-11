@@ -1,10 +1,10 @@
-import type { Service } from "@prisma/client";
+import { Prisma, type Service } from "@prisma/client";
 import { serviceBotFieldsSchema, type ServiceBotFields } from "@/lib/whatsapp/ai/service-catalog";
 
 // Kolom pengetahuan bot di Layanan khusus owner (docs/SERVICES_CATALOG.md): harga mulai dan catatan bot tidak
 // dikirim ke desainer.
 
-const BOT_KEYS = ["startingPrice", "priceNote", "suitableFor", "botNotes"] as const;
+const BOT_KEYS = ["startingPrice", "priceNote", "suitableFor", "botNotes", "priceMode", "packages", "unitPricing", "estimate"] as const;
 
 /**
  * Kolom layanan untuk payload project (dipakai juga oleh route yang dibuka desainer): tanpa kolom bot, supaya
@@ -34,7 +34,7 @@ export function parseServiceBotFields(
 ): { ok: true; data: Partial<ServiceBotFields> } | { ok: false; fields: Record<string, string> } {
   const source = typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
   const present = BOT_KEYS.filter((k) => k in source);
-  const parsed = serviceBotFieldsSchema.pick({ startingPrice: true, priceNote: true, suitableFor: true, botNotes: true }).safeParse(source);
+  const parsed = serviceBotFieldsSchema.safeParse(source);
   if (!parsed.success) {
     const fields: Record<string, string> = {};
     for (const issue of parsed.error.issues) {
@@ -45,5 +45,17 @@ export function parseServiceBotFields(
   }
   const data: Partial<ServiceBotFields> = {};
   for (const key of present) Object.assign(data, { [key]: parsed.data[key] });
+  // Paket: harga mulai = paket termurah (dipakai daftar layanan dan penjaga harga).
+  if (data.packages?.length) data.startingPrice = Math.min(...data.packages.map((p) => p.price));
   return { ok: true, data };
+}
+
+/** Data hasil parseServiceBotFields → bentuk tulis Prisma (Json null = Prisma.DbNull). */
+export function toServiceWriteData(data: Partial<ServiceBotFields>) {
+  const { packages, unitPricing, ...rest } = data;
+  return {
+    ...rest,
+    ...(packages !== undefined && { packages: packages ?? Prisma.DbNull }),
+    ...(unitPricing !== undefined && { unitPricing: unitPricing ?? Prisma.DbNull }),
+  };
 }
