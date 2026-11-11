@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
-import { parseServiceBotFields, toServiceDto } from "@/lib/services/service-dto";
+import { parseServiceBotFields, toServiceDto, toServiceWriteData } from "@/lib/services/service-dto";
 
 export async function GET() {
   try {
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
     const code = `SVC-${String(nextNum).padStart(2, "0")}`;
 
     const service = await prisma.service.create({
-      data: { code, name, description, outputFormat, ...botFields.data },
+      data: { code, name, description, outputFormat, ...toServiceWriteData(botFields.data) },
     });
 
     return NextResponse.json({ service }, { status: 201 });

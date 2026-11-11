@@ -95,6 +95,8 @@ describe("definisi tool", () => {
       "get_my_projects",
       "get_project_by_code",
       "get_studio_info",
+      // Hanya menghitung dari katalog (server), tidak menulis apa pun.
+      "calculate_price",
       // Menulis catatan untuk tim (pertanyaan ke owner, aturan harga yang dijanjikan), bukan harga/status.
       "ask_owner",
       "apply_pricing_rule",
@@ -117,6 +119,46 @@ describe("executeTool", () => {
     const r = await run("start_intake", { service_code: 42 });
     expect(r.isError).toBe(true);
     expect(db.service.findFirst).not.toHaveBeenCalled();
+  });
+});
+
+describe("calculate_price (spec §4.2)", () => {
+  const posterRow = {
+    code: "SVC-08",
+    name: "Poster Menu",
+    description: null,
+    outputFormat: null,
+    startingPrice: 135000,
+    priceNote: null,
+    suitableFor: null,
+    botNotes: null,
+    priceMode: "FIXED",
+    packages: null,
+    unitPricing: { unitLabel: "item", includedUnits: 35, extraUnitPrice: 5000, minUnits: null },
+    estimate: "3 hari",
+  };
+
+  it("menghitung dari katalog aktif dan mencatat total untuk penjaga harga", async () => {
+    db.service.findFirst.mockResolvedValue(posterRow);
+    const turn = { conversationId: "conv_1", calculatedTotals: [] as number[] };
+    const r = await executeTool("calculate_price", { service_code: "SVC-08", units: 40 }, turn);
+    expect(r.isError).toBe(false);
+    expect(JSON.parse(r.content)).toMatchObject({ total: 160000, priceMode: "FIXED" });
+    expect(db.service.findFirst.mock.calls[0][0].where).toEqual({ code: "SVC-08", isActive: true });
+    expect(turn.calculatedTotals).toEqual([160000]);
+  });
+
+  it("kesalahan kalkulator dikembalikan ke model, tidak dicatat", async () => {
+    db.service.findFirst.mockResolvedValue(posterRow);
+    const turn = { conversationId: "conv_1", calculatedTotals: [] as number[] };
+    const r = await executeTool("calculate_price", { service_code: "SVC-08", units: 2.5 }, turn);
+    expect(r.isError).toBe(true);
+    expect(turn.calculatedTotals).toEqual([]);
+  });
+
+  it("layanan tidak dikenal / tanpa konfigurasi brief ditolak", async () => {
+    db.service.findFirst.mockResolvedValue(null);
+    expect(await run("calculate_price", { service_code: "SVC-77" })).toMatchObject({ isError: true });
   });
 });
 

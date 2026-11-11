@@ -1,3 +1,4 @@
+import { suggestQuotePrice } from "@/lib/services/price-calculator";
 import { NextResponse } from "next/server";
 import type { Prisma, WaIntakeStatus } from "@prisma/client";
 import type { z } from "zod";
@@ -144,8 +145,8 @@ export const detailInclude = {
       },
     },
   },
-  // Harga mulai = patokan di panel harga (docs/SERVICES_CATALOG.md); isian harga tidak diisi otomatis.
-  service: { select: { id: true, code: true, name: true, startingPrice: true, priceNote: true } },
+  // Kolom katalog untuk patokan dan isian awal harga di panel harga (spec 2026-11-11-kb-merge-design §4.3).
+  service: { select: { id: true, code: true, name: true, startingPrice: true, priceNote: true, priceMode: true, packages: true, unitPricing: true } },
   project: { select: { id: true, projectNumber: true } },
   paymentProofs: {
     orderBy: { createdAt: "desc" },
@@ -211,7 +212,9 @@ export async function toDetail(row: DetailRow) {
   return {
     id: row.id,
     status: row.status as WaIntakeStatus,
-    service: row.service,
+    service: row.service
+      ? { id: row.service.id, code: row.service.code, name: row.service.name, startingPrice: row.service.startingPrice, priceNote: row.service.priceNote, priceMode: row.service.priceMode }
+      : null,
     clientName: row.clientName,
     clientEmail: row.clientEmail,
     brief: {
@@ -229,6 +232,8 @@ export async function toDetail(row: DetailRow) {
       dpPercent: snapshotDpPercent(row),
       deadline: row.deadline,
       quotedAt: row.quotedAt,
+      // Isian awal harga dari katalog + brief; admin tetap yang menyimpan.
+      suggested: suggestQuotePrice(row.service, draft),
     },
     dpPercentForNewQuote: (await getStudioOperations()).dpPercent,
     // Aturan harga owner yang dijanjikan bot: diterapkan admin saat mengisi harga (§6)

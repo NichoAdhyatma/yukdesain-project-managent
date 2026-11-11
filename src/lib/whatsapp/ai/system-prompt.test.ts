@@ -67,6 +67,10 @@ describe("Katalog Layanan untuk bot (docs/SERVICES_CATALOG.md)", () => {
     priceNote: "termasuk 3 konsep",
     suitableFor: "brand modern",
     botNotes: "tanyakan logo dipakai di mana",
+    priceMode: "STARTING" as const,
+    packages: [],
+    unitPricing: null,
+    estimate: null,
   };
   const ops = OPERATIONS_DEFAULTS;
 
@@ -83,8 +87,50 @@ describe("Katalog Layanan untuk bot (docs/SERVICES_CATALOG.md)", () => {
   it("system prompt memuat daftar Layanan dan aturan harga mulai", () => {
     const prompt = buildSystemPrompt("YukDesain", null, ops, [logo]);
     expect(prompt).toContain("# Layanan");
-    expect(prompt).toContain('Kamu boleh menyebut harga mulai sebuah layanan hanya persis seperti di daftar Layanan, selalu dengan kata "mulai"');
+    expect(prompt).toContain('Untuk layanan bertanda "mulai", selalu pakai kata "mulai"');
     expect(prompt).not.toContain("tanyakan logo dipakai di mana");
+  });
+
+  describe("Bagian A: harga pasti, paket, harga per unit, estimasi (spec §4.3)", () => {
+    const fixed = { ...logo, priceNote: null, suitableFor: null, priceMode: "FIXED" as const };
+
+    it("harga pasti tanpa kata mulai, dengan estimasi", () => {
+      expect(renderServiceCatalog([{ ...fixed, code: "SVC-04", name: "Banner UMKM", startingPrice: 135000, estimate: "3 hari" }])).toContain(
+        "- Banner UMKM (SVC-04): Rp135.000. Estimasi 3 hari",
+      );
+    });
+
+    it("paket ditulis satu per satu", () => {
+      const photobooth = {
+        ...fixed,
+        code: "SVC-09",
+        name: "Frame Photobooth",
+        startingPrice: 50000,
+        packages: [
+          { name: "Newspaper", price: 85000, note: null },
+          { name: "Photostrips 4R", price: 50000, note: null },
+        ],
+      };
+      expect(renderServiceCatalog([photobooth])).toContain("- Frame Photobooth (SVC-09): Newspaper Rp85.000; Photostrips 4R Rp50.000");
+    });
+
+    it("harga per unit menyebut jumlah termasuk dan tambahan per unit", () => {
+      const poster = { ...fixed, code: "SVC-08", name: "Poster Menu", startingPrice: 135000, unitPricing: { unitLabel: "item", includedUnits: 35, extraUnitPrice: 5000, minUnits: null } };
+      expect(renderServiceCatalog([poster])).toContain("- Poster Menu (SVC-08): Rp135.000 termasuk 35 item, tambahan Rp5.000 per item");
+      const buku = { ...fixed, code: "SVC-12", name: "Buku Menu", startingPrice: 0, unitPricing: { unitLabel: "halaman", includedUnits: 0, extraUnitPrice: 90000, minUnits: 5 } };
+      expect(renderServiceCatalog([buku])).toContain("- Buku Menu (SVC-12): Rp90.000 per halaman, minimal 5 halaman");
+    });
+
+    it("mode mulai tetap memakai kata mulai", () => {
+      expect(renderServiceCatalog([{ ...logo, priceNote: null, suitableFor: null }])).toContain("- Logo Minimalis (SVC-01): mulai Rp150.000");
+    });
+
+    it("aturan prompt: harga pasti dan hitungan hanya dari calculate_price", () => {
+      const prompt = buildSystemPrompt("YukDesain", null, ops, [fixed]);
+      expect(prompt).toContain('Untuk layanan berharga pasti, sebut angkanya langsung tanpa kata "mulai"');
+      expect(prompt).toContain("Hitungan harga (item, halaman, varian, pose, paket) hanya dari calculate_price");
+      expect(prompt).toContain("tanyakan angka pastinya dulu");
+    });
   });
 
   it("STATE memuat detail layanan order dan yang perlu disiapkan klien", () => {

@@ -27,6 +27,12 @@ export interface BriefResponses {
   sosmed_platform?: string;
   sosmed_vibe?: string;
 
+  // Pilihan paket dan jumlah untuk kalkulator harga (spec 2026-11-11-kb-merge-design §4.4)
+  package_choice?: string;
+  page_count?: number | string;
+  variant_count?: number | string;
+  pose_count?: number | string;
+
   // URLs
   brand_logo_url?: string;
 
@@ -105,6 +111,10 @@ export const SERVICE_CODES = {
   FRAME_PHOTBOOTH: "SVC-09",
   PAKET_SOSIAL_MEDIA: "SVC-10",
   PAKET_BRAND_KOPI: "SVC-11",
+  BUKU_MENU: "SVC-12",
+  SOSMED_AUTO_PILOT: "SVC-13",
+  SOSMED_DESIGN_PACKAGE: "SVC-14",
+  DUO_PACK: "SVC-15",
 } as const;
 
 // Service metadata
@@ -129,7 +139,7 @@ export const SERVICE_BRIEF_CONFIGS: ServiceBriefConfig[] = [
     code: SERVICE_CODES.LOGO_ILUSTRASI,
     name: "Logo Ilustrasi",
     requiredFields: ["brand_name", "business_desc", "colors"],
-    optionalFields: ["tagline", "reference_items_json"],
+    optionalFields: ["tagline", "pose_count", "reference_items_json"],
   },
   {
     code: SERVICE_CODES.POSTER_MENU,
@@ -173,13 +183,13 @@ export const SERVICE_BRIEF_CONFIGS: ServiceBriefConfig[] = [
     code: SERVICE_CODES.STICKER_LABEL,
     name: "Sticker Label",
     requiredFields: ["sticker_shape", "sticker_media", "sticker_text"],
-    optionalFields: ["reference_items_json"],
+    optionalFields: ["variant_count", "reference_items_json"],
   },
   {
     code: SERVICE_CODES.FRAME_PHOTBOOTH,
     name: "Frame Photobooth 4R / A3",
     requiredFields: ["photobooth_size", "vendor_name", "event_theme"],
-    optionalFields: ["vendor_logo_url", "reference_items_json"],
+    optionalFields: ["package_choice", "vendor_logo_url", "reference_items_json"],
   },
   {
     code: SERVICE_CODES.PAKET_SOSIAL_MEDIA,
@@ -194,5 +204,30 @@ export const SERVICE_BRIEF_CONFIGS: ServiceBriefConfig[] = [
     optionalFields: ["logos_json", "cart_sides_json", "cart_references_json", "kopi_menu_items_json", "reference_items_json"],
     hasRepeatableItems: true,
     repeatableItemType: "cart_sides",
+  },
+  // Layanan dari knowledge base (spec 2026-11-11-kb-merge-design §4.4); form web memakai isian generik.
+  {
+    code: SERVICE_CODES.BUKU_MENU,
+    name: "Buku Menu",
+    requiredFields: ["brand_name", "page_count", "size", "style"],
+    optionalFields: ["menu_items_json", "logos_json", "reference_items_json"],
+  },
+  {
+    code: SERVICE_CODES.SOSMED_AUTO_PILOT,
+    name: "Social Media Auto Pilot",
+    requiredFields: ["package_choice", "brand_name", "sosmed_platform", "sosmed_vibe"],
+    optionalFields: ["business_desc", "reference_items_json"],
+  },
+  {
+    code: SERVICE_CODES.SOSMED_DESIGN_PACKAGE,
+    name: "Social Media Design Package",
+    requiredFields: ["package_choice", "brand_name", "sosmed_platform", "sosmed_vibe"],
+    optionalFields: ["main_text", "reference_items_json"],
+  },
+  {
+    code: SERVICE_CODES.DUO_PACK,
+    name: "Paket Duo Pack (Sticker Label + Box)",
+    requiredFields: ["brand_name", "dimensions", "sticker_text", "mandatory_info"],
+    optionalFields: ["variant_count", "reference_items_json"],
   },
 ];

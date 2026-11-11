@@ -146,7 +146,7 @@ describe("runAiTurn", () => {
 
     const result = await runAiTurn(params);
 
-    expect(tools.executeTool).toHaveBeenCalledWith("start_intake", { service_code: "SVC-01" }, { conversationId: "conv_1", isSandbox: false });
+    expect(tools.executeTool).toHaveBeenCalledWith("start_intake", { service_code: "SVC-01" }, expect.objectContaining({ conversationId: "conv_1", isSandbox: false }));
     expect(result).toMatchObject({
       reply: "Siap kak, nama brandnya apa?",
       intakeStatus: "COLLECTING",
@@ -272,6 +272,46 @@ describe("runAiTurn", () => {
     expect(stateOf()).toContain("Catatan internal untuk kamu (jangan dikutip ke klien): tanya media pemakaian");
     expect(result.guardExtras.catalogGroups).toEqual([["150000", "termasuk 3 konsep"]]);
     expect(result.guardExtras.policyNumbers).toContain(OPERATIONS_DEFAULTS.revisionNotice);
+  });
+
+  it("penjaga: harga pasti, estimasi katalog, dan total calculate_price giliran itu", async () => {
+    givenHistory([inbound("m_last", "poster menu 40 item berapa?")]);
+    db.service.findMany.mockResolvedValue([
+      {
+        code: "SVC-08", name: "Poster Menu", description: null, outputFormat: null, startingPrice: 135000, priceNote: null, suitableFor: null, botNotes: null,
+        priceMode: "FIXED", packages: null, unitPricing: { unitLabel: "item", includedUnits: 35, extraUnitPrice: 5000, minUnits: null }, estimate: "3 hari",
+      },
+      {
+        code: "SVC-01", name: "Logo Minimalis", description: null, outputFormat: null, startingPrice: 150000, priceNote: null, suitableFor: null, botNotes: null,
+        priceMode: "STARTING", packages: null, unitPricing: null, estimate: "5-7 hari",
+      },
+    ]);
+    db.waIntake.findFirst.mockResolvedValue(null);
+    tools.findActiveIntake.mockResolvedValue(null);
+    tools.executeTool.mockImplementation(async (_name: string, _input: unknown, ctx: { calculatedTotals?: number[] }) => {
+      ctx.calculatedTotals?.push(160000);
+      return { content: JSON.stringify({ total: 160000, breakdown: "Rp135.000 (sampai 35 item) + 5 item × Rp5.000 = Rp160.000" }), isError: false };
+    });
+    create
+      .mockResolvedValueOnce({ stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu_1", name: "calculate_price", input: { service_code: "SVC-08", units: 40 } }] })
+      .mockResolvedValueOnce(textResponse("Totalnya Rp160.000 ya kak"));
+    const result = await runAiTurn(params);
+    expect(result.guardExtras.fixedGroups).toEqual([["135000", "5000"]]);
+    expect(result.guardExtras.calculatedTotals).toEqual(["160000"]);
+    expect(result.guardExtras.estimateGroups).toEqual([["3"], ["5", "7"]]);
+  });
+
+  it("penjaga: estimasi dibatasi ke layanan order aktif", async () => {
+    givenHistory([inbound("m_last", "berapa lama?")]);
+    db.service.findMany.mockResolvedValue([
+      { code: "SVC-08", name: "Poster Menu", description: null, outputFormat: null, startingPrice: 135000, priceNote: null, suitableFor: null, botNotes: null, priceMode: "FIXED", packages: null, unitPricing: null, estimate: "3 hari" },
+      { code: "SVC-01", name: "Logo Minimalis", description: null, outputFormat: null, startingPrice: 150000, priceNote: null, suitableFor: null, botNotes: null, priceMode: "STARTING", packages: null, unitPricing: null, estimate: "5-7 hari" },
+    ]);
+    db.waIntake.findFirst.mockResolvedValue(null);
+    tools.findActiveIntake.mockResolvedValue({ id: "in_1", status: "COLLECTING", briefDraft: {}, service: { id: "s", code: "SVC-01" } });
+    create.mockResolvedValue(textResponse("ok"));
+    const result = await runAiTurn(params);
+    expect(result.guardExtras.estimateGroups).toEqual([["5", "7"]]);
   });
 });
 

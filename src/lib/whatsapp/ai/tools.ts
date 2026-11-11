@@ -21,6 +21,8 @@ import {
   transitionIntake,
   updateBriefDraft,
 } from "../intake";
+import { calculatePrice } from "@/lib/services/price-calculator";
+import { BOT_SERVICE_SELECT, toBotService } from "./service-catalog";
 import { getBriefConfig, imageTargetFields, type BriefDraft, type BriefKey } from "./brief-schema";
 import { WA_OWNER } from "@/lib/constants";
 import { getDraftGuide, getPublishedGuide } from "./bot-guide";
@@ -35,6 +37,9 @@ export type ToolContext = {
   conversationId: string;
   // Uji bot: panduan draft, pertanyaan ke owner tidak dikirim ke WhatsApp
   isSandbox?: boolean;
+  // Total hasil calculate_price pada giliran ini: penjaga harga meloloskan angka ini (spec §4.3).
+  calculatedTotals?: number[];
+  calculatedBreakdowns?: string[];
 };
 
 export type ToolOutcome = { content: string; isError: boolean };
@@ -159,6 +164,21 @@ export const INTAKE_TOOLS: Anthropic.Tool[] = [
     input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
   {
+    name: "calculate_price",
+    description:
+      "Hitung harga SATU layanan dari katalog (server): paket yang dipilih dan/atau jumlah item, halaman, varian, atau pose. Satu-satunya sumber angka total untuk klien. Tidak untuk menjumlahkan beberapa layanan, diskon, atau express: itu lewat ask_owner/admin.",
+    input_schema: {
+      type: "object",
+      properties: {
+        service_code: { type: "string", description: "Kode layanan dari list_services, mis. SVC-08" },
+        package: { type: "string", description: "Nama paket persis dari list_services, bila layanan punya paket" },
+        units: { type: "integer", description: "Jumlah satuan (item/halaman/varian/pose) bila layanan dihitung per satuan" },
+      },
+      required: ["service_code"],
+      additionalProperties: false,
+    },
+  },
+  {
     name: "ask_owner",
     description:
       "Tanyakan ke owner studio apakah permintaan klien yang TIDAK ada di list_services bisa dikerjakan. Jawaban owner datang belakangan lewat STATE.",
@@ -222,6 +242,11 @@ const inputs = {
   get_my_projects: z.object({}),
   get_project_by_code: z.object({ project_code: z.string().trim().min(1).max(40) }),
   get_studio_info: z.object({}),
+  calculate_price: z.object({
+    service_code: z.string().trim().min(1),
+    package: z.string().trim().max(60).optional(),
+    units: z.number().optional(),
+  }),
   ask_owner: z.object({ request: z.string().trim().min(1).max(800) }),
   apply_pricing_rule: z.object({
     rule_id: z.string().trim().min(1).max(40),
@@ -258,7 +283,19 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     const services = await prisma.service.findMany({
       where: { isActive: true },
       // Tanpa botNotes: catatan internal hanya masuk STATE dengan label "jangan dikutip".
-      select: { code: true, name: true, description: true, outputFormat: true, startingPrice: true, priceNote: true, suitableFor: true },
+      select: {
+        code: true,
+        name: true,
+        description: true,
+        outputFormat: true,
+        startingPrice: true,
+        priceNote: true,
+        suitableFor: true,
+        priceMode: true,
+        packages: true,
+        unitPricing: true,
+        estimate: true,
+      },
       orderBy: { code: "asc" },
     });
     // Hanya layanan yang punya konfigurasi brief yang bisa dipesan lewat WA.
@@ -529,6 +566,20 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
   async get_studio_info() {
     const studio = await getStudioSettings();
     return ok({ name: studio.name, email: studio.email, phone: studio.phone, address: studio.address });
+  },
+
+  async calculate_price(ctx, input) {
+    const row = await prisma.service.findFirst({
+      where: { code: input.service_code, isActive: true },
+      select: BOT_SERVICE_SELECT,
+    });
+    if (!row || !getBriefConfig(row.code)) return fail("Kode layanan tidak dikenal");
+    const service = toBotService(row);
+    const result = calculatePrice(service, { packageName: input.package, units: input.units });
+    if (!result.ok) return fail(result.error);
+    ctx.calculatedTotals?.push(result.total);
+    ctx.calculatedBreakdowns?.push(result.breakdown);
+    return ok({ total: result.total, breakdown: result.breakdown, priceMode: service.priceMode });
   },
 
   async ask_owner(ctx, input) {

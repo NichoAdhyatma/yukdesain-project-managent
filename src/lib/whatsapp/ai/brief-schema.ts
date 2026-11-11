@@ -35,6 +35,8 @@ const cartSide = z.object({
 });
 
 const list = <T extends z.ZodType>(item: T) => z.array(item).max(50);
+// Jumlah halaman/varian/pose: angka atau teks angka ("6") dari klien, disimpan sebagai bilangan bulat.
+const count = z.coerce.number().int().min(1).max(999);
 
 export const BRIEF_FIELD_SCHEMAS: Record<BriefKey, z.ZodType> = {
   brand_name: text,
@@ -56,6 +58,10 @@ export const BRIEF_FIELD_SCHEMAS: Record<BriefKey, z.ZodType> = {
   vendor_logo_url: httpsUrl,
   sosmed_platform: text,
   sosmed_vibe: text,
+  package_choice: z.string().trim().min(1).max(60),
+  page_count: count,
+  variant_count: count,
+  pose_count: count,
   brand_logo_url: httpsUrl,
   menu_items_json: list(menuItem),
   box_references_json: list(boxReference),

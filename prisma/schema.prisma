@@ -219,6 +219,11 @@ model Service {
   priceNote     String? // catatan singkat harga, dikutip bot bersama harga mulai
   suitableFor   String? // "cocok untuk", dipakai bot saat klien bingung memilih
   botNotes      String? // catatan internal untuk bot, tidak dikutip ke klien
+  // Knowledge base (docs/superpowers/specs/2026-11-11-kb-merge-design.md §4.1)
+  priceMode     String  @default("STARTING") // FIXED = harga pasti (tanpa "mulai") | STARTING = harga mulai
+  packages      Json? // [{ name, price, note }] maks 6; startingPrice = paket termurah
+  unitPricing   Json? // { unitLabel, includedUnits, extraUnitPrice, minUnits }
+  estimate      String? // estimasi untuk bot, mis. "3 hari"
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

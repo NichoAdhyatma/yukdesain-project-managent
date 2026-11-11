@@ -3,6 +3,7 @@
 import { SERVICE_BRIEF_CONFIGS } from "./types";
 import { ImageViewerGroup, ViewableImage } from "@/components/ui/image-viewer";
 import { FileText } from "lucide-react";
+import { BRIEF_FIELD_LABELS } from "./field-labels";
 
 type BriefResponseItem = { questionId: string; question: string; answer: string };
 
@@ -214,26 +215,7 @@ function LogoGalleryField({ label, data }: { label: string; data: unknown }) {
 }
 
 // Map questionId to human-readable label
-const FIELD_LABELS: Record<string, string> = {
-  brand_name: "Nama Brand / Usaha",
-  tagline: "Tagline",
-  business_desc: "Deskripsi Bisnis",
-  colors: "Warna yang Diinginkan",
-  main_text: "Teks Utama",
-  size: "Ukuran",
-  style: "Gaya / Style",
-  dimensions: "Dimensi",
-  mandatory_info: "Informasi Wajib",
-  color_concept: "Konsep Warna",
-  sticker_shape: "Bentuk Sticker",
-  sticker_media: "Media Cetak",
-  sticker_text: "Teks Sticker",
-  photobooth_size: "Ukuran Fotobooth",
-  vendor_name: "Nama Vendor / Tempat",
-  event_theme: "Tema Acara",
-  sosmed_platform: "Platform Social Media",
-  sosmed_vibe: "Vibe / Gaya",
-};
+const FIELD_LABELS = BRIEF_FIELD_LABELS;
 
 function getLabel(questionId: string): string {
   return FIELD_LABELS[questionId] || questionId.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());

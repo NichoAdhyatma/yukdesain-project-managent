@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { EMPTY_SERVICE_FORM, ServiceForm, type ServiceFormValues } from "@/components/services/ServiceForm";
+import { EMPTY_UNIT } from "@/components/services/ServicePricingFields";
 import { SERVICE_BOT_LIMITS } from "@/lib/constants";
 import { formatRupiah } from "@/lib/whatsapp/format";
 import { Plus, Pencil, Trash2, Check, X, Loader2, AlertTriangle } from "lucide-react";
@@ -22,6 +23,10 @@ type Service = {
   priceNote: string | null;
   suitableFor: string | null;
   botNotes: string | null;
+  priceMode: "FIXED" | "STARTING";
+  packages: { name: string; price: number; note: string | null }[] | null;
+  unitPricing: { unitLabel: string; includedUnits: number; extraUnitPrice: number; minUnits: number | null } | null;
+  estimate: string | null;
 };
 
 /** Error dari API dengan pesan per field (validasi kolom bot). */
@@ -35,11 +40,23 @@ class ServiceSaveError extends Error {
 }
 
 function toPayload(values: ServiceFormValues) {
+  const { unit } = values;
+  // Baris paket kosong (belum diisi apa pun) diabaikan; baris setengah terisi dikirim supaya server menolaknya.
+  const packages = values.packages
+    .filter((p) => p.name.trim() || p.price !== null || p.note.trim())
+    .map((p) => ({ name: p.name, price: p.price ?? 0, note: p.note }));
   return {
     name: values.name.trim(),
     description: values.description.trim(),
     outputFormat: values.outputFormat.trim(),
-    startingPrice: values.startingPrice,
+    priceMode: values.priceMode,
+    // Harga per unit tanpa harga dasar (mis. Buku Menu per halaman) disimpan sebagai Rp0.
+    startingPrice: values.startingPrice ?? (unit.enabled ? 0 : null),
+    packages: packages.length ? packages : null,
+    unitPricing: unit.enabled
+      ? { unitLabel: unit.unitLabel, includedUnits: unit.includedUnits ?? 0, extraUnitPrice: unit.extraUnitPrice ?? 0, minUnits: unit.minUnits }
+      : null,
+    estimate: values.estimate,
     priceNote: values.priceNote,
     suitableFor: values.suitableFor,
     botNotes: values.botNotes,
@@ -47,11 +64,13 @@ function toPayload(values: ServiceFormValues) {
 }
 
 // Urutan isian di form; fokus pindah ke isian pertama yang salah (sama dengan form Operasional studio).
-const FIELD_ORDER = ["name", "startingPrice", "priceNote", "suitableFor", "botNotes"];
+const FIELD_ORDER = ["name", "priceMode", "startingPrice", "packages", "unitPricing", "estimate", "priceNote", "suitableFor", "botNotes"];
+// Isian yang difokuskan untuk error per kelompok.
+const FOCUS_TARGET: Record<string, string> = { priceMode: "priceMode-FIXED", packages: "package-0-name", unitPricing: "unitLabel" };
 
 function focusFirstInvalid(fields: Record<string, string>) {
   const first = FIELD_ORDER.find((k) => k in fields);
-  if (first) requestAnimationFrame(() => document.getElementById(`service-${first}`)?.focus());
+  if (first) requestAnimationFrame(() => document.getElementById(`service-${FOCUS_TARGET[first] ?? first}`)?.focus());
 }
 
 function toFormValues(service: Service): ServiceFormValues {
@@ -59,7 +78,11 @@ function toFormValues(service: Service): ServiceFormValues {
     name: service.name,
     description: service.description ?? "",
     outputFormat: service.outputFormat ?? "",
-    startingPrice: service.startingPrice,
+    priceMode: service.priceMode,
+    startingPrice: service.startingPrice || null,
+    packages: (service.packages ?? []).map((p) => ({ name: p.name, price: p.price, note: p.note ?? "" })),
+    unit: service.unitPricing ? { enabled: true, ...service.unitPricing } : EMPTY_UNIT,
+    estimate: service.estimate ?? "",
     priceNote: service.priceNote ?? "",
     suitableFor: service.suitableFor ?? "",
     botNotes: service.botNotes ?? "",
@@ -128,7 +151,8 @@ export default function ServicesPage() {
   const tooLong =
     formValues.priceNote.length > SERVICE_BOT_LIMITS.priceNoteMaxChars ||
     formValues.suitableFor.length > SERVICE_BOT_LIMITS.suitableForMaxChars ||
-    formValues.botNotes.length > SERVICE_BOT_LIMITS.botNotesMaxChars;
+    formValues.botNotes.length > SERVICE_BOT_LIMITS.botNotesMaxChars ||
+    formValues.estimate.length > SERVICE_BOT_LIMITS.estimateMaxChars;
 
   const handleSave = () => {
     if (!formTarget || !formValues.name.trim()) {
@@ -255,16 +279,7 @@ export default function ServicesPage() {
                   <div className="text-sm text-muted-foreground">
                     <span className="font-medium">Output:</span> {service.outputFormat || "-"}
                   </div>
-                  <div className="text-sm">
-                    {service.startingPrice ? (
-                      <p>
-                        <span className="font-medium tabular-nums">Mulai {formatRupiah(service.startingPrice)}</span>
-                        {service.priceNote && <span className="text-muted-foreground"> · {service.priceNote}</span>}
-                      </p>
-                    ) : (
-                      <p className="text-muted-foreground">Harga mulai belum diisi</p>
-                    )}
-                  </div>
+                  <ServicePriceSummary service={service} />
                   <div className="flex flex-wrap gap-2 pt-2">
                     <Button size="sm" variant="ghost" className="max-md:h-11" onClick={() => openForm(service)}>
                       <Pencil className="h-4 w-4 mr-1" aria-hidden="true" /> Edit
@@ -353,6 +368,56 @@ export default function ServicesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/** Ringkasan harga di kartu layanan: mode, paket / per unit, estimasi. */
+function ServicePriceSummary({ service }: { service: Service }) {
+  const mulai = service.priceMode === "STARTING" ? "Mulai " : "";
+  const unit = service.unitPricing;
+  const packages = service.packages ?? [];
+  const hasPrice = packages.length > 0 || !!service.startingPrice || !!unit;
+  return (
+    <div className="space-y-1 text-sm">
+      {!hasPrice ? (
+        <p className="text-muted-foreground">Harga belum diisi</p>
+      ) : (
+        <>
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <Badge variant="outline" className="font-normal">
+              {service.priceMode === "FIXED" ? "Harga pasti" : "Mulai dari"}
+            </Badge>
+            {packages.length === 0 && service.startingPrice ? (
+              <span className="font-medium tabular-nums">
+                {mulai}
+                {formatRupiah(service.startingPrice)}
+              </span>
+            ) : null}
+            {service.priceNote && <span className="text-muted-foreground">{service.priceNote}</span>}
+          </p>
+          {packages.length > 0 && (
+            <ul className="space-y-0.5">
+              {packages.map((p) => (
+                <li key={p.name} className="flex justify-between gap-2">
+                  <span className="min-w-0 truncate">{p.name}</span>
+                  <span className="shrink-0 tabular-nums">
+                    {mulai}
+                    {formatRupiah(p.price)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {unit && (
+            <p className="text-muted-foreground">
+              {unit.includedUnits > 0 && `Termasuk ${unit.includedUnits} ${unit.unitLabel}, `}+{formatRupiah(unit.extraUnitPrice)} per {unit.unitLabel}
+              {unit.minUnits ? `, minimal ${unit.minUnits}` : ""}
+            </p>
+          )}
+        </>
+      )}
+      {service.estimate && <p className="text-muted-foreground">Estimasi {service.estimate}</p>}
     </div>
   );
 }

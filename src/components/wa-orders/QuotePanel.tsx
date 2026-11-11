@@ -15,7 +15,9 @@ import { useIntakeAction } from "./use-intake-action";
 
 export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
   const requote = intake.status === "QUOTED";
-  const [price, setPrice] = useState<number>(intake.quote.agreedPrice ?? 0);
+  // Harga belum pernah disimpan: isi awal dari katalog Layanan (paket/unit di brief). Admin tetap bisa mengubah.
+  const suggested = intake.quote.agreedPrice === null ? intake.quote.suggested : null;
+  const [price, setPrice] = useState<number>(intake.quote.agreedPrice ?? suggested?.total ?? 0);
   const [deadline, setDeadline] = useState<Date | undefined>(
     intake.quote.deadline ? new Date(intake.quote.deadline) : undefined,
   );
@@ -26,7 +28,9 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
   // Hanya pratinjau; DP final dihitung server dengan persen Operasional yang sama.
   const dpPercent = intake.dpPercentForNewQuote;
   const dpPreview = price > 0 ? Math.ceil((price * dpPercent) / 100) : null;
-  const startingPrice = intake.service?.startingPrice ?? null;
+  const startingPrice = intake.service?.startingPrice || null;
+  const mulai = intake.service?.priceMode === "STARTING" ? "mulai " : "";
+  const helpIds = [suggested && "quote-price-katalog", startingPrice && "quote-price-patokan"].filter(Boolean).join(" ") || undefined;
 
   return (
     <Card>
@@ -57,12 +61,18 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
                 value={price}
                 onChange={setPrice}
                 placeholder="Rp0"
-                aria-describedby={startingPrice ? "quote-price-patokan" : undefined}
+                aria-describedby={helpIds}
               />
+              {suggested ? (
+                <p id="quote-price-katalog" className="text-xs text-muted-foreground">
+                  Terisi dari katalog: <span className="tabular-nums">{suggested.breakdown}</span>. Periksa lagi sebelum menyimpan.
+                </p>
+              ) : null}
               {/* Patokan dari menu Layanan (docs/SERVICES_CATALOG.md): bot mungkin sudah menyebutnya ke klien. */}
               {startingPrice ? (
                 <p id="quote-price-patokan" className="text-xs text-muted-foreground">
-                  Patokan layanan: mulai <span className="tabular-nums">{formatRupiah(startingPrice)}</span>
+                  Patokan layanan: {mulai}
+                  <span className="tabular-nums">{formatRupiah(startingPrice)}</span>
                   {intake.service?.priceNote ? ` (${intake.service.priceNote})` : ""}
                 </p>
               ) : null}
