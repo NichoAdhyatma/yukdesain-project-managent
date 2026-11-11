@@ -51,9 +51,14 @@ export type WaIntakeListResponse = {
   totalPages: number;
 };
 
-export type DeliveryResult =
+export type DeliveryResult = (
   | { ok: true; via: "text" | "template"; messageId: string }
-  | { ok: false; via: "text" | "template" | null; errorCode: string; messageId: string | null };
+  | { ok: false; via: "text" | "template" | null; errorCode: string; messageId: string | null }
+) & {
+  /** Hanya pada invoice: gambar QRIS yang terkirim / gagal */
+  qrisSent?: number;
+  qrisFailed?: number;
+};
 
 export type PaymentExtraction = {
   isTransferReceipt: boolean;
@@ -91,6 +96,8 @@ export type WaIntakeDetail = {
   };
   /** DP % dari Operasional studio untuk penawaran yang akan disimpan */
   dpPercentForNewQuote: number;
+  /** Jumlah metode bayar aktif di Pengaturan (rekening + e-wallet) yang ikut di invoice */
+  activePaymentMethods: number;
   pricingRulesApplied: PricingRuleApplied[];
   ownerQueries: OwnerQuery[];
   cancelReason: string | null;

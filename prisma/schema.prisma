@@ -712,6 +712,9 @@ model WaIntake {
   agreedPrice Int?
   dpAmount    Int? // = ceil(agreedPrice * dpPercent / 100), dihitung server
   dpPercent   Int? // snapshot DP % dari Operasional saat harga disimpan; null = order lama (50)
+  // Nomor invoice WA (INV-WA-YYYYMMDD-XXXX), dibuat saat harga pertama disimpan; revisi harga memakai nomor yang sama
+  // dan dipakai ulang sebagai Invoice.invoiceNumber project (spec 2026-11-11-kb-merge-design §5).
+  invoiceNumber String?
   deadline    DateTime?
   quotedById  String?
   quotedAt    DateTime?

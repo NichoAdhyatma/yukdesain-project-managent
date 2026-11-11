@@ -113,6 +113,7 @@ export async function approveIntake(input: ApproveInput): Promise<ApproveResult>
           agreedPrice: true,
           deadline: true,
           briefDraft: true,
+          invoiceNumber: true,
           conversation: { select: { id: true, waId: true, clientId: true, profileName: true } },
         },
       });
@@ -155,6 +156,8 @@ export async function approveIntake(input: ApproveInput): Promise<ApproveResult>
         paidAmount: input.verifiedAmount,
         deadline: intake.deadline,
         notes: "Order via WhatsApp",
+        // Nomor invoice yang sudah diterima klien di WA (spec 2026-11-11 §5)
+        invoiceNumber: intake.invoiceNumber,
         // Brief sudah ada → langsung siap dikerjakan (sama dengan setelah brief submit di alur lama)
         status: "BELUM_DIKERJAKAN",
         // Keputusan owner: dicatat sesuai nominal diterima; lunas → PAID

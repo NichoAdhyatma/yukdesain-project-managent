@@ -5,7 +5,7 @@ const db = vi.hoisted(() => ({
   waMessage: { create: vi.fn() },
   studioSettings: { findUnique: vi.fn(async () => null) },
 }));
-const api = vi.hoisted(() => ({ sendText: vi.fn(), sendTemplate: vi.fn() }));
+const api = vi.hoisted(() => ({ sendText: vi.fn(), sendTemplate: vi.fn(), sendImage: vi.fn() }));
 const env = vi.hoisted(() => ({ getWhatsAppEnv: vi.fn(), isWhatsAppConfigured: vi.fn(), isFonnteConfigured: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
@@ -16,10 +16,13 @@ import { WhatsAppApiError } from "./client-api";
 import {
   cancelledMessage,
   dpRejectedMessage,
+  invoiceMessage,
+  invoiceNumberFor,
   isWithinServiceWindow,
   offerMessage,
   sendManualReply,
   sendSystemText,
+  sendInvoiceToClient,
   sendToClient,
   templateParam,
 } from "./outbound";
@@ -231,5 +234,91 @@ describe("sendSystemText (kabar otomatis ke klien, docs/CLIENT_NOTIFICATIONS.md)
     await expect(sendSystemText("conv_1", "Halo kak")).resolves.toEqual({ ok: true, via: "text", messageId: "out_1" });
     expect(api.sendText).toHaveBeenCalledWith("6281234567890", "Halo kak");
     expect(db.waMessage.create.mock.calls[0][0].data).toMatchObject({ direction: "OUTBOUND", type: "text", body: "Halo kak", sentByBot: false, deliveryStatus: "sent" });
+  });
+});
+
+describe("invoice (spec 2026-11-11 §5, Plan B Task 2)", () => {
+  const base = {
+    clientName: "Sari",
+    serviceName: "Poster Menu",
+    invoiceNumber: "INV-WA-20261111-AB12",
+    agreedPrice: 160000,
+    dpAmount: 80000,
+    dpPercent: 50,
+    deadline: new Date("2026-11-15T00:00:00Z"),
+    lines: ["Rp135.000 (sampai 35 item) + 5 item × Rp5.000 = Rp160.000"],
+    accounts: [
+      { name: "BCA", accountNumber: "1234567890", accountHolder: "YukDesain Studio" },
+      { name: "DANA", accountNumber: "08123", accountHolder: "Rizal" },
+    ],
+  };
+
+  it("nomor invoice INV-WA-YYYYMMDD-XXXX (tanggal WIB)", () => {
+    expect(invoiceNumberFor(new Date("2026-11-11T18:30:00Z"))).toMatch(/^INV-WA-20261112-[A-Z0-9]{4}$/);
+  });
+
+  it("isi: nomor, rincian, total, tagihan DP, sisa pelunasan, deadline, semua metode bayar, bukti transfer", () => {
+    const m = invoiceMessage(base);
+    expect(m.text).toContain("Invoice INV-WA-20261111-AB12");
+    expect(m.text).toContain("Rp135.000 (sampai 35 item) + 5 item × Rp5.000 = Rp160.000");
+    expect(m.text).toContain("Total: *Rp160.000*");
+    expect(m.text).toContain("Tagihan DP 50%: *Rp80.000*");
+    expect(m.text).toContain("Sisa pelunasan: *Rp80.000*");
+    expect(m.text).toContain("Deadline: 15 November 2026");
+    expect(m.text).toContain("• BCA 1234567890 a.n. YukDesain Studio");
+    expect(m.text).toContain("• DANA 08123 a.n. Rizal");
+    expect(m.text).toContain("bukti transfer");
+    expect(m.text).not.toContain("—");
+    // Pembuka di luar 24 jam tetap template penawaran yang sudah disetujui Meta.
+    expect(m.template).toEqual({ name: "yd_penawaran_order", params: ["Sari", "Poster Menu", "Rp160.000", "Rp80.000", "15 November 2026"] });
+  });
+
+  it("tanpa metode bayar aktif → kalimat pengganti", () => {
+    expect(invoiceMessage({ ...base, accounts: [] }).text).toContain("Metode pembayaran akan dikirim tim kami");
+  });
+
+  describe("sendInvoiceToClient", () => {
+    const conversation = (hoursAgo: number) =>
+      db.waConversation.findUniqueOrThrow.mockResolvedValue({ id: "conv_1", waId: "6281234567890", lastInboundAt: new Date(Date.now() - hoursAgo * HOUR) });
+
+    it("invoice lalu setiap QRIS https sebagai gambar; URL kosong / http dilewati", async () => {
+      conversation(2);
+      api.sendImage.mockResolvedValue("wamid.IMG");
+      const r = await sendInvoiceToClient("conv_1", invoiceMessage(base), [
+        { name: "BCA", url: "https://cdn.example.com/qris-bca.png" },
+        { name: "DANA", url: "http://cdn.example.com/qris-dana.png" },
+        { name: "OVO", url: "" },
+      ]);
+      expect(r).toMatchObject({ ok: true, qrisSent: 1, qrisFailed: 0 });
+      expect(api.sendImage).toHaveBeenCalledTimes(1);
+      expect(api.sendImage).toHaveBeenCalledWith("6281234567890", "https://cdn.example.com/qris-bca.png", "QRIS BCA");
+    });
+
+    it("gambar gagal → URL dikirim sebagai teks, dicatat tanpa nomor lengkap", async () => {
+      conversation(2);
+      api.sendImage.mockRejectedValue(new WhatsAppApiError(400, "131053"));
+      const r = await sendInvoiceToClient("conv_1", invoiceMessage(base), [{ name: "BCA", url: "https://cdn.example.com/qris-bca.png" }]);
+      expect(r).toMatchObject({ ok: true, qrisSent: 0, qrisFailed: 1 });
+      expect(api.sendText).toHaveBeenLastCalledWith("6281234567890", "QRIS BCA: https://cdn.example.com/qris-bca.png");
+      const logged = vi.mocked(console.error).mock.calls.flat().join(" ");
+      expect(logged).toContain("[whatsapp] gambar QRIS gagal");
+      expect(logged).not.toContain("6281234567890");
+    });
+
+    it("Meta di luar 24 jam: invoice lewat template, QRIS tidak dikirim (gagal tercatat)", async () => {
+      conversation(30);
+      const r = await sendInvoiceToClient("conv_1", invoiceMessage(base), [{ name: "BCA", url: "https://cdn.example.com/qris-bca.png" }]);
+      expect(r).toMatchObject({ ok: true, via: "template", qrisSent: 0, qrisFailed: 1 });
+      expect(api.sendImage).not.toHaveBeenCalled();
+      expect(api.sendText).not.toHaveBeenCalled();
+    });
+
+    it("invoice gagal terkirim → QRIS tidak dikirim", async () => {
+      conversation(2);
+      api.sendText.mockRejectedValue(new WhatsAppApiError(500, null));
+      const r = await sendInvoiceToClient("conv_1", invoiceMessage(base), [{ name: "BCA", url: "https://cdn.example.com/qris-bca.png" }]);
+      expect(r).toMatchObject({ ok: false, qrisSent: 0, qrisFailed: 1 });
+      expect(api.sendImage).not.toHaveBeenCalled();
+    });
   });
 });

@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/db";
 import { WA_TEMPLATES } from "@/lib/constants";
+import { randomInt } from "node:crypto";
 import {
   deliveryErrorCode,
   getChannel,
   isChannelConfigured,
+  sendImageOnChannel,
   sendTemplateOnChannel,
   sendTextOnChannel,
   usesServiceWindow,
@@ -45,6 +47,70 @@ export function templateParam(value: string, maxLength = 500): string {
 }
 
 const greet = (name: string | null) => (name ? `Halo kak ${name}` : "Halo kak");
+
+const INVOICE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+/** Nomor invoice WA: INV-WA-YYYYMMDD-XXXX, tanggal WIB, XXXX 4 karakter acak [A-Z0-9]. */
+export function invoiceNumberFor(now: Date): string {
+  const date = now.toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" }).replaceAll("-", "");
+  const code = Array.from({ length: 4 }, () => INVOICE_ALPHABET[randomInt(INVOICE_ALPHABET.length)]).join("");
+  return `INV-WA-${date}-${code}`;
+}
+
+/**
+ * Invoice setelah admin menyimpan harga (spec 2026-11-11-kb-merge-design §5): tagihan DP dari snapshot order, sisa
+ * pelunasan, deadline, dan semua metode bayar aktif. QRIS dikirim terpisah sebagai gambar (sendInvoiceToClient).
+ * Di luar 24 jam (Meta) pembukanya tetap template penawaran yang sudah disetujui.
+ */
+export function invoiceMessage(p: {
+  clientName: string | null;
+  serviceName: string;
+  invoiceNumber: string;
+  agreedPrice: number;
+  dpAmount: number;
+  dpPercent: number;
+  deadline: Date;
+  /** Rincian harga (paket/unit dari kalkulator), boleh kosong */
+  lines: string[];
+  accounts: { name: string; accountNumber: string; accountHolder: string }[];
+  /** Ada QRIS yang dikirim sebagai gambar setelah pesan ini */
+  hasQris?: boolean;
+}): OutboundMessage {
+  const methods = p.accounts.length
+    ? [
+        "Metode pembayaran:",
+        ...p.accounts.map((a) => `• ${a.name} ${a.accountNumber} a.n. ${a.accountHolder}`),
+        ...(p.hasQris ? ["QRIS kami kirim sebagai gambar setelah pesan ini."] : []),
+      ].join("\n")
+    : "Metode pembayaran akan dikirim tim kami.";
+  return {
+    kind: "offer",
+    templateMatchesText: p.dpPercent === OFFER_TEMPLATE_DP_PERCENT,
+    text: [
+      `${greet(p.clientName)}, berikut invoice order *${p.serviceName}*:`,
+      `Invoice ${p.invoiceNumber}`,
+      ...p.lines.map((l) => `• Rincian: ${l}`),
+      `• Total: *${formatRupiah(p.agreedPrice)}*`,
+      `• Tagihan DP ${p.dpPercent}%: *${formatRupiah(p.dpAmount)}*`,
+      `• Sisa pelunasan: *${formatRupiah(Math.max(0, p.agreedPrice - p.dpAmount))}*`,
+      `• Deadline: ${formatTanggal(p.deadline)}`,
+      "",
+      methods,
+      "",
+      "Setelah transfer DP, kirim foto atau screenshot bukti transfernya di chat ini ya kak.",
+    ].join("\n"),
+    template: {
+      name: WA_TEMPLATES.OFFER,
+      params: [
+        templateParam(p.clientName ?? "Kak"),
+        templateParam(p.serviceName),
+        formatRupiah(p.agreedPrice),
+        formatRupiah(p.dpAmount),
+        formatTanggal(p.deadline),
+      ],
+    },
+  };
+}
 
 export function offerMessage(p: {
   clientName: string | null;
@@ -169,6 +235,58 @@ export async function sendToClient(conversationId: string, message: OutboundMess
     console.error(`[whatsapp] ${message.kind} gagal ke ${maskPhone(conversation.waId)} via ${via}: ${errorCode}`);
     return { ok: false, via, errorCode, messageId: saved.id };
   }
+}
+
+export type InvoiceDelivery = DeliveryResult & { qrisSent: number; qrisFailed: number };
+
+/**
+ * Kirim invoice lalu setiap QRIS (URL https) sebagai gambar. Gambar gagal → URL dikirim sebagai teks. Di Meta di luar
+ * jendela 24 jam gambar maupun teks bebas tidak bisa dikirim: QRIS dihitung gagal (admin melihatnya di hasil kirim).
+ */
+export async function sendInvoiceToClient(
+  conversationId: string,
+  message: OutboundMessage,
+  qris: { name: string; url: string }[],
+): Promise<InvoiceDelivery> {
+  const images = qris.filter((q) => /^https:\/\//i.test(q.url.trim()));
+  const delivery = await sendToClient(conversationId, message);
+  if (!delivery.ok) return { ...delivery, qrisSent: 0, qrisFailed: images.length };
+
+  const conversation = await prisma.waConversation.findUniqueOrThrow({
+    where: { id: conversationId },
+    select: { waId: true, lastInboundAt: true },
+  });
+  const channel = await getChannel();
+  const withinServiceWindow = !usesServiceWindow(channel) || isWithinServiceWindow(conversation.lastInboundAt);
+  const store = (body: string, data: { wamid?: string; deliveryStatus: string; errorCode?: string }) =>
+    prisma.waMessage.create({ data: { conversationId, direction: "OUTBOUND", type: "text", body, sentByBot: false, ...data } });
+
+  let qrisSent = 0;
+  let qrisFailed = 0;
+  for (const q of images) {
+    const caption = `QRIS ${q.name}`;
+    const url = q.url.trim();
+    try {
+      const wamid = await sendImageOnChannel(conversation.waId, url, caption, channel, { withinServiceWindow });
+      await store(`[Gambar ${caption}] ${url}`, { wamid, deliveryStatus: "sent" });
+      qrisSent++;
+      continue;
+    } catch (error) {
+      console.error(`[whatsapp] gambar QRIS gagal ke ${maskPhone(conversation.waId)}: ${deliveryErrorCode(error)}`);
+    }
+    qrisFailed++;
+    if (!withinServiceWindow) {
+      await store(`[Gambar ${caption}] ${url}`, { deliveryStatus: "failed", errorCode: "OUTSIDE_WINDOW" });
+      continue;
+    }
+    const fallback = `${caption}: ${url}`;
+    try {
+      await store(fallback, { wamid: await sendTextOnChannel(conversation.waId, fallback, channel), deliveryStatus: "sent" });
+    } catch (error) {
+      await store(fallback, { deliveryStatus: "failed", errorCode: deliveryErrorCode(error) });
+    }
+  }
+  return { ...delivery, qrisSent, qrisFailed };
 }
 
 /**
