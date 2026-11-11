@@ -10,15 +10,23 @@ vi.mock("./owner/identity", () => owners);
 const push = vi.hoisted(() => ({ notifyOwnersPush: vi.fn() }));
 vi.mock("@/lib/notifications/push", () => push);
 
-import { PHONE_MEDIA_BODY, handleKirimiEcho, isOwnEcho, isPhoneReplyWamid } from "./phone-takeover";
+import { PHONE_MEDIA_BODY, handleKirimiEcho, isOwnEcho, isPhoneReplyWamid, resetPhoneReplyNotifyThrottle } from "./phone-takeover";
 
 const now = new Date("2026-11-08T05:00:00Z");
-const conv = (id: string, over: object = {}) => ({ id, waId: `62812000000${id.length}${id}`, mode: "BOT", ownerActsAsClient: false, ...over });
+const conv = (id: string, over: object = {}) => ({
+  id,
+  waId: `62812000000${id.length}${id}`,
+  profileName: `Klien ${id}`,
+  mode: "BOT",
+  ownerActsAsClient: false,
+  ...over,
+});
 // Pantulan perangkat Kirimi D-CZIKM: `from` = nomor perangkat sendiri, tanpa nomor klien (2026-11-08).
 const echo = (body: string) => ({ to: { waId: "6281233828235", lid: null }, body, msgId: "M1" });
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetPhoneReplyNotifyThrottle();
   db.waMessage.findUnique.mockResolvedValue(null);
   db.waMessage.findMany.mockResolvedValue([]);
   db.waConversation.findMany.mockResolvedValue([]);
@@ -80,15 +88,31 @@ describe("handleKirimiEcho: chat aktif + notifikasi (docs/WHATSAPP_CHANNEL_KIRIM
     expect(await handleKirimiEcho({ ...echo("Siap kak"), msgId: "M2" }, now)).toBe("ambiguous");
   });
 
-  it("beberapa chat aktif → tidak menebak, owner diberi notifikasi untuk ambil alih manual", async () => {
-    db.waConversation.findMany.mockResolvedValue([conv("c1"), conv("c2")]);
+  it("beberapa chat aktif → tidak menebak, owner diberi notifikasi berisi chat yang masih dipegang bot", async () => {
+    db.waConversation.findMany.mockResolvedValue([conv("c1"), conv("c2", { mode: "HUMAN" })]);
     expect(await handleKirimiEcho(echo("Siap kak"), now)).toBe("ambiguous");
     expect(db.waConversation.updateMany).not.toHaveBeenCalled();
     expect(db.waMessage.create).not.toHaveBeenCalled();
     expect(push.notifyOwnersPush).toHaveBeenCalledWith(
       "NEEDS_ADMIN",
-      expect.objectContaining({ title: "Balasan dari HP belum dicocokkan", url: "/wa-orders?tab=inbox" }),
+      expect.objectContaining({ title: "Balasan dari HP belum dicocokkan", body: expect.stringContaining("Klien c1"), url: "/wa-orders?tab=inbox" }),
     );
+    expect(push.notifyOwnersPush.mock.calls[0][1].body).not.toContain("Klien c2");
+  });
+
+  it("beberapa chat aktif tapi semuanya sudah dipegang admin → bot memang diam, tanpa notifikasi", async () => {
+    db.waConversation.findMany.mockResolvedValue([conv("c1", { mode: "HUMAN" }), conv("c2", { mode: "HUMAN" })]);
+    expect(await handleKirimiEcho(echo("Siap kak"), now)).toBe("ambiguous_all_human");
+    expect(push.notifyOwnersPush).not.toHaveBeenCalled();
+  });
+
+  it("notifikasi belum dicocokkan paling banyak satu per 15 menit", async () => {
+    db.waConversation.findMany.mockResolvedValue([conv("c1"), conv("c2")]);
+    await handleKirimiEcho(echo("Siap kak"), now);
+    await handleKirimiEcho({ ...echo("Sebentar ya kak"), msgId: "M2" }, new Date(now.getTime() + 14 * 60_000));
+    expect(push.notifyOwnersPush).toHaveBeenCalledTimes(1);
+    await handleKirimiEcho({ ...echo("Sudah kak"), msgId: "M3" }, new Date(now.getTime() + 15 * 60_000));
+    expect(push.notifyOwnersPush).toHaveBeenCalledTimes(2);
   });
 
   it("tidak ada chat aktif → hanya dicatat di log, tanpa chat baru", async () => {

@@ -114,7 +114,10 @@ Cara kerja (`src/lib/whatsapp/phone-takeover.ts`):
     (`wamid kirimi:phone:<msgId>`, `sentByBot: false`, label **Admin** di Inbox / Order WA, ikut dibaca AI setelah
     chat dikembalikan ke bot). Foto/stiker dari HP dicatat sebagai "[Media dikirim dari HP admin]".
   - **Lebih dari satu** → sistem tidak menebak. Owner menerima notifikasi "Balasan dari HP belum dicocokkan"
-    (kejadian "Chat menunggu admin") dan menekan **Ambil alih** di Inbox pada chat yang dibalas.
+    (kejadian "Chat menunggu admin") berisi chat yang masih dipegang bot, lalu menekan **Ambil alih** di Inbox
+    pada chat yang dibalas. Sejak 2026-11-11 (produksi 9–10 Nov: ±200 notifikasi per hari):
+    - tidak dikirim bila semua chat aktif sudah dipegang admin (bot memang diam);
+    - paling banyak sekali per 15 menit (`AMBIGUOUS_NOTIFY_INTERVAL_MS`).
   - **Tidak ada** (mis. admin chat ke kenalan) → hanya dicatat di log.
 - Kiriman ulang webhook tidak diproses dua kali.
 
