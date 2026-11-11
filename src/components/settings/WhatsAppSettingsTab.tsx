@@ -3,15 +3,15 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { OwnerNumberCard } from "./whatsapp/OwnerNumberCard";
 import { ChannelCard } from "./whatsapp/ChannelCard";
+import { ResponderSwitchDialog } from "./whatsapp/ResponderSwitchDialog";
 import {
   SettingsApiError,
   WHATSAPP_SETTINGS_KEY,
@@ -175,20 +175,13 @@ function MonthlyBrakeSetting({ usage }: { usage: WhatsAppUsage }) {
 }
 
 export function WhatsAppSettingsTab() {
-  const queryClient = useQueryClient();
   const { data, isLoading, isError, refetch, isRefetching } = useQuery<WhatsAppSettings>({
     queryKey: WHATSAPP_SETTINGS_KEY,
     queryFn: fetchWhatsAppSettings,
   });
 
-  const toggleBot = useMutation({
-    mutationFn: (botEnabled: boolean) => putWhatsAppSettings({ botEnabled }),
-    onSuccess: (next) => {
-      queryClient.setQueryData(WHATSAPP_SETTINGS_KEY, next);
-      toast(next.botEnabled ? "Bot WhatsApp diaktifkan" : "Bot WhatsApp dimatikan", "success");
-    },
-    onError: () => toast("Gagal mengubah status bot", "error"),
-  });
+  // Menyalakan/mematikan bot lewat dialog Ganti penjawab: menyalakan bot portal dicek terhadap Agen AI Kirimi.
+  const [responderOpen, setResponderOpen] = useState(false);
 
   if (isLoading) {
     return (
@@ -255,26 +248,27 @@ export function WhatsAppSettingsTab() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-between gap-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="space-y-0.5">
-              <Label id="wa-bot-enabled-label" htmlFor="wa-bot-enabled">
-                Balas otomatis
-              </Label>
-              <p id="wa-bot-enabled-help" className="text-sm text-muted-foreground">
+              <p id="wa-responder-label" className="text-sm font-medium">
+                Penjawab chat klien
+              </p>
+              <p id="wa-responder-help" className="text-sm text-muted-foreground">
                 {data.botEnabled
-                  ? "Aktif. Pesan klien dibalas oleh bot."
-                  : "Nonaktif. Pesan tetap tersimpan, tapi tidak dibalas otomatis."}
+                  ? "Bot portal (Balas otomatis aktif). Pesan klien dibalas oleh bot."
+                  : "Bot portal mati. Pesan tetap tersimpan; dibalas Agen AI Kirimi atau admin."}
               </p>
             </div>
-            <Switch
-              id="wa-bot-enabled"
-              // Base UI menaruh id di input tersembunyi; elemen role="switch" butuh nama sendiri.
-              aria-labelledby="wa-bot-enabled-label"
-              aria-describedby="wa-bot-enabled-help"
-              checked={data.botEnabled}
-              disabled={toggleBot.isPending}
-              onCheckedChange={(checked) => toggleBot.mutate(checked)}
-            />
+            <Button
+              type="button"
+              variant="outline"
+              className="max-md:h-11"
+              aria-describedby="wa-responder-help"
+              onClick={() => setResponderOpen(true)}
+            >
+              <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
+              Ganti penjawab
+            </Button>
           </div>
           {data.ai.provider === "GATEWAY" && (
             <p role="note" className="mt-3 flex gap-2 text-sm text-amber-700 dark:text-amber-300">
@@ -291,6 +285,8 @@ export function WhatsAppSettingsTab() {
           )}
         </CardContent>
       </Card>
+
+      <ResponderSwitchDialog open={responderOpen} onOpenChange={setResponderOpen} />
 
       <ChannelCard data={data} />
 
