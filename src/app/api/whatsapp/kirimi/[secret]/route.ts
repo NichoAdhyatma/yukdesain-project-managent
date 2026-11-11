@@ -125,7 +125,7 @@ export async function POST(request: Request, { params }: Params) {
       await new Promise((resolve) => setTimeout(resolve, ECHO_SETTLE_MS));
       try {
         const outcome = await handleKirimiEcho(echo, receivedAt);
-        if (outcome !== "own" && outcome !== "duplicate") {
+        if (outcome !== "own" && outcome !== "duplicate" && outcome !== "bot_off") {
           // Pantulan hanya membawa nomor perangkat sendiri, jadi tujuan tidak dicatat (docs/WHATSAPP_CHANNEL_KIRIMI.md §10).
           console.info(`[kirimi] pesan keluar dari HP admin: ${outcome}`);
         }

@@ -120,6 +120,11 @@ Cara kerja (`src/lib/whatsapp/phone-takeover.ts`):
     - paling banyak sekali per 15 menit (`AMBIGUOUS_NOTIFY_INTERVAL_MS`).
   - **Tidak ada** (mis. admin chat ke kenalan) → hanya dicatat di log.
 - Kiriman ulang webhook tidak diproses dua kali.
+- **Balas otomatis portal mati** (`waBotEnabled = false`) → pantulan diabaikan seluruhnya (`bot_off`). Tidak ada bot
+  yang perlu dihentikan, dan balasan Agen AI Kirimi (owner memakainya sementara, 2026-11-11) tidak boleh dianggap
+  ketikan admin. Sebelum perubahan ini, 41 chat pindah ke mode admin dan 137 balasan AI Kirimi tercatat sebagai pesan
+  Admin. Saat pindah ke bot portal: matikan Agen AI Kirimi dulu, kembalikan chat-chat itu ke bot, lalu nyalakan
+  Balas otomatis.
 
 Batasan:
 
