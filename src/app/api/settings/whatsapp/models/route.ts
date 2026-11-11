@@ -1,15 +1,21 @@
 import { NextResponse } from "next/server";
 import { requireOwner } from "@/lib/auth/require-owner";
-import { aiProviderSchema } from "@/lib/whatsapp/ai/ai-config";
-import { listModels } from "@/lib/whatsapp/ai/model-list";
+import { resolveProvider } from "@/lib/ai/providers";
+import { fallbackModels, listModels } from "@/lib/whatsapp/ai/model-list";
 
-// GET /api/settings/whatsapp/models?provider=ANTHROPIC|GATEWAY — isi dropdown model di Settings.
+// GET /api/settings/whatsapp/models?providerKey=env:ANTHROPIC|env:GATEWAY|db:<id> — isi pilihan model di Bot AI › Model.
+// `provider=ANTHROPIC|GATEWAY` (bentuk lama) tetap diterima.
 export async function GET(request: Request) {
   const auth = await requireOwner();
   if (auth.error) return auth.error;
-  const provider = aiProviderSchema.safeParse(new URL(request.url).searchParams.get("provider"));
-  if (!provider.success) {
-    return NextResponse.json({ error: "VALIDATION_ERROR", message: "provider tidak dikenal" }, { status: 400 });
+  const params = new URL(request.url).searchParams;
+  const legacy = params.get("provider");
+  const providerKey = params.get("providerKey") ?? (legacy ? `env:${legacy}` : null);
+  if (!providerKey) return NextResponse.json({ error: "VALIDATION_ERROR", message: "providerKey wajib" }, { status: 400 });
+  try {
+    return NextResponse.json(await listModels(await resolveProvider(providerKey)));
+  } catch {
+    // Key belum ada / provider tidak bisa dibuka: tetap tampilkan daftar cadangan (provider bawaan).
+    return NextResponse.json({ models: fallbackModels(providerKey), source: "fallback" });
   }
-  return NextResponse.json(await listModels(provider.data));
 }

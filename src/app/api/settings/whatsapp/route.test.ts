@@ -126,8 +126,9 @@ describe("PUT /api/settings/whatsapp", () => {
     }
   });
 
-  it("validasi: model non-Claude dan provider tidak dikenal ditolak per field", async () => {
-    const res = await put({ aiModel: "gpt-5.5", aiProvider: "OPENAI" });
+  it("validasi: ID model tidak valid dan provider tidak dikenal ditolak per field", async () => {
+    // Sejak 2026-11-11 model non-Claude diterima (docs/AI_PROVIDERS.md); yang ditolak ID tidak valid.
+    const res = await put({ aiModel: "gpt 5.5", aiProvider: "OPENAI" });
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(Object.keys(body.fields).sort()).toEqual(["aiModel", "aiProvider"]);
