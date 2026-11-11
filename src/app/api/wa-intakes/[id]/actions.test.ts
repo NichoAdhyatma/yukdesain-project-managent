@@ -157,6 +157,14 @@ describe("POST quote", () => {
     expect(body.warnings).toEqual(["NO_ACTIVE_PAYMENT_ACCOUNT"]);
   });
 
+  it("invoice hanya terkirim sebagai template (Meta di luar 24 jam) → ditandai kirim ulang + peringatan", async () => {
+    intake("AWAITING_QUOTE");
+    outbound.sendInvoiceToClient.mockResolvedValue({ ok: true, via: "template", messageId: "out_1", qrisSent: 0, qrisFailed: 0 });
+    const body = await (await quote(req({ agreedPrice: 1000, deadline: tomorrow }), ctx)).json();
+    expect(body.warnings).toContain("INVOICE_VIA_TEMPLATE");
+    expect(db.waIntake.updateMany).toHaveBeenLastCalledWith({ where: { id: "in_1" }, data: { invoiceResendPending: true } });
+  });
+
   it("pengiriman gagal → status tetap tersimpan, hasil gagal dikembalikan", async () => {
     intake("AWAITING_QUOTE");
     outbound.sendInvoiceToClient.mockResolvedValue({ ok: false, via: "template", errorCode: "132001", messageId: "out_1" });

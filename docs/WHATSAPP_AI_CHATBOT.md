@@ -888,5 +888,8 @@ merevisi harga di Order WA:
   tim kami" dan panel harga memberi peringatan.
 - QRIS (`sendInvoiceToClient`): setiap akun dengan `qrisImageUrl` https dikirim sebagai gambar (`sendImageOnChannel`:
   Kirimi `send-message` + `media_url`, Fonnte `url`, Meta pesan image), caption `QRIS {nama}`. Gagal → URL dikirim
-  sebagai teks. Meta di luar 24 jam: gambar dan teks bebas tidak bisa dikirim, dicatat `OUTSIDE_WINDOW`; admin melihat
-  jumlah QRIS yang belum terkirim.
+  sebagai teks. Meta di luar 24 jam: klien hanya menerima template pembuka; order ditandai `invoiceResendPending` dan
+  invoice lengkap + QRIS dikirim otomatis (`resendPendingInvoice`) begitu klien membalas, juga saat bot nonaktif. Admin
+  mendapat peringatan di panel harga.
+- Penjaga `stripDpMentions` (QUOTED/DP_REVIEW): kalimat berkata DP / uang muka / panjar / tanda jadi yang memuat angka,
+  dan kalimat apa pun yang memuat nominal DP atau sisa pelunasan order itu, dibuang dan diganti rujukan ke invoice.

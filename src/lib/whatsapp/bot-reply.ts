@@ -128,7 +128,7 @@ export async function replyWithAi(
   const safe = PRE_QUOTE_STATUSES.has(turn.intakeStatus)
     ? stripPriceMentions(sanitized.text, turn.briefText, turn.allowedPriceNumbers, turn.guardExtras).text
     : INVOICE_STATUSES.has(turn.intakeStatus)
-      ? stripDpMentions(sanitized.text).text
+      ? stripDpMentions(sanitized.text, turn.dpGuardNumbers ?? []).text
       : sanitized.text;
   const sent = await sendBotText(conversation, clampReply(safe));
   if (sent) {

@@ -33,6 +33,8 @@ vi.mock("./rate-limit", () => limits);
 vi.mock("./ai/tools", () => tools);
 vi.mock("./owner/identity", () => ({ resolveOwner: owner.resolveOwner }));
 vi.mock("./owner/handle", () => ({ handleOwnerMessage: owner.handleOwnerMessage }));
+const invoice = vi.hoisted(() => ({ resendPendingInvoice: vi.fn() }));
+vi.mock("./invoice", () => invoice);
 vi.mock("./spam-guard", async (orig) => ({
   ...(await orig<typeof import("./spam-guard")>()),
   getMonthlyBrake: guard.getMonthlyBrake,
@@ -78,6 +80,7 @@ describe("handleInboundMessage", () => {
     limits.botReplyLimitReached.mockResolvedValue(false);
     limits.imageLimitExceeded.mockResolvedValue(false);
     tools.findActiveIntake.mockResolvedValue({ createdAt: new Date("2026-11-01T00:00:00Z") });
+    invoice.resendPendingInvoice.mockResolvedValue(false);
     owner.resolveOwner.mockResolvedValue(null);
   });
 
@@ -113,6 +116,13 @@ describe("handleInboundMessage", () => {
     expect(humanModeSet()).toBe(true);
     expect(sentBodies()).toEqual([BOT_REPLIES.dailyLimit]);
     expect(ai.runAiTurn).not.toHaveBeenCalled();
+  });
+
+  it("invoice yang tertunda (template di luar 24 jam) dikirim ulang saat klien membalas, walau bot nonaktif", async () => {
+    db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
+    givenMessage("text");
+    await handleInboundMessage("msg_1");
+    expect(invoice.resendPendingInvoice).toHaveBeenCalledWith("conv_1");
   });
 
   it("bot nonaktif → tidak membalas, AI tidak dipanggil", async () => {
@@ -246,6 +256,13 @@ describe("handleInboundMessage", () => {
     aiReply(reply, "QUOTED");
     await handleInboundMessage("msg_1");
     expect(sentBodies()).toEqual([reply]);
+  });
+
+  it("status QUOTED: nominal DP order ini dihapus walau tanpa kata DP", async () => {
+    givenMessage("text");
+    ai.runAiTurn.mockResolvedValue({ reply: "Untuk pembayaran awal ya kak. Nominalnya Rp750.000.", intakeStatus: "QUOTED", briefText: "{}", allowedPriceNumbers: [], dpGuardNumbers: ["750000"], toolsCalled: [] });
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()[0]).not.toContain("750.000");
   });
 
   it.each(["QUOTED", "DP_REVIEW"])("status %s: nominal DP dari bot dihapus, merujuk invoice", async (status) => {

@@ -237,6 +237,24 @@ describe("stripDpMentions: setelah invoice, bot tidak menyebut DP (spec 2026-11-
     expect(stripDpMentions("Transfer DP 30 ribu dulu ya kak.").changed).toBe(true);
   });
 
+  it.each([
+    "DPnya Rp750.000 ya kak.",
+    "DP 750000 ya kak.",
+    "DP 50 persen dari total ya kak.",
+    "Panjar Rp750.000 dulu ya kak.",
+    "Tanda jadinya 300rb ya kak.",
+  ])("bentuk DP umum dihapus: %s", (text) => {
+    expect(stripDpMentions(text).changed).toBe(true);
+  });
+
+  it("nominal DP / sisa pelunasan order ini dihapus walau tanpa kata DP atau di kalimat lain", () => {
+    const dp = ["750000", "750000", "50"];
+    expect(stripDpMentions("Untuk DP ya kak. Nominalnya Rp750.000.", dp).text).not.toContain("750.000");
+    expect(stripDpMentions("Bayar setengahnya dulu Rp750.000 ya kak.", dp).changed).toBe(true);
+    expect(stripDpMentions("DP\nRp750.000", dp).text).not.toContain("750.000");
+    expect(stripDpMentions("Harga order Rp1.500.000 sesuai invoice ya kak.", dp).changed).toBe(false);
+  });
+
   it("tanpa angka atau tanpa kata DP tidak diubah", () => {
     expect(stripDpMentions("Silakan bayar DP sesuai invoice yang sudah kami kirim ya kak.").changed).toBe(false);
     expect(stripDpMentions("Harga order Rp150.000 sesuai invoice ya kak.").changed).toBe(false);

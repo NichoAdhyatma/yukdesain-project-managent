@@ -4,8 +4,8 @@ import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { computeDpAmount, transitionIntake } from "@/lib/whatsapp/intake";
 import { getStudioOperations } from "@/lib/studio-operations";
-import { invoiceMessage, invoiceNumberFor, sendInvoiceToClient } from "@/lib/whatsapp/outbound";
-import { suggestQuotePrice } from "@/lib/services/price-calculator";
+import { invoiceNumberFor } from "@/lib/whatsapp/outbound";
+import { sendIntakeInvoice } from "@/lib/whatsapp/invoice";
 import {
   errorResponse,
   findIntakeForDetail,
@@ -85,38 +85,26 @@ export async function POST(request: Request, { params }: Params) {
     return intakeErrorResponse(error);
   }
 
-  // Semua metode bayar aktif (rekening bank dan e-wallet), urut sesuai Pengaturan.
-  const accounts = await prisma.paymentAccount.findMany({
-    where: { isActive: true },
-    select: { name: true, accountNumber: true, accountHolder: true, qrisImageUrl: true },
-    orderBy: { order: "asc" },
-  });
-  const qris = accounts.filter((a) => a.qrisImageUrl).map((a) => ({ name: a.name, url: a.qrisImageUrl as string }));
-  // Rincian kalkulator hanya bila totalnya sama dengan harga yang disimpan admin.
-  const suggestion = suggestQuotePrice(intake.service, (intake.briefDraft ?? {}) as Record<string, unknown>);
-  const lines = suggestion && suggestion.total === agreedPrice && !suggestion.breakdown.startsWith("Harga layanan") ? [suggestion.breakdown] : [];
   // Status sudah tersimpan; kegagalan kirim ditampilkan ke admin, bukan dibatalkan.
-  const delivery = await sendInvoiceToClient(
-    intake.conversationId,
-    invoiceMessage({
-      clientName: intake.clientName,
-      serviceName: intake.service.name,
-      invoiceNumber,
-      agreedPrice,
-      dpAmount,
-      dpPercent,
-      deadline: deadlineDate,
-      lines,
-      accounts,
-      hasQris: qris.some((q) => q.url.startsWith("https://")),
-    }),
-    qris,
-  );
+  const delivery = await sendIntakeInvoice({
+    conversationId: intake.conversationId,
+    clientName: intake.clientName,
+    invoiceNumber,
+    agreedPrice,
+    dpAmount,
+    dpPercent,
+    deadline: deadlineDate,
+    briefDraft: intake.briefDraft,
+    service: intake.service,
+  });
+  // Meta di luar 24 jam: klien baru menerima template pembuka. Invoice lengkap + QRIS dikirim saat klien membalas.
+  const viaTemplate = delivery.ok && delivery.via === "template";
+  if (viaTemplate) await prisma.waIntake.updateMany({ where: { id }, data: { invoiceResendPending: true } });
 
   const row = await findIntakeForDetail(id);
   return NextResponse.json({
     intake: row ? await toDetail(row) : null,
     delivery,
-    warnings: accounts.length ? [] : ["NO_ACTIVE_PAYMENT_ACCOUNT"],
+    warnings: [...(delivery.activeAccounts ? [] : ["NO_ACTIVE_PAYMENT_ACCOUNT"]), ...(viaTemplate ? ["INVOICE_VIA_TEMPLATE"] : [])],
   });
 }

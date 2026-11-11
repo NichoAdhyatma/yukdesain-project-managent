@@ -31,6 +31,8 @@ export type AiTurnResult = {
   allowedPriceNumbers: string[];
   // Penjaga harga (reply-guard GuardExtras): teks kebijakan/FAQ owner dan katalog Layanan per layanan
   guardExtras: GuardExtras;
+  // Nominal DP dan sisa pelunasan order ini: tidak boleh disebut bot setelah invoice (spec 2026-11-11 §5)
+  dpGuardNumbers?: string[];
   toolsCalled: string[];
 };
 
@@ -223,6 +225,10 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
         intakeStatus: finalIntake?.status ?? null,
         briefText: JSON.stringify(finalIntake?.briefDraft ?? {}),
         allowedPriceNumbers: allowedPriceNumbers(guide),
+        dpGuardNumbers:
+          finalIntake?.agreedPrice != null && finalIntake.dpAmount != null
+            ? [String(finalIntake.dpAmount), String(finalIntake.agreedPrice - finalIntake.dpAmount)]
+            : [],
         guardExtras: {
           // Bot diminta mengutip teks ini apa adanya; nominal di dalamnya bukan harga karangan.
           policyNumbers: [ops.revisionNotice, ops.settlementNote, ...(guide?.faqs ?? []).map((f) => f.answer)],

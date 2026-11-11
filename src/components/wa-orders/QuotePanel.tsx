@@ -25,6 +25,11 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
   const quote = useIntakeAction<{ agreedPrice: number; deadline: string }>(intake.id, "/quote", "POST", {
     successMessage: requote ? "Invoice direvisi" : "Harga disimpan",
     onSuccess: (data) => {
+      // Meta di luar 24 jam: klien baru menerima template pembuka; invoice lengkap + QRIS terkirim otomatis saat klien membalas.
+      if (data.delivery?.ok && data.delivery.via === "template") {
+        toast("Klien di luar 24 jam: baru pesan pembuka yang terkirim. Invoice lengkap dan QRIS dikirim otomatis saat klien membalas.", "error");
+        return;
+      }
       const failed = data.delivery?.qrisFailed ?? 0;
       if (failed > 0) toast(`${failed} gambar QRIS belum terkirim ke klien. Kirim manual dari chat.`, "error");
     },
