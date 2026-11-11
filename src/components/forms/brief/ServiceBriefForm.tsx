@@ -28,6 +28,12 @@ import { KopiMenuBuilder } from "./KopiMenuBuilder";
 import { MenuItemBuilder } from "./MenuItemBuilder";
 import type { BoxReference, CartReference, KopiMenuItem } from "./types";
 import { SubmitProgressOverlay } from "@/components/ui/submit-progress-overlay";
+import { COUNT_KEYS, GenericBriefFields, genericTextKeys } from "./GenericBriefFields";
+
+// Layanan dengan bagian form khusus di bawah. Layanan lain (SVC-12..15) memakai isian generik.
+const DEDICATED_CODES = new Set(["SVC-01", "SVC-02", "SVC-03", "SVC-04", "SVC-05", "SVC-06", "SVC-07", "SVC-08", "SVC-09", "SVC-10", "SVC-11"]);
+// Isian paket/jumlah yang ditambahkan ke layanan lama untuk kalkulator harga.
+const EXTRA_KEYS: readonly (keyof BriefResponses)[] = ["package_choice", ...COUNT_KEYS];
 
 interface ServiceBriefFormProps {
   serviceCode: string;
@@ -49,6 +55,12 @@ export function ServiceBriefForm({
   onBeforeSubmit,
 }: ServiceBriefFormProps) {
   const config = SERVICE_BRIEF_CONFIGS.find((c) => c.code === serviceCode);
+  const configKeys = config ? [...config.requiredFields, ...config.optionalFields] : [];
+  const requiredKeys = new Set(config?.requiredFields ?? []);
+  const isGeneric = !DEDICATED_CODES.has(serviceCode);
+  const genericKeys = isGeneric ? genericTextKeys(configKeys) : configKeys.filter((k) => EXTRA_KEYS.includes(k));
+  const usesBrandLogos = ["SVC-03", "SVC-04", "SVC-05", "SVC-11"].includes(serviceCode) || (isGeneric && configKeys.includes("logos_json"));
+  const usesMenuItems = ["SVC-03", "SVC-04", "SVC-05"].includes(serviceCode) || (isGeneric && configKeys.includes("menu_items_json"));
   const [formData, setFormData] = useState<BriefResponses>({});
   const [menuItems, setMenuItems] = useState<MenuItem[]>([{ id: "1", name: "", price: "" }]);
   const [cartSides, setCartSides] = useState<CartSide[]>([
@@ -251,8 +263,16 @@ export function ServiceBriefForm({
 
     const responses: BriefResponses = { ...formData };
 
-    // Logos JSON for SVC-03/04/05 and SVC-11
-    if ((serviceCode === "SVC-03" || serviceCode === "SVC-04" || serviceCode === "SVC-05" || serviceCode === "SVC-11") && uploadedBrandLogos.length > 0) {
+    // Jumlah halaman/varian/pose disimpan sebagai angka; kosong tidak dikirim.
+    for (const key of COUNT_KEYS) {
+      const raw = responses[key];
+      if (raw === undefined) continue;
+      if (String(raw).trim() === "") delete responses[key];
+      else (responses as Record<string, unknown>)[key] = Number(raw);
+    }
+
+    // Logos JSON for SVC-03/04/05, SVC-11, dan layanan generik yang memakainya
+    if (usesBrandLogos && uploadedBrandLogos.length > 0) {
       responses.logos_json = uploadedBrandLogos;
     }
 
@@ -270,8 +290,8 @@ export function ServiceBriefForm({
       tick();
     }
 
-    // Menu items for SVC-03/04/05
-    if (serviceCode === "SVC-03" || serviceCode === "SVC-04" || serviceCode === "SVC-05") {
+    // Menu items for SVC-03/04/05 dan layanan generik yang memakainya
+    if (usesMenuItems) {
       responses.menu_items_json = uploadedMenuItems;
     }
 
@@ -428,6 +448,49 @@ export function ServiceBriefForm({
           </CardDescription>
         </CardHeader>
       </Card>
+
+      {/* Layanan tanpa bagian khusus (SVC-12..15): isian generik dari konfigurasi brief */}
+      {isGeneric && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Detail Brief</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <GenericBriefFields keys={genericKeys} required={requiredKeys} values={formData} onChange={updateField} disabled={isSubmitting} />
+            </CardContent>
+          </Card>
+          {usesBrandLogos && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Logo Brand</CardTitle>
+                <CardDescription>Upload logo brand Anda (opsional)</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <LogoUploader
+                  items={brandLogos}
+                  onChange={setBrandLogos}
+                  label="Logo Brand"
+                  helperText="Upload file logo brand untuk ditampilkan di desain"
+                  disabled={isSubmitting}
+                  maxItems={5}
+                />
+              </CardContent>
+            </Card>
+          )}
+          {usesMenuItems && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Daftar Menu / Produk</CardTitle>
+                <CardDescription>Tambahkan item yang ingin ditampilkan (opsional)</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <MenuItemBuilder items={menuItems} onChange={setMenuItems} disabled={isSubmitting} />
+              </CardContent>
+            </Card>
+          )}
+        </>
+      )}
 
       {/* Logo Forms (SVC-01, SVC-02) */}
       {(serviceCode === "SVC-01" || serviceCode === "SVC-02") && (
@@ -1016,6 +1079,19 @@ export function ServiceBriefForm({
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* Paket / jumlah untuk layanan lama (SVC-02 pose, SVC-08 varian, SVC-09 paket) */}
+      {!isGeneric && genericKeys.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Paket & Jumlah</CardTitle>
+            <CardDescription>Membantu tim menghitung harga sesuai katalog</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <GenericBriefFields keys={genericKeys} required={requiredKeys} values={formData} onChange={updateField} disabled={isSubmitting} />
+          </CardContent>
+        </Card>
       )}
 
       {/* Reference Images */}
