@@ -24,6 +24,10 @@ Aturan pengajuan:
 
 Dikirim saat admin menyimpan harga + deadline.
 
+> Catatan 2026-11-11: di dalam jendela 24 jam (dan di gateway QR) klien menerima **invoice** lengkap + QRIS
+> (`docs/WHATSAPP_AI_CHATBOT.md` "Invoice WA"). Di luar 24 jam template ini tetap dipakai sebagai pembuka
+> (parameter sama: nama, layanan, harga, nominal DP, deadline); gambar QRIS tidak terkirim sampai klien membalas.
+
 **Body:**
 
 ```text
