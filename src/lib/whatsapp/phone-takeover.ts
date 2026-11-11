@@ -34,6 +34,7 @@ export const PHONE_MEDIA_BODY = "[Media dikirim dari HP admin]";
 export type KirimiEcho = { to: { waId: string | null; lid: string | null }; body: string; msgId: string | null };
 
 export type EchoOutcome =
+  | "bot_off"
   | "own"
   | "takeover"
   | "already_human"
@@ -94,6 +95,11 @@ async function activeChats(now: Date) {
  * Pantulan tidak membawa nomor klien, jadi chat tujuan ditentukan dari chat yang sedang aktif.
  */
 export async function handleKirimiEcho(echo: KirimiEcho, now = new Date()): Promise<EchoOutcome> {
+  // Balas otomatis portal mati (mis. Agen AI Kirimi yang sedang membalas): tidak ada bot yang perlu dihentikan, dan
+  // balasan AI Kirimi tidak boleh dianggap ketikan admin (2026-11-11: 41 chat pindah ke admin karena itu).
+  const settings = await prisma.studioSettings.findUnique({ where: { id: "default" }, select: { waBotEnabled: true } });
+  if (!settings?.waBotEnabled) return "bot_off";
+
   const wamid = echoWamid(echo, now);
   if (await prisma.waMessage.findUnique({ where: { wamid }, select: { id: true } })) return "duplicate";
 

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({
   waMessage: { findUnique: vi.fn(), findMany: vi.fn(), create: vi.fn() },
   waConversation: { findMany: vi.fn(), updateMany: vi.fn() },
+  studioSettings: { findUnique: vi.fn() },
 }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 const owners = vi.hoisted(() => ({ listOwnerNumbers: vi.fn() }));
@@ -31,6 +32,7 @@ beforeEach(() => {
   db.waMessage.findMany.mockResolvedValue([]);
   db.waConversation.findMany.mockResolvedValue([]);
   db.waConversation.updateMany.mockResolvedValue({ count: 1 });
+  db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: true });
   owners.listOwnerNumbers.mockResolvedValue([{ id: "o1", name: "Rizal", waNumber: "6289700006937" }]);
 });
 
@@ -125,6 +127,15 @@ describe("handleKirimiEcho: chat aktif + notifikasi (docs/WHATSAPP_CHANNEL_KIRIM
     db.waConversation.findMany.mockResolvedValue([conv("c1")]);
     await handleKirimiEcho(echo(""), now);
     expect(db.waMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ body: PHONE_MEDIA_BODY }) });
+  });
+
+  it("Balas otomatis portal mati (mis. Agen AI Kirimi yang membalas) → pantulan diabaikan, tanpa mode admin / notifikasi", async () => {
+    db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
+    db.waConversation.findMany.mockResolvedValue([conv("c1"), conv("c2")]);
+    expect(await handleKirimiEcho(echo("Halo kak, ada yang bisa dibantu?"), now)).toBe("bot_off");
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+    expect(db.waMessage.create).not.toHaveBeenCalled();
+    expect(push.notifyOwnersPush).not.toHaveBeenCalled();
   });
 
   it("kiriman ulang webhook → tidak diproses dua kali", async () => {
