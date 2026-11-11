@@ -71,6 +71,10 @@ path `/var/www/yukdesain-project-managent/.env`: `sed -i` mengganti symlink deng
 hanya berlaku di rilis itu dan hilang di deploy berikutnya. Kalau ada env yang juga disalin ke `/etc/yukdesain/cron.env`
 (lihat `docs/CLIENT_NOTIFICATIONS.md`), salinan itu tetap harus diperbarui sendiri.
 
+**`AI_KEYS_SECRET`** (kunci enkripsi API key provider AI, `docs/AI_PROVIDERS.md`): 32 byte acak base64 di
+`shared/.env`, dibuat sekali langsung di server (`openssl rand -base64 32`). Jangan diganti setelah ada provider
+tersimpan: key yang sudah tersimpan tidak bisa dibuka lagi dan harus diisi ulang.
+
 ## 6. Aturan yang tidak berubah
 
 - Jangan pernah menjalankan `prisma/seed.ts` (atau `npm run db:seed` / `db:reset`) di produksi.
