@@ -148,3 +148,26 @@ owner-only, `src/lib/whatsapp/kirimi-knowledge.ts`):
   internal), aturan harga owner, instruksi Panduan, FAQ, dan file pengetahuan.
 - Tidak memuat nomor rekening, link QRIS, persen DP, kunci API, atau data klien.
 - Tidak tersinkron otomatis: buat ulang lalu tempel di Kirimi setiap kali harga, layanan, atau Panduan berubah.
+
+## Ganti penjawab: bot portal atau Agen AI Kirimi (2026-11-11)
+
+Bot portal (Balas otomatis) dan Agen AI Kirimi tidak boleh aktif bersamaan: klien menerima dua balasan dan balasan AI
+Kirimi terbaca sebagai ketikan admin (chat pindah ke mode admin). Saklar Balas otomatis di **Settings › WhatsApp**
+diganti tombol **Ganti penjawab** (`src/components/settings/whatsapp/ResponderSwitchDialog.tsx`,
+`GET/POST /api/settings/whatsapp/responder`, `src/lib/whatsapp/responder.ts`, owner-only):
+
+- **Ke bot portal:**
+  1. Status Agen AI Kirimi dibaca lewat `/v1/device-status` (`ai_enabled`). Masih aktif → ditolak (409
+     `KIRIMI_AI_ON`), dengan link ke dashboard Kirimi dan tombol Cek ulang. Status tidak terbaca → owner wajib
+     mencentang "Sudah saya matikan" (`KIRIMI_UNCONFIRMED`). Saluran bukan Kirimi → langkah dilewati. Server
+     mengecek ulang saat menyimpan.
+  2. Peringatan bila draft Panduan belum diterbitkan (tidak memblokir).
+  3. Daftar chat mode admin (bukan Uji bot, bukan nomor diblokir). Tercentang otomatis: chat yang balasan admin-nya
+     hanya pantulan HP/Kirimi (`wamid kirimi:phone:`) tanpa balasan admin dari portal (`sentById`).
+  4. Dalam satu transaksi: chat terpilih kembali ke bot (`WA_CHAT_RETURNED_TO_BOT` per chat), Balas otomatis menyala,
+     dicatat `WA_RESPONDER_SWITCHED`.
+- **Ke Agen AI Kirimi:** Balas otomatis dimatikan (`WA_RESPONDER_SWITCHED`), lalu dialog mengarahkan ke Bot AI ›
+  Otak bot untuk membuat knowledge dan ke dashboard Kirimi untuk menyalakan Agen AI.
+- API Kirimi tidak menyediakan endpoint untuk menyalakan/mematikan Agen AI (dokumentasi Kirimi, dicek 2026-11-11);
+  langkah itu tetap di dashboard Kirimi.
+- `PUT /api/settings/whatsapp` dengan `botEnabled` tetap ada untuk kompatibilitas, tetapi portal tidak lagi memakainya.
