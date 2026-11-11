@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { AiNotConfiguredError, getAiConfig } from "@/lib/whatsapp/ai/ai-config";
 import { testAiConnection } from "@/lib/whatsapp/ai/connection-test";
+import { getAiClient } from "@/lib/ai/client";
+import { resolveProvider } from "@/lib/ai/providers";
 
 export const maxDuration = 60;
 
@@ -22,7 +24,9 @@ export async function POST() {
       { status: 422 },
     );
   }
-  const checks = await testAiConnection(config);
+  // Jalur lama (provider env aktif); tes per provider + model ada di /api/settings/whatsapp/ai-providers/test.
+  const client = getAiClient(await resolveProvider(`env:${config.provider}`));
+  const checks = await testAiConnection(client, config.model, { claudeOptions: config.model.startsWith("claude-") });
   return NextResponse.json({
     model: config.model,
     provider: config.label,

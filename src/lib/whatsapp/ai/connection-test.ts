@@ -1,9 +1,10 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { getAnthropicClient, type AiConfig } from "./ai-config";
+import type { AiClient } from "@/lib/ai/client";
+import { maskSecrets } from "@/lib/ai/key-crypto";
 import { modelRequestOptions } from "./model-profile";
 
-// Uji koneksi dari Settings: pastikan base URL + key + model mendukung yang dipakai bot
-// (system prompt, tool use, gambar) dan model ekstraksi tersedia. Request kecil, tanpa data klien.
+// Uji model dari Bot AI › Model: pastikan provider + model mendukung yang dipakai bot (teks, tool use, gambar).
+// Request kecil, tanpa data klien.
 
 export type ConnectionCheck = { name: string; ok: boolean; detail: string };
 
@@ -23,25 +24,32 @@ const PING_TOOL: Anthropic.Tool = {
 };
 
 function describeError(error: unknown): string {
-  const e = error as { status?: number; message?: string };
-  const message = String(e.message ?? "Error").replace(/sk-[\w-]+/g, "sk-***").slice(0, 200);
-  return e.status ? `HTTP ${e.status}: ${message}` : message;
+  const e = error as { status?: number | null; message?: string };
+  const message = maskSecrets(String(e.message ?? "Error")).slice(0, 200);
+  return e.status && !message.startsWith("HTTP ") ? `HTTP ${e.status}: ${message}` : message;
 }
 
-export async function testAiConnection(config: AiConfig): Promise<ConnectionCheck[]> {
-  const client = getAnthropicClient(config);
-  const base = { model: config.model, max_tokens: 300, ...modelRequestOptions(config.model) };
+const hasText = (r: Anthropic.Message) => (r.content.some((b) => b.type === "text" && b.text.trim()) ? null : "Tidak ada jawaban teks");
+
+/**
+ * Tes satu model di satu provider (docs/AI_PROVIDERS.md): Koneksi (teks pendek), Tool use (bot memakai tool),
+ * Gambar (bukti transfer). `claudeOptions` = kirim opsi khusus Claude (hanya format Anthropic + model claude-…).
+ */
+export async function testAiConnection(client: AiClient, model: string, opts: { claudeOptions: boolean }): Promise<ConnectionCheck[]> {
+  const base = { model, max_tokens: 300, ...(opts.claudeOptions ? modelRequestOptions(model) : {}) };
   const checks: ConnectionCheck[] = [];
 
   const run = async (name: string, request: Anthropic.MessageCreateParamsNonStreaming, verify: (r: Anthropic.Message) => string | null) => {
     try {
-      const response = await client.messages.create(request);
+      const response = await client.create(request);
       const problem = verify(response);
       checks.push({ name, ok: !problem, detail: problem ?? `OK (${response.stop_reason})` });
     } catch (error) {
       checks.push({ name, ok: false, detail: describeError(error) });
     }
   };
+
+  await run("Koneksi", { ...base, messages: [{ role: "user", content: "Balas dengan satu kata: siap" }] }, hasText);
 
   await run(
     "Tool use",
@@ -68,29 +76,8 @@ export async function testAiConnection(config: AiConfig): Promise<ConnectionChec
         },
       ],
     },
-    (r) => (r.content.some((b) => b.type === "text" && b.text.trim()) ? null : "Tidak ada jawaban teks"),
+    hasText,
   );
-
-  // Bukti transfer dibaca model ekstraksi; pastikan model itu juga tersedia di endpoint ini.
-  if (config.extractionModel !== config.model) {
-    await run(
-      "Model ekstraksi",
-      {
-        model: config.extractionModel,
-        max_tokens: 300,
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: "image/png", data: TINY_PNG } },
-              { type: "text", text: "Sebutkan warna gambar ini dalam satu kata." },
-            ],
-          },
-        ],
-      },
-      (r) => (r.content.some((b) => b.type === "text" && b.text.trim()) ? null : "Tidak ada jawaban teks"),
-    );
-  }
 
   return checks;
 }
