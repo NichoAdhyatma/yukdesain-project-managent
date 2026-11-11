@@ -94,23 +94,25 @@ export const serviceBotFieldsSchema = z.object({
 export type ServiceBotFields = z.output<typeof serviceBotFieldsSchema>;
 
 /** Layanan aktif yang bisa dipesan lewat WA (punya konfigurasi brief), urut kode. */
+export const BOT_SERVICE_SELECT = {
+  code: true,
+  name: true,
+  description: true,
+  outputFormat: true,
+  startingPrice: true,
+  priceNote: true,
+  suitableFor: true,
+  botNotes: true,
+  priceMode: true,
+  packages: true,
+  unitPricing: true,
+  estimate: true,
+} as const;
+
 export async function getBotServiceCatalog(): Promise<BotService[]> {
   const services = await prisma.service.findMany({
     where: { isActive: true },
-    select: {
-      code: true,
-      name: true,
-      description: true,
-      outputFormat: true,
-      startingPrice: true,
-      priceNote: true,
-      suitableFor: true,
-      botNotes: true,
-      priceMode: true,
-      packages: true,
-      unitPricing: true,
-      estimate: true,
-    },
+    select: BOT_SERVICE_SELECT,
     orderBy: { code: "asc" },
   });
   return services.filter((s) => getBriefConfig(s.code)).map(toBotService);
