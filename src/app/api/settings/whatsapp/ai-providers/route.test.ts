@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   aiProvider: { findMany: vi.fn(), create: vi.fn(), findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
-  aiModelTest: { findMany: vi.fn() },
+  aiModelTest: { findMany: vi.fn(), deleteMany: vi.fn() },
   studioSettings: { findUnique: vi.fn(), upsert: vi.fn() },
   activityLog: { create: vi.fn() },
 }));
@@ -85,6 +85,8 @@ describe("GET", () => {
     expect(body.providers.map((p: { key: string }) => p.key)).toEqual(["env:ANTHROPIC", "env:GATEWAY"]);
     expect(body.usage.chat).toEqual({ providerKey: "db:p1", model: "m1" });
     expect(body.effective.chat).toEqual({ providerKey: "db:p1", model: "m1" });
+    // Label "Bawaan server" memakai provider env lama, bukan provider pilihan (review Minor 7).
+    expect(body.defaults.chat.providerKey).toBe("env:ANTHROPIC");
     expect(JSON.stringify(body)).not.toContain("sk-ant-env-1234");
   });
 });
@@ -96,6 +98,13 @@ describe("PUT / DELETE provider", () => {
     expect(res.status).toBe(409);
     expect((await res.json()).message).toBe("Provider sedang dipakai untuk Chat");
     expect(db.aiProvider.delete).not.toHaveBeenCalled();
+  });
+
+  it("hapus provider yang tidak dipakai → hasil tesnya ikut dihapus (review Minor 6)", async () => {
+    db.aiProvider.findUnique.mockResolvedValue({ id: "p2" });
+    const res = await DELETE(new Request("http://x"), { params: Promise.resolve({ id: "p2" }) });
+    expect(res.status).toBe(200);
+    expect(db.aiModelTest.deleteMany).toHaveBeenCalledWith({ where: { providerKey: "db:p2" } });
   });
 
   it("provider bawaan server tidak bisa diubah / dihapus", async () => {
@@ -126,8 +135,30 @@ describe("PUT pemakaian", () => {
     expect(db.studioSettings.upsert).not.toHaveBeenCalled();
   });
 
+  it("pilihan yang tidak berubah tidak dicek ulang (Chat basi tidak memblokir ubah Cadangan; review Important 3)", async () => {
+    tests.assertUsable.mockImplementation(async (usage: string) => {
+      if (usage === "chat") throw new ModelNotTestedError("chat", ["tools"]);
+    });
+    const res = await PUT_USAGE(
+      new Request("http://x", {
+        method: "PUT",
+        body: JSON.stringify({ chat: { providerKey: "db:p1", model: "m1" }, fallback: { providerKey: "env:ANTHROPIC", model: "claude-haiku-5-5" } }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(tests.assertUsable).not.toHaveBeenCalledWith("chat", expect.anything(), expect.anything());
+  });
+
   it("model lulus → disimpan; cadangan bisa dikosongkan", async () => {
     tests.assertUsable.mockResolvedValue(undefined);
+    db.studioSettings.findUnique.mockResolvedValue({
+      aiChatProviderKey: "db:p1",
+      aiChatModel: "m1",
+      aiProofProviderKey: null,
+      aiProofModel: null,
+      aiFallbackProviderKey: "env:ANTHROPIC",
+      aiFallbackModel: "claude-haiku-5-5",
+    });
     const res = await PUT_USAGE(new Request("http://x", { method: "PUT", body: JSON.stringify({ chat: { providerKey: "db:p1", model: "m2" }, fallback: null }) }));
     expect(res.status).toBe(200);
     expect(db.studioSettings.upsert.mock.calls[0][0].update).toEqual({ aiChatProviderKey: "db:p1", aiChatModel: "m2", aiFallbackProviderKey: null, aiFallbackModel: null });

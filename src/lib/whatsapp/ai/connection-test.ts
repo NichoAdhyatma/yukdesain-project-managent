@@ -51,16 +51,34 @@ export async function testAiConnection(client: AiClient, model: string, opts: { 
 
   await run("Koneksi", { ...base, messages: [{ role: "user", content: "Balas dengan satu kata: siap" }] }, hasText);
 
-  await run(
-    "Tool use",
-    {
+  // Tool use bolak-balik seperti bot: model memanggil tool, hasil tool dikirim balik, model harus menjawab teks.
+  // Menguji juga terjemahan hasil tool (format OpenAI: pesan role "tool").
+  try {
+    const first: Anthropic.MessageCreateParamsNonStreaming = {
       ...base,
-      system: "Kamu asisten uji koneksi. Gunakan tool save_color untuk menyimpan warna yang disebut pengguna.",
+      system: "Kamu asisten uji koneksi. Gunakan tool save_color untuk menyimpan warna yang disebut pengguna, lalu konfirmasi singkat.",
       tools: [PING_TOOL],
       messages: [{ role: "user", content: "Warna favorit saya coklat." }],
-    },
-    (r) => (r.content.some((b) => b.type === "tool_use" && b.name === "save_color") ? null : "Model tidak memanggil tool"),
-  );
+    };
+    const r1 = await client.create(first);
+    const use = r1.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "save_color");
+    if (!use || r1.stop_reason !== "tool_use") {
+      checks.push({ name: "Tool use", ok: false, detail: "Model tidak memanggil tool" });
+    } else {
+      const r2 = await client.create({
+        ...first,
+        messages: [
+          ...first.messages,
+          { role: "assistant", content: r1.content },
+          { role: "user", content: [{ type: "tool_result", tool_use_id: use.id, content: '{"saved":true}' }] },
+        ],
+      });
+      const problem = hasText(r2);
+      checks.push({ name: "Tool use", ok: !problem, detail: problem ? "Model tidak menjawab setelah hasil tool" : "OK (tool + jawaban)" });
+    }
+  } catch (error) {
+    checks.push({ name: "Tool use", ok: false, detail: describeError(error) });
+  }
 
   await run(
     "Gambar",

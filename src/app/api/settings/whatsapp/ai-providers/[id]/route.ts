@@ -29,7 +29,7 @@ export async function PUT(request: Request, { params }: Params) {
   if (input.apiKey && !isKeyCryptoReady()) {
     return NextResponse.json({ error: "VALIDATION_ERROR", message: new KeyCryptoUnavailableError().message }, { status: 400 });
   }
-  // Key kosong = tidak diubah. Mengubah base URL / key memperbarui updatedAt → hasil tes lama batal.
+  // Key kosong = tidak diubah. Mengubah base URL, format, atau key membatalkan hasil tes lama (credentialVersionOf).
   const key = input.apiKey ? encryptApiKey(input.apiKey) : null;
   const row = await prisma.aiProvider.update({
     where: { id },
@@ -64,6 +64,7 @@ export async function DELETE(_request: Request, { params }: Params) {
     return NextResponse.json({ error: "CONFLICT", message: `Provider sedang dipakai untuk ${usedFor.join(", ")}` }, { status: 409 });
   }
   await prisma.aiProvider.delete({ where: { id } });
+  await prisma.aiModelTest.deleteMany({ where: { providerKey: `db:${id}` } });
   await prisma.activityLog.create({
     data: { entityType: "AiProvider", entityId: id, action: "AI_PROVIDER_DELETED", actorId: auth.user.id },
   });

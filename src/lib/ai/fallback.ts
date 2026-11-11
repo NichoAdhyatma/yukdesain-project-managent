@@ -28,27 +28,48 @@ export async function createWithTarget(target: AiTarget, params: ChatParams): Pr
   return getAiClient(provider).create({ ...params, ...options, model: target.model });
 }
 
+function notifyFallback(targets: { chat: AiTarget }, reason: string, now: Date) {
+  if (now.getTime() - lastNotifyAt < NOTIFY_INTERVAL_MS) return;
+  lastNotifyAt = now.getTime();
+  void notifyOwnersPush("NEEDS_ADMIN", {
+    title: "Provider utama gagal, memakai cadangan",
+    body: `${targets.chat.model}: ${reason}. Cek Bot AI › Model.`,
+    url: "/bot?tab=model",
+    tag: "AI_FALLBACK",
+  });
+}
+
+/**
+ * Sesi Chat untuk satu giliran bot (beberapa putaran tool). Setelah provider utama gagal secara teknis sekali, sisa
+ * putaran langsung ke cadangan: tidak menunggu timeout utama berulang, dan satu giliran tidak mencampur provider.
+ */
+export function createChatSession(targets: { chat: AiTarget; fallback: AiTarget | null }, now = new Date()) {
+  const session = {
+    usedFallback: false,
+    async create(params: ChatParams): Promise<Anthropic.Message> {
+      if (session.usedFallback && targets.fallback) return createWithTarget(targets.fallback, params);
+      try {
+        return await createWithTarget(targets.chat, params);
+      } catch (error) {
+        if (!targets.fallback || !isTechnicalFailure(error)) throw error;
+        const reason = maskSecrets(String((error as Error).message ?? error)).slice(0, 120);
+        console.warn(`[ai] provider utama gagal (${reason}), memakai cadangan untuk giliran ini`);
+        session.usedFallback = true;
+        notifyFallback(targets, reason, now);
+        return createWithTarget(targets.fallback, params);
+      }
+    },
+  };
+  return session;
+}
+
+/** Satu panggilan Chat dengan cadangan (tanpa sesi). */
 export async function createChatWithFallback(
   targets: { chat: AiTarget; fallback: AiTarget | null },
   params: ChatParams,
   now = new Date(),
 ): Promise<{ message: Anthropic.Message; usedFallback: boolean }> {
-  try {
-    return { message: await createWithTarget(targets.chat, params), usedFallback: false };
-  } catch (error) {
-    if (!targets.fallback || !isTechnicalFailure(error)) throw error;
-    const reason = maskSecrets(String((error as Error).message ?? error)).slice(0, 120);
-    console.warn(`[ai] provider utama gagal (${reason}), memakai cadangan`);
-    const message = await createWithTarget(targets.fallback, params);
-    if (now.getTime() - lastNotifyAt >= NOTIFY_INTERVAL_MS) {
-      lastNotifyAt = now.getTime();
-      void notifyOwnersPush("NEEDS_ADMIN", {
-        title: "Provider utama gagal, memakai cadangan",
-        body: `${targets.chat.model}: ${reason}. Cek Bot AI › Model.`,
-        url: "/bot?tab=model",
-        tag: "AI_FALLBACK",
-      });
-    }
-    return { message, usedFallback: true };
-  }
+  const session = createChatSession(targets, now);
+  const message = await session.create(params);
+  return { message, usedFallback: session.usedFallback };
 }

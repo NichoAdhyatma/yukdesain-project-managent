@@ -61,3 +61,26 @@ describe("isTechnicalFailure", () => {
     expect(isTechnicalFailure(new Error("AI_REFUSAL"))).toBe(false);
   });
 });
+
+describe("OPENAI: kegagalan setelah header (review Important 4, Minor 4)", () => {
+  it("timeout saat membaca isi jawaban → kegagalan teknis", async () => {
+    const res = new Response("x", { status: 200 });
+    vi.spyOn(res, "text").mockRejectedValue(Object.assign(new Error("The operation was aborted due to timeout"), { name: "TimeoutError" }));
+    fetchMock.mockResolvedValue(res);
+    const err = await getAiClient(provider).create(params).catch((e) => e);
+    expect(err).toBeInstanceOf(AiProviderError);
+    expect(isTechnicalFailure(err)).toBe(true);
+  });
+
+  it.each([
+    ['{"error":{"message":"upstream overloaded"}}'],
+    ['{"choices":[]}'],
+    ["<html>bad gateway</html>"],
+  ])("HTTP 200 tanpa jawaban yang sah (%s) → kegagalan teknis", async (body) => {
+    fetchMock.mockResolvedValue(new Response(body, { status: 200 }));
+    const err = await getAiClient(provider).create(params).catch((e) => e);
+    expect(err).toBeInstanceOf(AiProviderError);
+    expect(isTechnicalFailure(err)).toBe(true);
+  });
+});
+

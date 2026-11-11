@@ -22,7 +22,8 @@ describe("runModelTest", () => {
   it("menyimpan hasil per langkah tanpa key provider di detail", async () => {
     client.create
       .mockResolvedValueOnce({ stop_reason: "end_turn", content: [{ type: "text", text: "ok" }] })
-      .mockResolvedValueOnce({ stop_reason: "tool_use", content: [{ type: "tool_use", name: "save_color", input: {} }] })
+      .mockResolvedValueOnce({ stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu1", name: "save_color", input: {} }] })
+      .mockResolvedValueOnce({ stop_reason: "end_turn", content: [{ type: "text", text: "disimpan" }] })
       .mockRejectedValueOnce(new Error("image not supported for key sk-or-secret-123"));
     const { test: saved, checks } = await runModelTest("db:p1", "m1");
     expect(checks.map((c) => [c.name, c.ok])).toEqual([

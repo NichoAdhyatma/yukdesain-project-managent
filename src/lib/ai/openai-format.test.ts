@@ -126,3 +126,11 @@ describe("fromOpenAiResponse", () => {
     expect(() => fromOpenAiResponse({ error: "x" }, "m")).toThrow("OPENAI_BAD_RESPONSE");
   });
 });
+
+describe("fromOpenAiResponse: tool_calls dengan finish_reason stop (review Important 2)", () => {
+  it("ada tool_calls → stop_reason tool_use walau finish_reason stop", () => {
+    const msg = fromOpenAiResponse({ choices: [{ message: { tool_calls: [{ id: "c1", function: { name: "x", arguments: "{}" } }] }, finish_reason: "stop" }] }, "m");
+    expect(msg.stop_reason).toBe("tool_use");
+  });
+});
+

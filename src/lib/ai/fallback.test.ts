@@ -11,7 +11,7 @@ const push = vi.hoisted(() => ({ notifyOwnersPush: vi.fn() }));
 vi.mock("@/lib/notifications/push", () => push);
 
 import { AiProviderError } from "./client";
-import { createChatWithFallback, resetFallbackNotifyThrottle } from "./fallback";
+import { createChatSession, createChatWithFallback, resetFallbackNotifyThrottle } from "./fallback";
 import { KeyCryptoUnavailableError } from "./key-crypto";
 
 const resolved = (key: string, format = "ANTHROPIC") => ({ key, name: key === "db:backup" ? "Cadangan" : "Utama", format, baseUrl: "https://x", builtIn: false, credentialVersion: "v", apiKey: "k" });
@@ -73,3 +73,26 @@ describe("createChatWithFallback (spec §5.5)", () => {
     await expect(createChatWithFallback({ ...targets, fallback: null }, params, t0)).rejects.toThrow("HTTP 503");
   });
 });
+
+describe("createChatSession: cadangan menempel untuk sisa giliran (review Important 1)", () => {
+  it("setelah utama gagal sekali, putaran berikutnya langsung ke cadangan", async () => {
+    clients.primary.create.mockRejectedValue(new AiProviderError("timeout", null));
+    const session = createChatSession(targets, t0);
+    await session.create(params);
+    await session.create(params);
+    expect(clients.primary.create).toHaveBeenCalledTimes(1);
+    expect(clients.backup.create).toHaveBeenCalledTimes(2);
+    expect(session.usedFallback).toBe(true);
+    expect(push.notifyOwnersPush).toHaveBeenCalledTimes(1);
+  });
+
+  it("utama sehat → semua putaran ke utama", async () => {
+    clients.primary.create.mockResolvedValue(message);
+    const session = createChatSession(targets, t0);
+    await session.create(params);
+    await session.create(params);
+    expect(clients.primary.create).toHaveBeenCalledTimes(2);
+    expect(session.usedFallback).toBe(false);
+  });
+});
+

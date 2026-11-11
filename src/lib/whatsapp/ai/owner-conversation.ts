@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { getStudioSettings } from "@/lib/studio";
 import { maskPhone } from "../phone";
 import { getAiTargets } from "./ai-config";
-import { createChatWithFallback } from "@/lib/ai/fallback";
+import { createChatSession } from "@/lib/ai/fallback";
 import { EMPTY_GUIDE, botGuideSchema, describeRuleValue, getDraftGuide, getPublishedGuide, type BotGuide } from "./bot-guide";
 import { createProposal, findPendingProposal, isNoChange } from "../owner/proposals";
 import { answerOwnerQuery } from "../owner/query-store";
@@ -211,6 +211,7 @@ export async function runOwnerAiTurn(p: {
       select: { direction: true, body: true },
     }),
   ]);
+  const chat = createChatSession(targets);
   const openIds = new Set(queries.map((q) => q.id));
 
   const messages: Anthropic.MessageParam[] = history
@@ -235,7 +236,7 @@ export async function runOwnerAiTurn(p: {
   const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [] };
 
   for (let round = 0; ; round++) {
-    const { message: response } = await createChatWithFallback(targets, {
+    const response = await chat.create({
       max_tokens: Math.max(targets.maxTokens, 1500),
       system,
       tools: OWNER_TOOLS,

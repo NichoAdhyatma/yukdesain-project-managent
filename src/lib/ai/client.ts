@@ -73,14 +73,25 @@ function openAiClient(provider: ResolvedProvider): AiClient {
       } catch (error) {
         throw new AiProviderError(maskSecrets(`Koneksi gagal: ${(error as Error).message}`, [provider.apiKey]), null);
       }
-      const text = await res.text();
+      let text: string;
+      try {
+        // Timeout bisa terjadi setelah header (mis. OpenRouter mengirim header lebih dulu): tetap kegagalan teknis.
+        text = await res.text();
+      } catch (error) {
+        throw new AiProviderError(maskSecrets(`Jawaban terputus: ${(error as Error).message}`, [provider.apiKey]), null);
+      }
       if (!res.ok) throw new AiProviderError(maskSecrets(`HTTP ${res.status}: ${text}`, [provider.apiKey]).slice(0, 300), res.status);
+      // HTTP 200 tanpa jawaban yang sah (error dari upstream gateway, choices kosong, bukan JSON) diperlakukan seperti
+      // 502: kegagalan teknis, supaya cadangan dipakai.
+      const upstream = (detail: string) => new AiProviderError(maskSecrets(`Jawaban provider tidak sah: ${detail}`, [provider.apiKey]).slice(0, 300), 502);
       let body: unknown;
       try {
         body = JSON.parse(text);
       } catch {
-        throw new AiProviderError("Jawaban provider bukan JSON", res.status);
+        throw upstream(text.slice(0, 120));
       }
+      const parsed = body as { error?: unknown; choices?: unknown[] };
+      if (parsed?.error || !Array.isArray(parsed?.choices) || parsed.choices.length === 0) throw upstream(JSON.stringify(parsed?.error ?? "tanpa choices"));
       return fromOpenAiResponse(body, params.model);
     },
   };

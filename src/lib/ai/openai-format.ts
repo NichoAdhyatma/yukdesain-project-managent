@@ -111,7 +111,8 @@ export function fromOpenAiResponse(body: unknown, model: string): Anthropic.Mess
     role: "assistant",
     model,
     content,
-    stop_reason: STOP_REASONS[choice.finish_reason ?? "stop"] ?? "end_turn",
+    // Beberapa backend kompatibel OpenAI mengirim finish_reason "stop" bersama tool_calls; tool_calls yang menentukan.
+    stop_reason: choice.message.tool_calls?.length ? "tool_use" : (STOP_REASONS[choice.finish_reason ?? "stop"] ?? "end_turn"),
     stop_sequence: null,
     usage: { input_tokens: res.usage?.prompt_tokens ?? 0, output_tokens: res.usage?.completion_tokens ?? 0 },
   } as Anthropic.Message;

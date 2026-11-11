@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { aiModelIdSchema } from "@/lib/ai/providers";
 import { ModelNotTestedError, assertUsable, type AiUsage } from "@/lib/ai/model-tests";
-import { CAPABILITY_LABELS } from "@/lib/ai/provider-admin";
+import { CAPABILITY_LABELS, getUsage } from "@/lib/ai/provider-admin";
 
 // Pilihan model untuk Chat / Bukti transfer / Cadangan; hanya model yang lulus tes (spec 2026-11-11 §4.3).
 // null = kembali ke bawaan (Chat/Bukti: provider env lama; Cadangan: tanpa cadangan).
@@ -26,9 +26,14 @@ export async function PUT(request: Request) {
 
   const fields: Record<string, string> = {};
   const data: Record<string, string | null> = {};
+  const stored = await getUsage();
   for (const usage of Object.keys(COLUMNS) as AiUsage[]) {
     const value = parsed.data[usage];
     if (value === undefined) continue;
+    // Pilihan yang sama dengan yang tersimpan tidak dicek ulang: pilihan yang basi (key diganti) tidak boleh
+    // memblokir perubahan pemakaian lain.
+    const unchanged = value?.providerKey === stored[usage]?.providerKey && value?.model === stored[usage]?.model;
+    if (unchanged) continue;
     if (value) {
       try {
         await assertUsable(usage, value.providerKey, value.model);
@@ -42,6 +47,7 @@ export async function PUT(request: Request) {
     data[COLUMNS[usage].model] = value?.model ?? null;
   }
   if (Object.keys(fields).length) return NextResponse.json({ error: "VALIDATION_ERROR", fields }, { status: 400 });
+  if (!Object.keys(data).length) return NextResponse.json({ ok: true });
 
   await prisma.studioSettings.upsert({ where: { id: "default" }, update: data, create: { id: "default", ...data } });
   await prisma.activityLog.create({

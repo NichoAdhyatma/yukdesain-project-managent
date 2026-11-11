@@ -96,20 +96,26 @@ export async function getAiConfig(): Promise<AiConfig> {
  * Target AI per pemakaian (docs/AI_PROVIDERS.md). Kolom pemakaian kosong = jalur lama: provider env pilihan
  * (waAiProvider) dengan model pilihan owner atau default env. Provider baru dibuka saat dipanggil (fallback.ts).
  */
-export async function getAiTargets(): Promise<{ chat: AiTarget; proof: AiTarget; fallback: AiTarget | null; maxTokens: number }> {
-  const row = await getAiSettingsRow();
+/** Bawaan server (jalur lama) untuk Chat dan Bukti transfer: provider env pilihan + model pilihan / default env. */
+export function defaultTargets(row: AiSettingsRow | null): { chat: AiTarget; proof: AiTarget } {
   const legacyProvider = providerOf(row);
   const env = getProviderEnv(legacyProvider);
   const overrides = modelOverrides(row, legacyProvider);
-  const legacyKey = `env:${legacyProvider}`;
+  const providerKey = `env:${legacyProvider}`;
+  return {
+    chat: { providerKey, model: overrides.model || env.defaultModel },
+    proof: { providerKey, model: overrides.extractionModel || env.defaultExtractionModel },
+  };
+}
+
+export async function getAiTargets(): Promise<{ chat: AiTarget; proof: AiTarget; fallback: AiTarget | null; maxTokens: number }> {
+  const row = await getAiSettingsRow();
+  const defaults = defaultTargets(row);
   const pick = (key: string | null | undefined, model: string | null | undefined): AiTarget | null =>
     key && model ? { providerKey: key, model } : null;
   return {
-    chat: pick(row?.aiChatProviderKey, row?.aiChatModel) ?? { providerKey: legacyKey, model: overrides.model || env.defaultModel },
-    proof: pick(row?.aiProofProviderKey, row?.aiProofModel) ?? {
-      providerKey: legacyKey,
-      model: overrides.extractionModel || env.defaultExtractionModel,
-    },
+    chat: pick(row?.aiChatProviderKey, row?.aiChatModel) ?? defaults.chat,
+    proof: pick(row?.aiProofProviderKey, row?.aiProofModel) ?? defaults.proof,
     fallback: pick(row?.aiFallbackProviderKey, row?.aiFallbackModel),
     maxTokens: getAiEnv().WA_AI_MAX_TOKENS,
   };

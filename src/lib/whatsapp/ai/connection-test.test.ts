@@ -11,7 +11,8 @@ describe("testAiConnection", () => {
   it("tiga pemeriksaan lolos; opsi Claude hanya bila diminta", async () => {
     create
       .mockResolvedValueOnce(ok("siap"))
-      .mockResolvedValueOnce({ stop_reason: "tool_use", content: [{ type: "tool_use", name: "save_color", input: {} }] })
+      .mockResolvedValueOnce({ stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu1", name: "save_color", input: { color: "coklat" } }] })
+      .mockResolvedValueOnce(ok("Siap, coklat disimpan"))
       .mockResolvedValueOnce(ok("coklat"));
     const checks = await testAiConnection(client as never, "claude-sonnet-4-6", { claudeOptions: true });
     expect(checks.map((c) => [c.name, c.ok])).toEqual([
@@ -20,7 +21,30 @@ describe("testAiConnection", () => {
       ["Gambar", true],
     ]);
     expect(create.mock.calls[1][0].output_config).toEqual({ effort: "low" });
-    expect(create.mock.calls[2][0].messages[0].content[0]).toMatchObject({ type: "image", source: { type: "base64", media_type: "image/png" } });
+    // Tool use bolak-balik: hasil tool dikirim balik, model harus menjawab teks (review Important 2).
+    const roundTrip = create.mock.calls[2][0].messages;
+    expect(roundTrip[1]).toMatchObject({ role: "assistant", content: [{ type: "tool_use", id: "tu1" }] });
+    expect(roundTrip[2]).toMatchObject({ role: "user", content: [{ type: "tool_result", tool_use_id: "tu1" }] });
+    expect(create.mock.calls[3][0].messages[0].content[0]).toMatchObject({ type: "image", source: { type: "base64", media_type: "image/png" } });
+  });
+
+  it("tool_use tanpa stop_reason tool_use, atau tidak ada jawaban setelah hasil tool → Tool use gagal", async () => {
+    create
+      .mockResolvedValueOnce(ok("siap"))
+      .mockResolvedValueOnce({ stop_reason: "end_turn", content: [{ type: "tool_use", id: "tu1", name: "save_color", input: {} }] })
+      .mockResolvedValueOnce(ok("coklat"));
+    const [, tool] = await testAiConnection(client as never, "m", { claudeOptions: false });
+    expect(tool.ok).toBe(false);
+
+    create.mockReset();
+    create
+      .mockResolvedValueOnce(ok("siap"))
+      .mockResolvedValueOnce({ stop_reason: "tool_use", content: [{ type: "tool_use", id: "tu1", name: "save_color", input: {} }] })
+      .mockRejectedValueOnce(Object.assign(new Error("invalid tool message"), { status: 400 }))
+      .mockResolvedValueOnce(ok("coklat"));
+    const [, tool2] = await testAiConnection(client as never, "m", { claudeOptions: false });
+    expect(tool2.ok).toBe(false);
+    expect(tool2.detail).toContain("invalid tool message");
   });
 
   it("model non-Claude: tanpa opsi Claude", async () => {

@@ -4,7 +4,7 @@ import { requireOwner } from "@/lib/auth/require-owner";
 import { encryptApiKey, isKeyCryptoReady, KeyCryptoUnavailableError } from "@/lib/ai/key-crypto";
 import { listProviders, normalizeBaseUrl, providerInputSchema } from "@/lib/ai/providers";
 import { getUsage, testsByProvider } from "@/lib/ai/provider-admin";
-import { getAiTargets } from "@/lib/whatsapp/ai/ai-config";
+import { defaultTargets, getAiSettingsRow, getAiTargets } from "@/lib/whatsapp/ai/ai-config";
 
 // Provider AI dari portal (docs/AI_PROVIDERS.md). Key tidak pernah ada di respons maupun log.
 
@@ -14,13 +14,15 @@ export async function GET() {
   const auth = await requireOwner();
   if (auth.error) return auth.error;
   const providers = await listProviders();
-  const [tests, usage, effective] = await Promise.all([testsByProvider(providers), getUsage(), getAiTargets()]);
+  const [tests, usage, effective, row] = await Promise.all([testsByProvider(providers), getUsage(), getAiTargets(), getAiSettingsRow()]);
   // effective = yang sedang dipakai bot (termasuk bawaan server bila pemakaian belum dipilih).
   return NextResponse.json({
     providers,
     tests,
     usage,
     effective: { chat: effective.chat, proof: effective.proof, fallback: effective.fallback },
+    // defaults = "Bawaan server" (dipakai bila pemakaian dikosongkan).
+    defaults: defaultTargets(row),
     cryptoReady: isKeyCryptoReady(),
   });
 }

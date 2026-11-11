@@ -12,7 +12,7 @@ import { getBotServiceCatalog, servicePriceGroups, type BotService } from "./ser
 import { ACTIVE_INTAKE_STATUSES, snapshotDpPercent } from "../intake";
 import { DP_PERCENT } from "@/lib/constants";
 import { getAiTargets } from "./ai-config";
-import { createChatWithFallback } from "@/lib/ai/fallback";
+import { createChatSession } from "@/lib/ai/fallback";
 import { INTAKE_TOOLS, executeTool, findActiveIntake } from "./tools";
 
 // Satu giliran AI untuk satu pesan masuk (§10.3 langkah 7–8).
@@ -167,6 +167,8 @@ function textOf(response: Anthropic.Message): string {
 export async function runAiTurn(params: { conversationId: string; messageId: string }): Promise<AiTurnResult> {
   // Provider/model pilihan owner (Bot AI › Model) dengan cadangan; docs/AI_PROVIDERS.md.
   const targets = await getAiTargets();
+  // Satu sesi per giliran: cadangan menempel setelah utama gagal (tidak mencampur provider di tengah giliran).
+  const chat = createChatSession(targets);
   const current = await prisma.waMessage.findUniqueOrThrow({
     where: { id: params.messageId },
     select: { createdAt: true },
@@ -208,7 +210,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
 
   for (let round = 0; ; round++) {
     const toolsAllowed = round < MAX_TOOL_ROUNDS;
-    const { message: response } = await createChatWithFallback(targets, {
+    const response = await chat.create({
       max_tokens: targets.maxTokens,
       system,
       tools: INTAKE_TOOLS,

@@ -41,7 +41,7 @@ export function AiUsageCard({ data }: { data: AiProvidersData }) {
       (data.tests[p.key] ?? []).filter((t) => !t.stale && t.usages.includes(usage)).map((t) => ({ value: `${p.key}|${t.model}`, label: `${p.name} · ${t.model}` })),
     );
     const defaultLabel =
-      usage === "fallback" ? "Tanpa cadangan" : `Bawaan server (${nameOf(usage === "chat" ? data.effective.chat.providerKey : data.effective.proof.providerKey)})`;
+      usage === "fallback" ? "Tanpa cadangan" : `Bawaan server (${nameOf(data.defaults[usage].providerKey)} · ${data.defaults[usage].model})`;
     const current = form[usage];
     // Pilihan tersimpan yang tidak lagi lulus (mis. key diganti) tetap tampil supaya tidak hilang diam-diam.
     const extra = current !== NONE && !passed.some((o) => o.value === current) ? [{ value: current, label: `${nameOf(decode(current)!.providerKey)} · ${decode(current)!.model}` }] : [];
@@ -56,7 +56,9 @@ export function AiUsageCard({ data }: { data: AiProvidersData }) {
   };
 
   const save = useMutation({
-    mutationFn: () => saveUsage({ chat: decode(form.chat), proof: decode(form.proof), fallback: decode(form.fallback) }),
+    // Hanya pilihan yang berubah yang dikirim (pilihan basi lain tidak ikut dicek ulang).
+    mutationFn: () =>
+      saveUsage(Object.fromEntries(USAGES.filter((u) => form[u] !== encode(data.usage[u])).map((u) => [u, decode(form[u])]))),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: AI_PROVIDERS_KEY });
       toast("Pemakaian model disimpan. Bot langsung memakainya.", "success");

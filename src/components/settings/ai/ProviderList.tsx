@@ -93,7 +93,11 @@ export function ProviderList({ data }: { data: AiProvidersData }) {
         )}
         <ul className="space-y-3">
           {data.providers.map((p) => (
-            <ProviderItem key={p.key} provider={p} data={data} onEdit={() => setForm({ provider: p })} onDelete={() => setToDelete(p)} />
+            <ProviderItem key={p.key} provider={p} data={data} onEdit={() => setForm({ provider: p })} onDelete={() => {
+                remove.reset();
+                setToDelete(p);
+              }}
+            />
           ))}
         </ul>
         {custom.length === 0 && data.cryptoReady && (

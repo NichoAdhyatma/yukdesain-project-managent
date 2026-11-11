@@ -37,10 +37,10 @@ const ENV_PROVIDERS: EnvProvider[] = ["ANTHROPIC", "GATEWAY"];
 
 /** Buang garis miring akhir dan path endpoint yang ikut ditempel owner. */
 export function normalizeBaseUrl(url: string, format: ProviderFormat): string {
-  let out = url.trim().replace(/\/+$/, "");
-  const suffix = format === "OPENAI" ? /\/chat\/completions$/i : /\/v1\/messages$/i;
-  out = out.replace(suffix, "").replace(/\/+$/, "");
-  return out;
+  const out = url.trim().replace(/\/+$/, "");
+  if (format === "OPENAI") return out.replace(/\/chat\/completions$/i, "").replace(/\/+$/, "");
+  // SDK Anthropic menambah /v1/messages sendiri: buang /v1/messages atau /v1 di akhir.
+  return out.replace(/\/v1\/messages$/i, "").replace(/\/v1$/i, "").replace(/\/+$/, "");
 }
 
 const LOCAL_HTTP = /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?(\/|$)/i;
@@ -61,11 +61,12 @@ export const providerInputSchema = z.object({
   apiKey: z.string().trim().min(8, "API key terlalu pendek").max(400, "API key terlalu panjang").optional(),
 });
 
-export function credentialVersionOf(p: { key: string; baseUrl: string; updatedAt: Date | null; keyTail?: string }): string {
-  return createHash("sha256")
-    .update(`${p.key}|${p.baseUrl}|${p.updatedAt?.toISOString() ?? ""}|${p.keyTail ?? ""}`)
-    .digest("hex")
-    .slice(0, 12);
+/**
+ * Sidik kredensial: berubah hanya bila base URL, format, atau key berubah (bukan nama), sehingga hasil tes lama batal
+ * tepat saat perlu. `secret` = ciphertext key (provider portal) atau key env; di-hash, tidak pernah dikirim.
+ */
+export function credentialVersionOf(p: { key: string; baseUrl: string; format: ProviderFormat; secret: string }): string {
+  return createHash("sha256").update(`${p.key}|${p.format}|${p.baseUrl}|${p.secret}`).digest("hex").slice(0, 12);
 }
 
 function envProvider(provider: EnvProvider): { summary: ProviderSummary; apiKey: string | null } {
@@ -79,7 +80,7 @@ function envProvider(provider: EnvProvider): { summary: ProviderSummary; apiKey:
     keyHint: env.apiKey ? `••••${env.apiKey.slice(-4)}` : null,
     builtIn: true,
     // Mengganti key env juga membatalkan hasil tes.
-    credentialVersion: credentialVersionOf({ key, baseUrl: env.baseUrl, updatedAt: null, keyTail: env.apiKey?.slice(-4) }),
+    credentialVersion: credentialVersionOf({ key, baseUrl: env.baseUrl, format: "ANTHROPIC", secret: env.apiKey ?? "" }),
     configured: !!env.apiKey,
   };
   return { summary, apiKey: env.apiKey };
@@ -96,7 +97,7 @@ function dbSummary(row: ProviderRow): ProviderSummary {
     baseUrl: row.baseUrl,
     keyHint: `••••${row.apiKeyLast4}`,
     builtIn: false,
-    credentialVersion: credentialVersionOf({ key, baseUrl: row.baseUrl, updatedAt: row.updatedAt }),
+    credentialVersion: credentialVersionOf({ key, baseUrl: row.baseUrl, format: row.format === "OPENAI" ? "OPENAI" : "ANTHROPIC", secret: row.apiKeyCiphertext }),
     configured: isKeyCryptoReady(),
   };
 }

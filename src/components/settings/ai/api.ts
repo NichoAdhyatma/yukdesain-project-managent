@@ -33,6 +33,7 @@ export type AiProvidersData = {
   tests: Record<string, ModelTest[]>;
   usage: Record<AiUsage, AiTarget | null>;
   effective: { chat: AiTarget; proof: AiTarget; fallback: AiTarget | null };
+  defaults: { chat: AiTarget; proof: AiTarget };
   cryptoReady: boolean;
 };
 

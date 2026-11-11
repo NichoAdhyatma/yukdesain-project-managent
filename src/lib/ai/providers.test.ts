@@ -45,6 +45,9 @@ describe("normalizeBaseUrl (Review Focus 3)", () => {
   it("membuang garis miring dan path endpoint yang ikut ditempel", () => {
     expect(normalizeBaseUrl("https://openrouter.ai/api/v1/chat/completions/", "OPENAI")).toBe("https://openrouter.ai/api/v1");
     expect(normalizeBaseUrl("https://api.anthropic.com/v1/messages", "ANTHROPIC")).toBe("https://api.anthropic.com");
+    // SDK Anthropic menambah /v1 sendiri (review Minor 3).
+    expect(normalizeBaseUrl("https://api.anthropic.com/v1", "ANTHROPIC")).toBe("https://api.anthropic.com");
+    expect(normalizeBaseUrl("https://openrouter.ai/api/v1", "OPENAI")).toBe("https://openrouter.ai/api/v1");
   });
 });
 
@@ -90,11 +93,17 @@ describe("listProviders / resolveProvider", () => {
   });
 });
 
-describe("credentialVersionOf", () => {
-  it("berubah bila base URL atau waktu ubah berubah", () => {
-    const a = credentialVersionOf({ key: "db:p1", baseUrl: "https://a", updatedAt: new Date("2026-11-11T00:00:00Z") });
+describe("credentialVersionOf (review Minor 2)", () => {
+  it("berubah bila base URL, format, atau key berubah; tidak bila hanya nama yang diganti", async () => {
+    const a = credentialVersionOf({ key: "db:p1", baseUrl: "https://a", format: "OPENAI", secret: "c1" });
     expect(a).toHaveLength(12);
-    expect(credentialVersionOf({ key: "db:p1", baseUrl: "https://b", updatedAt: new Date("2026-11-11T00:00:00Z") })).not.toBe(a);
-    expect(credentialVersionOf({ key: "db:p1", baseUrl: "https://a", updatedAt: new Date("2026-11-12T00:00:00Z") })).not.toBe(a);
+    expect(credentialVersionOf({ key: "db:p1", baseUrl: "https://b", format: "OPENAI", secret: "c1" })).not.toBe(a);
+    expect(credentialVersionOf({ key: "db:p1", baseUrl: "https://a", format: "ANTHROPIC", secret: "c1" })).not.toBe(a);
+    expect(credentialVersionOf({ key: "db:p1", baseUrl: "https://a", format: "OPENAI", secret: "c2" })).not.toBe(a);
+
+    const before = (await listProviders()).find((p) => p.key === "db:p1")!.credentialVersion;
+    row.name = "Nama baru";
+    row.updatedAt = new Date("2026-11-12T00:00:00Z");
+    expect((await listProviders()).find((p) => p.key === "db:p1")!.credentialVersion).toBe(before);
   });
 });
