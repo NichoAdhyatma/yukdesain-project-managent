@@ -84,6 +84,7 @@ describe("GET", () => {
     expect(body.cryptoReady).toBe(true);
     expect(body.providers.map((p: { key: string }) => p.key)).toEqual(["env:ANTHROPIC", "env:GATEWAY"]);
     expect(body.usage.chat).toEqual({ providerKey: "db:p1", model: "m1" });
+    expect(body.effective.chat).toEqual({ providerKey: "db:p1", model: "m1" });
     expect(JSON.stringify(body)).not.toContain("sk-ant-env-1234");
   });
 });

@@ -2,20 +2,11 @@
 
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
-import { Loader2, RotateCcw } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AiProviderCard } from "@/components/settings/whatsapp/AiProviderCard";
+import { AiModelSettings } from "@/components/settings/ai/AiModelSettings";
 import { BotBrainCard } from "@/components/settings/whatsapp/BotBrainCard";
 import { BotGuideCard } from "@/components/settings/whatsapp/BotGuideCard";
 import { BotSandboxCard } from "@/components/settings/whatsapp/BotSandboxCard";
-import {
-  WHATSAPP_SETTINGS_KEY,
-  fetchWhatsAppSettings,
-  type WhatsAppSettings,
-} from "@/components/settings/whatsapp/settings-api";
 
 // Bot AI (docs/BOT_AI_PAGE.md): semua yang menyangkut otak bot, terpisah dari Settings › WhatsApp.
 // Tab aktif ada di URL (?tab=…); ?bagian=… menggulir ke bagian Panduan (dipakai tombol Ubah di Otak bot).
@@ -105,40 +96,7 @@ function BotContent() {
   );
 }
 
-/** Model AI butuh status penyedia dari pengaturan WhatsApp (key terpasang atau belum). */
+/** Model AI: provider dari portal, tes model, dan pemakaian (docs/AI_PROVIDERS.md). */
 function ModelTab() {
-  const { data, isLoading, isError, refetch, isRefetching } = useQuery<WhatsAppSettings>({
-    queryKey: WHATSAPP_SETTINGS_KEY,
-    queryFn: fetchWhatsAppSettings,
-  });
-  if (isLoading) {
-    return (
-      <Card aria-busy="true">
-        <CardHeader>
-          <CardTitle>Model AI</CardTitle>
-          <CardDescription>Memuat pengaturan…</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-24 w-full animate-pulse rounded bg-muted" />
-        </CardContent>
-      </Card>
-    );
-  }
-  if (isError || !data) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Model AI</CardTitle>
-          <CardDescription>Pengaturan tidak bisa dimuat.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={() => refetch()} disabled={isRefetching}>
-            {isRefetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-            Coba lagi
-          </Button>
-        </CardContent>
-      </Card>
-    );
-  }
-  return <AiProviderCard data={data} />;
+  return <AiModelSettings />;
 }
