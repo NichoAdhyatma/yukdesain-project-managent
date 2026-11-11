@@ -121,7 +121,7 @@ export function ResponderSwitchDialog({ open, onOpenChange }: { open: boolean; o
     setSelected(next);
   };
 
-  const blocked = toPortal && !!data && (data.kirimiAi === "on" || (data.kirimiAi === "unknown" && !confirmed));
+  const blocked = toPortal && !!data && (data.kirimiAi === "on" || data.kirimiAi === "unknown") && !confirmed;
 
   return (
     <Dialog open={open} onOpenChange={close}>
@@ -151,9 +151,13 @@ export function ResponderSwitchDialog({ open, onOpenChange }: { open: boolean; o
             <Step n={1} title="Matikan Agen AI Kirimi">
               {data.kirimiAi === "off" && <Note tone="ok">Agen AI Kirimi sudah mati di perangkat ini.</Note>}
               {data.kirimiAi === "not_kirimi" && <Note tone="ok">Saluran aktif bukan Kirimi, langkah ini tidak perlu.</Note>}
-              {data.kirimiAi === "on" && (
-                <Note tone="error">
-                  <p>Agen AI Kirimi masih aktif. Matikan di dashboard Kirimi, lalu cek ulang.</p>
+              {(data.kirimiAi === "on" || data.kirimiAi === "unknown") && (
+                <Note tone="warn">
+                  <p>
+                    {data.kirimiAi === "on"
+                      ? "Kirimi masih melaporkan Agen AI aktif. Status ini kadang tidak ikut berubah setelah Agen AI dimatikan, jadi pastikan sendiri di dashboard Kirimi bahwa tidak ada agen yang aktif di perangkat ini."
+                      : "Status Agen AI Kirimi tidak terbaca dari server. Pastikan sendiri di dashboard Kirimi."}
+                  </p>
                   <div className="flex flex-wrap gap-2 pt-1">
                     <a href={KIRIMI_DASHBOARD} target="_blank" rel="noreferrer" className={cn(buttonVariants({ variant: "outline", size: "sm" }), "max-md:h-11")}>
                       <ExternalLink className="h-4 w-4" aria-hidden="true" />
@@ -164,11 +168,6 @@ export function ResponderSwitchDialog({ open, onOpenChange }: { open: boolean; o
                       Cek ulang
                     </Button>
                   </div>
-                </Note>
-              )}
-              {data.kirimiAi === "unknown" && (
-                <Note tone="warn">
-                  <p>Status Agen AI Kirimi tidak terbaca dari server.</p>
                   <label className="flex min-h-11 cursor-pointer items-center gap-2">
                     <input type="checkbox" className="h-4 w-4 accent-primary" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
                     Sudah saya matikan di dashboard Kirimi

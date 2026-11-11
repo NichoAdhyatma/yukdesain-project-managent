@@ -157,9 +157,12 @@ diganti tombol **Ganti penjawab** (`src/components/settings/whatsapp/ResponderSw
 `GET/POST /api/settings/whatsapp/responder`, `src/lib/whatsapp/responder.ts`, owner-only):
 
 - **Ke bot portal:**
-  1. Status Agen AI Kirimi dibaca lewat `/v1/device-status` (`ai_enabled`). Masih aktif → ditolak (409
-     `KIRIMI_AI_ON`), dengan link ke dashboard Kirimi dan tombol Cek ulang. Status tidak terbaca → owner wajib
-     mencentang "Sudah saya matikan" (`KIRIMI_UNCONFIRMED`). Saluran bukan Kirimi → langkah dilewati. Server
+  1. Status Agen AI Kirimi dibaca lewat `/v1/device-status` (`ai_enabled`). Kirimi melaporkan aktif atau status
+     tidak terbaca → peringatan + link dashboard Kirimi + Cek ulang, dan owner wajib mencentang "Sudah saya matikan"
+     (tanpa centang: 409 `KIRIMI_AI_ON` / `KIRIMI_UNCONFIRMED`). Temuan 2026-11-11: `ai_enabled` tetap `true` setelah
+     owner mematikan Agen AI di dashboard, jadi laporan "aktif" tidak lagi memblokir; konfirmasi owner dicatat di
+     `WA_RESPONDER_SWITCHED` (`kirimiOffConfirmed`). Bila AI Kirimi ternyata masih membalas, pantulannya terbaca
+     sebagai ketikan admin dan chat itu pindah ke mode admin (§10). Saluran bukan Kirimi → langkah dilewati. Server
      mengecek ulang saat menyimpan.
   2. Peringatan bila draft Panduan belum diterbitkan (tidak memblokir).
   3. Daftar chat mode admin (bukan Uji bot, bukan nomor diblokir). Tercentang otomatis: chat yang balasan admin-nya

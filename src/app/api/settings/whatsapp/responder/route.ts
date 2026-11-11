@@ -15,7 +15,7 @@ const switchSchema = z.discriminatedUnion("to", [
 ]);
 
 const MESSAGES = {
-  KIRIMI_AI_ON: "Agen AI Kirimi masih aktif. Matikan dulu di dashboard Kirimi, lalu cek ulang.",
+  KIRIMI_AI_ON: "Kirimi masih melaporkan Agen AI aktif. Matikan di dashboard Kirimi; bila sudah, centang konfirmasinya.",
   KIRIMI_UNCONFIRMED: "Status Agen AI Kirimi tidak terbaca. Pastikan sudah dimatikan di dashboard Kirimi, lalu centang konfirmasinya.",
 } as const;
 

@@ -70,11 +70,18 @@ describe("getResponderStatus", () => {
 });
 
 describe("switchResponder", () => {
-  it("ke bot portal ditolak selama AI Kirimi aktif; tidak ada yang diubah", async () => {
+  it("Kirimi melaporkan AI aktif: ditolak tanpa konfirmasi, tidak ada yang diubah", async () => {
     kirimi.kirimiDeviceStatus.mockResolvedValue({ aiEnabled: true });
     expect(await switchResponder({ to: "PORTAL", returnConversationIds: ["c1"] }, "u_owner")).toEqual({ ok: false, error: "KIRIMI_AI_ON" });
     expect(db.studioSettings.update).not.toHaveBeenCalled();
     expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("Kirimi melaporkan AI aktif tapi owner sudah mematikannya (status Kirimi tidak ikut berubah): boleh dengan konfirmasi, tercatat", async () => {
+    kirimi.kirimiDeviceStatus.mockResolvedValue({ aiEnabled: true });
+    expect(await switchResponder({ to: "PORTAL", returnConversationIds: [], kirimiOffConfirmed: true }, "u_owner")).toMatchObject({ ok: true, botEnabled: true });
+    const log = db.activityLog.create.mock.calls.find((c) => c[0].data.action === "WA_RESPONDER_SWITCHED")![0].data;
+    expect(log.newValue).toMatchObject({ kirimiAi: "on", kirimiOffConfirmed: true });
   });
 
   it("status AI Kirimi tidak terbaca: wajib konfirmasi manual", async () => {
