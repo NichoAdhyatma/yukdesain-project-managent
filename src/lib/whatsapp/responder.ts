@@ -127,7 +127,9 @@ export async function switchResponder(input: SwitchInput, actorId: string): Prom
 
   // Dicek ulang di server: status di layar bisa sudah basi.
   const ai = await kirimiAiState(await getChannel());
-  if (ai === "on") return { ok: false, error: "KIRIMI_AI_ON" };
+  // ai_enabled dari Kirimi tidak selalu ikut berubah setelah Agen AI dimatikan di dashboard (temuan 2026-11-11),
+  // jadi laporan "aktif" bisa dilewati dengan konfirmasi owner; konfirmasinya ikut dicatat.
+  if (ai === "on" && !input.kirimiOffConfirmed) return { ok: false, error: "KIRIMI_AI_ON" };
   if (ai === "unknown" && !input.kirimiOffConfirmed) return { ok: false, error: "KIRIMI_UNCONFIRMED" };
 
   const ids = [...new Set(input.returnConversationIds)];
@@ -155,7 +157,7 @@ export async function switchResponder(input: SwitchInput, actorId: string): Prom
         action: "WA_RESPONDER_SWITCHED",
         actorId,
         previousValue: { botEnabled: before?.waBotEnabled ?? false },
-        newValue: { responder: "PORTAL", botEnabled: true, returnedChats: count, kirimiAi: ai },
+        newValue: { responder: "PORTAL", botEnabled: true, returnedChats: count, kirimiAi: ai, kirimiOffConfirmed: !!input.kirimiOffConfirmed },
       },
     });
     return count;
