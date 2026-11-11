@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { getAnthropicClient, type AiConfig } from "./ai-config";
+import { createWithTarget, type AiTarget } from "@/lib/ai/fallback";
 
 // Ekstraksi bukti transfer (docs/WHATSAPP_AI_CHATBOT.md §11). AI hanya MEMBACA isi
 // gambar; tidak menilai asli/palsu. Kejanggalan dihitung server (computeProofFlags),
@@ -63,10 +63,10 @@ Panggil tool record_transfer_receipt tepat satu kali dengan isi yang terbaca.
 /** Return null jika model tidak mengembalikan data yang valid. */
 export async function extractPaymentProof(
   image: { data: Buffer; mimeType: "image/jpeg" | "image/png" | "image/webp" },
-  config: AiConfig,
+  // Model Baca bukti transfer (Bot AI › Model); tanpa cadangan: gagal baca = admin mengecek manual.
+  target: AiTarget,
 ): Promise<PaymentExtraction | null> {
-  const response = await getAnthropicClient(config).messages.create({
-    model: config.extractionModel,
+  const response = await createWithTarget(target, {
     max_tokens: 1024,
     system: SYSTEM,
     tools: [RECORD_TOOL],

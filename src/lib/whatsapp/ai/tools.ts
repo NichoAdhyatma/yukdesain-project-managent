@@ -9,7 +9,7 @@ import { copyToPublicBucket } from "@/lib/storage";
 import { getPrivateBucket } from "../env";
 import { mimeFromStorageKey, movePrivateMedia, readPrivateMedia } from "../media";
 import { WA_MAX_FAILED_LOOKUPS_PER_HOUR, WA_MAX_PAYMENT_PROOFS_PER_INTAKE } from "@/lib/constants";
-import { getAiConfig } from "./ai-config";
+import { getAiTargets } from "./ai-config";
 import { getClientProjectSummaries, getProjectDetailByCode } from "./client-safe-dto";
 import { findClientsByPhone } from "@/lib/clients/find-by-phone";
 import { getStudioSettings } from "@/lib/studio";
@@ -429,7 +429,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     // Gagal membaca bukan alasan menolak bukti: admin tetap bisa mengecek manual.
     let extraction: PaymentExtraction | null = null;
     try {
-      extraction = await extractPaymentProof({ data, mimeType }, await getAiConfig());
+      extraction = await extractPaymentProof({ data, mimeType }, (await getAiTargets()).proof);
     } catch (error) {
       const status = (error as { status?: number }).status;
       console.error(`[whatsapp] ekstraksi bukti transfer gagal: ${status ? `api_${status}` : (error as Error).name}`);

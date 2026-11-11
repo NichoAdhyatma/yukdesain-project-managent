@@ -35,7 +35,7 @@ const media = vi.hoisted(() => ({
   mimeFromStorageKey: (k: string) => (k.endsWith(".png") ? "image/png" : "image/jpeg"),
 }));
 vi.mock("../media", () => media);
-vi.mock("./ai-config", () => ({ getAiConfig: async () => ({ extractionModel: "x", baseUrl: "https://x" }) }));
+vi.mock("./ai-config", () => ({ getAiTargets: async () => ({ proof: { providerKey: "env:ANTHROPIC", model: "x" } }) }));
 const extraction = vi.hoisted(() => ({ extractPaymentProof: vi.fn() }));
 const dto = vi.hoisted(() => ({ getClientProjectSummaries: vi.fn(), getProjectDetailByCode: vi.fn() }));
 vi.mock("./client-safe-dto", () => dto);

@@ -780,7 +780,7 @@ Perbedaan dari rencana di atas, beserta alasannya. Dokumen di atas tetap acuan p
 
 **AI**
 - Blok STATE dikirim sebagai blok system prompt kedua (bukan pesan di tengah percakapan) supaya berjalan di semua model Claude.
-- `model-profile.ts`: parameter opsional (mis. `effort`) hanya dikirim ke model yang mendukung; model tak dikenal memakai profil aman. Hanya model `claude-*` yang diterima (keputusan owner: AI = Claude).
+- `model-profile.ts`: parameter opsional (mis. `effort`) hanya dikirim ke model yang mendukung; model tak dikenal memakai profil aman. Sejak 2026-11-11 semua model yang lulus tes di Bot AI › Model boleh dipakai, termasuk format OpenAI Chat Completions (keputusan owner, `docs/AI_PROVIDERS.md`); opsi khusus Claude hanya dikirim ke format Anthropic + model `claude-*`.
 - Ekstraksi bukti memakai tool berskema dengan `tool_choice: auto` (bukan forced tool use, yang ditolak Claude Sonnet/Opus 5.5).
 - AI tidak bisa menulis field gambar/URL brief (`reference_items_json`, logo, dll.); hanya server lewat `attach_image_to_brief` atau admin. Akibatnya link referensi yang diketik klien belum masuk brief otomatis.
 - Pengaman di server: `stripPriceMentions` (harga/durasi sebelum ada harga) dan `sanitizeReply` (markup tool-call → tidak dikirim, pengulangan rusak, huruf CJK, kode `SVC-xx`, em dash).

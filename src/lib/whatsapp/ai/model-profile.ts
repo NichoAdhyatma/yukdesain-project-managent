@@ -38,7 +38,8 @@ export function getModelProfile(model: string): ModelProfile {
   return { ...parsed, supportsEffort: effortSupported(parsed.family, parsed.version) };
 }
 
-/** Parameter tambahan untuk messages.create sesuai kemampuan model. */
-export function modelRequestOptions(model: string): { output_config?: { effort: "low" } } {
+/** Parameter tambahan sesuai kemampuan model. Hanya untuk format Anthropic (opsi khusus Claude). */
+export function modelRequestOptions(model: string, format: "ANTHROPIC" | "OPENAI" = "ANTHROPIC"): { output_config?: { effort: "low" } } {
+  if (format !== "ANTHROPIC") return {};
   return getModelProfile(model).supportsEffort ? { output_config: { effort: "low" } } : {};
 }

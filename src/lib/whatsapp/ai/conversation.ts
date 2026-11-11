@@ -11,8 +11,8 @@ import { allowedPriceNumbers, getDraftGuide, getPublishedGuide } from "./bot-gui
 import { getBotServiceCatalog, servicePriceGroups, type BotService } from "./service-catalog";
 import { ACTIVE_INTAKE_STATUSES, snapshotDpPercent } from "../intake";
 import { DP_PERCENT } from "@/lib/constants";
-import { getAiConfig, getAnthropicClient } from "./ai-config";
-import { modelRequestOptions } from "./model-profile";
+import { getAiTargets } from "./ai-config";
+import { createChatSession } from "@/lib/ai/fallback";
 import { INTAKE_TOOLS, executeTool, findActiveIntake } from "./tools";
 
 // Satu giliran AI untuk satu pesan masuk (§10.3 langkah 7–8).
@@ -165,8 +165,10 @@ function textOf(response: Anthropic.Message): string {
  * atau model menolak; pemanggil yang menangani fallback.
  */
 export async function runAiTurn(params: { conversationId: string; messageId: string }): Promise<AiTurnResult> {
-  const config = await getAiConfig();
-  const client = getAnthropicClient(config);
+  // Provider/model pilihan owner (Bot AI › Model) dengan cadangan; docs/AI_PROVIDERS.md.
+  const targets = await getAiTargets();
+  // Satu sesi per giliran: cadangan menempel setelah utama gagal (tidak mencampur provider di tengah giliran).
+  const chat = createChatSession(targets);
   const current = await prisma.waMessage.findUniqueOrThrow({
     where: { id: params.messageId },
     select: { createdAt: true },
@@ -208,13 +210,11 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
 
   for (let round = 0; ; round++) {
     const toolsAllowed = round < MAX_TOOL_ROUNDS;
-    const response = await client.messages.create({
-      model: config.model,
-      max_tokens: config.maxTokens,
+    const response = await chat.create({
+      max_tokens: targets.maxTokens,
       system,
       tools: INTAKE_TOOLS,
       tool_choice: toolsAllowed ? { type: "auto" } : { type: "none" },
-      ...modelRequestOptions(config.model),
       messages,
     });
 
