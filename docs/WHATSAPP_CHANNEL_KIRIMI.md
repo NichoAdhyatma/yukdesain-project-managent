@@ -133,3 +133,18 @@ Batasan:
 - AI bawaan Kirimi harus mati: balasannya juga memantul dan akan dianggap ketikan admin.
 - Admin yang menyapa pelanggan lama lebih dulu dari HP tidak bisa dikenali (pantulan tanpa nomor tujuan). Bila
   pelanggan itu membalas, bot yang menjawab; ambil alih chat itu di Inbox bila perlu.
+
+## Knowledge untuk Agen AI Kirimi (2026-11-11)
+
+Owner memakai Agen AI Kirimi sementara bot portal dimatikan. Supaya isinya sama dengan portal, **Bot AI › Otak bot ›
+Knowledge untuk Agen AI Kirimi** membuat file `.md` dari data portal (`GET /api/settings/whatsapp/kirimi-knowledge`,
+owner-only, `src/lib/whatsapp/kirimi-knowledge.ts`):
+
+- **Versi terbit:** Panduan terbit + layanan aktif (sama dengan yang dipakai bot portal).
+- **Draft:** Panduan draft + semua layanan; layanan nonaktif ditandai "jangan ditawarkan".
+- Isi: aturan wajib (pengganti pengaman portal yang tidak ada di Kirimi: kalkulator, penjaga harga/DP, `ask_owner`),
+  jam kerja dan kebijakan revisi/pelunasan dari Operasional (tanpa persen DP), katalog per layanan (harga pasti/mulai,
+  paket, harga per unit dengan rumus dan **contoh hitungan dari kalkulator portal**, estimasi, format file, catatan
+  internal), aturan harga owner, instruksi Panduan, FAQ, dan file pengetahuan.
+- Tidak memuat nomor rekening, link QRIS, persen DP, kunci API, atau data klien.
+- Tidak tersinkron otomatis: buat ulang lalu tempel di Kirimi setiap kali harga, layanan, atau Panduan berubah.

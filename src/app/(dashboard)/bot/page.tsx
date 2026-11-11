@@ -7,6 +7,7 @@ import { AiModelSettings } from "@/components/settings/ai/AiModelSettings";
 import { BotBrainCard } from "@/components/settings/whatsapp/BotBrainCard";
 import { BotGuideCard } from "@/components/settings/whatsapp/BotGuideCard";
 import { BotSandboxCard } from "@/components/settings/whatsapp/BotSandboxCard";
+import { KirimiKnowledgeCard } from "@/components/settings/whatsapp/KirimiKnowledgeCard";
 
 // Bot AI (docs/BOT_AI_PAGE.md): semua yang menyangkut otak bot, terpisah dari Settings › WhatsApp.
 // Tab aktif ada di URL (?tab=…); ?bagian=… menggulir ke bagian Panduan (dipakai tombol Ubah di Otak bot).
@@ -78,8 +79,9 @@ function BotContent() {
             ))}
           </TabsList>
 
-          <TabsContent value="otak" className="mt-4">
+          <TabsContent value="otak" className="mt-4 space-y-4">
             <BotBrainCard />
+            <KirimiKnowledgeCard />
           </TabsContent>
           <TabsContent value="panduan" className="mt-4 max-w-3xl">
             <BotGuideCard />
