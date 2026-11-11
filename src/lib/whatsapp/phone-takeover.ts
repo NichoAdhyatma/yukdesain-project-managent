@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { prisma } from "@/lib/db";
 import { notifyOwnersPush } from "@/lib/notifications/push";
 import { listOwnerNumbers } from "./owner/identity";
+import { maskPhone } from "./phone";
 
 // Admin membalas langsung dari HP nomor Kirimi (docs/WHATSAPP_CHANNEL_KIRIMI.md §10). Setiap pesan keluar dari
 // perangkat memantul ke webhook (isFromMe), tetapi pantulannya hanya membawa nomor perangkat sendiri, tanpa nomor
@@ -16,13 +17,30 @@ export const ECHO_SETTLE_MS = 10_000;
 const MATCH_WINDOW_MS = 10 * 60_000;
 /** Chat dianggap aktif bila klien mengirim pesan dalam rentang ini. */
 export const ACTIVE_CHAT_WINDOW_MS = 15 * 60_000;
+/** Notifikasi "belum dicocokkan" paling banyak sekali per rentang ini (produksi 9–10 Nov: ±200 per hari). */
+export const AMBIGUOUS_NOTIFY_INTERVAL_MS = 15 * 60_000;
+
+// Satu proses Node di VPS: cukup di memori; restart hanya membuat satu notifikasi lebih awal.
+let lastAmbiguousNotifyAt = 0;
+
+/** Untuk tes: kosongkan batas waktu notifikasi. */
+export function resetPhoneReplyNotifyThrottle(): void {
+  lastAmbiguousNotifyAt = 0;
+}
 
 export const PHONE_REPLY_WAMID_PREFIX = "kirimi:phone:";
 export const PHONE_MEDIA_BODY = "[Media dikirim dari HP admin]";
 
 export type KirimiEcho = { to: { waId: string | null; lid: string | null }; body: string; msgId: string | null };
 
-export type EchoOutcome = "own" | "takeover" | "already_human" | "duplicate" | "ambiguous" | "no_active_chat";
+export type EchoOutcome =
+  | "own"
+  | "takeover"
+  | "already_human"
+  | "duplicate"
+  | "ambiguous"
+  | "ambiguous_all_human"
+  | "no_active_chat";
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -63,7 +81,7 @@ async function activeChats(now: Date) {
         blockedAt: null,
         messages: { some: { direction: "INBOUND", createdAt: { gte: new Date(now.getTime() - ACTIVE_CHAT_WINDOW_MS) } } },
       },
-      select: { id: true, waId: true, mode: true, ownerActsAsClient: true },
+      select: { id: true, waId: true, profileName: true, mode: true, ownerActsAsClient: true },
     }),
     listOwnerNumbers(),
   ]);
@@ -95,13 +113,21 @@ export async function handleKirimiEcho(echo: KirimiEcho, now = new Date()): Prom
   const chats = await activeChats(now);
   if (chats.length === 0) return "no_active_chat";
   if (chats.length > 1) {
-    // Tidak menebak: owner mengambil alih sendiri chat yang dibalas.
-    void notifyOwnersPush("NEEDS_ADMIN", {
-      title: "Balasan dari HP belum dicocokkan",
-      body: `Ada ${chats.length} chat aktif. Tekan "Ambil alih" di Inbox pada chat yang kamu balas, supaya bot berhenti.`,
-      url: "/wa-orders?tab=inbox",
-      tag: "PHONE_REPLY",
-    });
+    // Tidak menebak. Notifikasi hanya bila masih ada chat aktif yang dipegang bot (kalau semuanya sudah di admin,
+    // bot memang diam), dan paling banyak sekali per AMBIGUOUS_NOTIFY_INTERVAL_MS.
+    const botChats = chats.filter((c) => c.mode === "BOT");
+    if (botChats.length === 0) return "ambiguous_all_human";
+    if (now.getTime() - lastAmbiguousNotifyAt >= AMBIGUOUS_NOTIFY_INTERVAL_MS) {
+      lastAmbiguousNotifyAt = now.getTime();
+      const names = botChats.map((c) => c.profileName ?? maskPhone(c.waId));
+      const shown = names.slice(0, 3).join(", ") + (names.length > 3 ? ` (+${names.length - 3})` : "");
+      void notifyOwnersPush("NEEDS_ADMIN", {
+        title: "Balasan dari HP belum dicocokkan",
+        body: `Masih dipegang bot: ${shown}. Tekan "Ambil alih" di Inbox pada chat yang kamu balas.`,
+        url: "/wa-orders?tab=inbox",
+        tag: "PHONE_REPLY",
+      });
+    }
     return "ambiguous";
   }
 
