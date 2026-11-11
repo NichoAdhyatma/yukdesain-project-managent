@@ -11,7 +11,7 @@ vi.mock("@/lib/project-code", () => ({
 }));
 
 // Fake db minimal: merekam data yang ditulis, sama seperti yang dikirim route lama ke prisma.
-function makeDb(opts: { clash?: boolean; lastInvoice?: string | null } = {}) {
+function makeDb(opts: { clash?: boolean; lastInvoice?: string | null; takenInvoice?: string } = {}) {
   let clashLeft = opts.clash ? 1 : 0;
   const db = {
     project: {
@@ -24,6 +24,9 @@ function makeDb(opts: { clash?: boolean; lastInvoice?: string | null } = {}) {
     },
     activityLog: { create: vi.fn(async () => ({})) },
     invoice: {
+      findUnique: vi.fn(async ({ where }: { where: { invoiceNumber: string } }) =>
+        where.invoiceNumber === opts.takenInvoice ? { id: "inv_taken" } : null,
+      ),
       findFirst: vi.fn(async () =>
         opts.lastInvoice ? { invoiceNumber: opts.lastInvoice } : null,
       ),
@@ -157,6 +160,20 @@ describe("createProject", () => {
     const db = makeDb({ clash: true });
     await createProject(asDb(db), base);
     expect(db.project.findUnique).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("createProject: nomor invoice WA (spec 2026-11-11 §5)", () => {
+  it("nomor invoice dari order WA dipakai bila belum dipakai", async () => {
+    const db = makeDb();
+    const { invoice } = await createProject(asDb(db), { ...base, invoiceNumber: "INV-WA-20261111-AB12" });
+    expect(invoice).toMatchObject({ invoiceNumber: "INV-WA-20261111-AB12" });
+  });
+
+  it("nomor sudah dipakai → nomor struk biasa", async () => {
+    const db = makeDb({ takenInvoice: "INV-WA-20261111-AB12" });
+    const { invoice } = await createProject(asDb(db), { ...base, invoiceNumber: "INV-WA-20261111-AB12" });
+    expect(invoice.invoiceNumber).toMatch(/^STRUK-\d{4}-001$/);
   });
 });
 

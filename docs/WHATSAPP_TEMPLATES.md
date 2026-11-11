@@ -24,6 +24,10 @@ Aturan pengajuan:
 
 Dikirim saat admin menyimpan harga + deadline.
 
+> Catatan 2026-11-11: di dalam jendela 24 jam (dan di gateway QR) klien menerima **invoice** lengkap + QRIS
+> (`docs/WHATSAPP_AI_CHATBOT.md` "Invoice WA"). Di luar 24 jam template ini tetap dipakai sebagai pembuka
+> (parameter sama: nama, layanan, harga, nominal DP, deadline); invoice lengkap + QRIS dikirim otomatis saat klien membalas.
+
 **Body:**
 
 ```text
@@ -44,7 +48,9 @@ Balas pesan ini untuk menerima info rekening pembayaran DP.
 | `{{5}}` | deadline | 15 November 2026 |
 
 Rekening tidak dimasukkan ke template karena jumlahnya bisa berubah. Begitu klien membalas, jendela 24 jam
-terbuka dan bot mengirim rekening dari STATE.
+terbuka dan **sistem** mengirim invoice lengkap (nomor sama) + semua metode bayar aktif + gambar QRIS secara otomatis
+(`WaIntake.invoiceResendPending`, `resendPendingInvoice`), juga saat bot nonaktif. Bot sendiri tidak mengirim rekening
+(2026-11-11).
 
 ## 2. `yd_dp_terverifikasi`
 

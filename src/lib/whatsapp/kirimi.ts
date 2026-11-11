@@ -49,6 +49,21 @@ export async function kirimiSendText(to: string, message: string): Promise<strin
   return `kirimi:${data?.message_id ?? data?.id ?? clientMsgId}`;
 }
 
+/** Kirim gambar dari URL publik (paket Pro): `send-message` dengan `media_url`, caption sebagai `message`. */
+export async function kirimiSendImage(to: string, imageUrl: string, caption: string): Promise<string> {
+  const env = getKirimiEnv();
+  const clientMsgId = `yd-${randomUUID()}`;
+  const data = await kirimiFetch<{ message_id?: string; id?: string } | null>("/v1/send-message", {
+    device_id: env.KIRIMI_DEVICE_ID,
+    receiver: to,
+    message: caption,
+    media_url: imageUrl,
+    enableTypingEffect: false,
+    clientMsgId,
+  });
+  return `kirimi:${data?.message_id ?? data?.id ?? clientMsgId}`;
+}
+
 export type KirimiDevice = {
   deviceId: string;
   name: string | null;

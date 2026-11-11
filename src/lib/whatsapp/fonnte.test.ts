@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("./env", () => ({ getFonnteEnv: () => ({ FONNTE_DEVICE_TOKEN: "tok-123", FONNTE_WEBHOOK_SECRET: "x".repeat(20) }) }));
 
-import { FonnteApiError, fonnteDisconnect, fonnteGetDevice, fonnteGetQr, fonnteSendText, fonnteSetWebhook } from "./fonnte";
+import { FonnteApiError, fonnteDisconnect, fonnteGetDevice, fonnteGetQr, fonnteSendImage, fonnteSendText, fonnteSetWebhook } from "./fonnte";
 
 const fetchMock = vi.fn();
 const reply = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body }) as Response;
@@ -52,5 +52,14 @@ describe("fonnte client", () => {
     expect(body.get("webhook")).toBe("https://p.example/api/whatsapp/fonnte/s");
     expect(body.get("autoread")).toBe("true");
     expect(body.get("group")).toBe("false");
+  });
+
+  it("kirim gambar: /send dengan url dan caption sebagai message", async () => {
+    fetchMock.mockResolvedValue(reply({ status: true, id: ["556"] }));
+    expect(await fonnteSendImage("6281234567890", "https://cdn.example.com/qris.png", "QRIS BCA")).toBe("fonnte:556");
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/send");
+    const body = init.body instanceof FormData ? Object.fromEntries(init.body) : JSON.parse(init.body);
+    expect(body).toMatchObject({ target: "6281234567890", message: "QRIS BCA", url: "https://cdn.example.com/qris.png" });
   });
 });

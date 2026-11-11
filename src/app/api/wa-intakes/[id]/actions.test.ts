@@ -12,7 +12,7 @@ const db = vi.hoisted(() => {
   return d;
 });
 const session = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
-const outbound = vi.hoisted(() => ({ sendToClient: vi.fn() }));
+const outbound = vi.hoisted(() => ({ sendToClient: vi.fn(), sendInvoiceToClient: vi.fn() }));
 const ops = vi.hoisted(() => ({ dpPercent: 50 }));
 vi.mock("@/lib/studio-operations", () => ({ getStudioOperations: async () => ({ dpPercent: ops.dpPercent }) }));
 
@@ -21,6 +21,7 @@ vi.mock("@/lib/auth/session", () => session);
 vi.mock("@/lib/whatsapp/outbound", async (orig) => ({
   ...(await orig<typeof import("@/lib/whatsapp/outbound")>()),
   sendToClient: outbound.sendToClient,
+  sendInvoiceToClient: outbound.sendInvoiceToClient,
 }));
 vi.mock("@/lib/whatsapp/intake-api", async (orig) => ({
   ...(await orig<typeof import("@/lib/whatsapp/intake-api")>()),
@@ -36,14 +37,17 @@ const ctx = { params: Promise.resolve({ id: "in_1" }) };
 const req = (body: unknown) => new Request("http://x", { method: "POST", body: JSON.stringify(body) });
 const tomorrow = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10);
 
-function intake(status: string) {
+function intake(status: string, over: Record<string, unknown> = {}) {
   db.waIntake.findFirst.mockResolvedValue({
     status,
     clientName: "Sari",
     conversationId: "conv_1",
     agreedPrice: null,
     deadline: null,
-    service: { name: "Logo Minimalis" },
+    invoiceNumber: null,
+    briefDraft: {},
+    service: { name: "Logo Minimalis", startingPrice: null, packages: null, unitPricing: null },
+    ...over,
   });
 }
 
@@ -53,8 +57,9 @@ beforeEach(() => {
   db.$transaction.mockImplementation(async (fn: (tx: typeof db) => unknown) => fn(db));
   db.waIntake.updateMany.mockResolvedValue({ count: 1 });
   db.paymentProof.updateMany.mockResolvedValue({ count: 1 });
-  db.paymentAccount.findMany.mockResolvedValue([{ name: "BCA", accountNumber: "123", accountHolder: "YukDesain" }]);
+  db.paymentAccount.findMany.mockResolvedValue([{ name: "BCA", accountNumber: "123", accountHolder: "YukDesain", qrisImageUrl: null }]);
   outbound.sendToClient.mockResolvedValue({ ok: true, via: "text", messageId: "out_1" });
+  outbound.sendInvoiceToClient.mockResolvedValue({ ok: true, via: "text", messageId: "out_1", qrisSent: 0, qrisFailed: 0 });
 });
 
 describe("POST quote", () => {
@@ -72,10 +77,36 @@ describe("POST quote", () => {
     expect(where).toEqual({ id: "in_1", status: "AWAITING_QUOTE" });
     expect(data).toMatchObject({ status: "QUOTED", agreedPrice: 1500001, dpAmount: 750001, quotedById: "u_owner" });
     expect(db.activityLog.create.mock.calls[0][0].data).toMatchObject({ entityType: "WaIntake", action: "WA_QUOTED" });
-    const [convId, message] = outbound.sendToClient.mock.calls[0];
+    const [convId, message] = outbound.sendInvoiceToClient.mock.calls[0];
     expect(convId).toBe("conv_1");
     expect(message.template.params).toEqual(["Sari", "Logo Minimalis", "Rp1.500.001", "Rp750.001", expect.any(String)]);
+    expect(message.text).toContain("Invoice INV-WA-");
     expect(await res.json()).toMatchObject({ delivery: { ok: true }, warnings: [] });
+    // Nomor invoice disimpan saat harga pertama disimpan.
+    expect(data.invoiceNumber).toMatch(/^INV-WA-\d{8}-[A-Z0-9]{4}$/);
+  });
+
+  it("revisi harga memakai nomor invoice yang sama; QRIS dikirim ulang", async () => {
+    intake("QUOTED", { invoiceNumber: "INV-WA-20261110-ZZ99", agreedPrice: 1000 });
+    db.paymentAccount.findMany.mockResolvedValue([
+      { name: "BCA", accountNumber: "123", accountHolder: "YukDesain", qrisImageUrl: "https://cdn.example.com/qris.png" },
+      { name: "DANA", accountNumber: "0812", accountHolder: "Rizal", qrisImageUrl: null },
+    ]);
+    await quote(req({ agreedPrice: 2000, deadline: tomorrow }), ctx);
+    expect(db.waIntake.updateMany.mock.calls[0][0].data.invoiceNumber).toBe("INV-WA-20261110-ZZ99");
+    const [, message, qris] = outbound.sendInvoiceToClient.mock.calls[0];
+    expect(message.text).toContain("Invoice INV-WA-20261110-ZZ99");
+    expect(message.text).toContain("• DANA 0812 a.n. Rizal");
+    expect(qris).toEqual([{ name: "BCA", url: "https://cdn.example.com/qris.png" }]);
+  });
+
+  it("rincian kalkulator ikut di invoice bila total sama dengan harga yang disimpan", async () => {
+    intake("AWAITING_QUOTE", {
+      briefDraft: { menu_items_json: Array.from({ length: 40 }, (_, k) => ({ id: String(k), name: "x" })) },
+      service: { name: "Poster Menu", startingPrice: 135000, packages: null, unitPricing: { unitLabel: "item", includedUnits: 35, extraUnitPrice: 5000, minUnits: null } },
+    });
+    await quote(req({ agreedPrice: 160000, deadline: tomorrow }), ctx);
+    expect(outbound.sendInvoiceToClient.mock.calls[0][1].text).toContain("+ 5 item × Rp5.000 = Rp160.000");
   });
 
   it("DP mengikuti Operasional studio dan persennya disimpan di order (docs/STUDIO_OPERATIONS.md)", async () => {
@@ -85,8 +116,8 @@ describe("POST quote", () => {
     ops.dpPercent = 50;
     expect(res.status).toBe(200);
     expect(db.waIntake.updateMany.mock.calls[0][0].data).toMatchObject({ dpAmount: 450001, dpPercent: 30 });
-    const [, message] = outbound.sendToClient.mock.calls[0];
-    expect(message.text).toContain("• DP 30%: *Rp450.001*");
+    const [, message] = outbound.sendInvoiceToClient.mock.calls[0];
+    expect(message.text).toContain("Tagihan DP 30%: *Rp450.001*");
   });
 
   it("revisi harga saat QUOTED dicatat sebagai WA_QUOTE_REVISED", async () => {
@@ -99,7 +130,7 @@ describe("POST quote", () => {
     intake(status);
     const res = await quote(req({ agreedPrice: 1000, deadline: tomorrow }), ctx);
     expect(res.status).toBe(409);
-    expect(outbound.sendToClient).not.toHaveBeenCalled();
+    expect(outbound.sendInvoiceToClient).not.toHaveBeenCalled();
   });
 
   it("klik ganda (status sudah berubah) → 409", async () => {
@@ -126,9 +157,17 @@ describe("POST quote", () => {
     expect(body.warnings).toEqual(["NO_ACTIVE_PAYMENT_ACCOUNT"]);
   });
 
+  it("invoice hanya terkirim sebagai template (Meta di luar 24 jam) → ditandai kirim ulang + peringatan", async () => {
+    intake("AWAITING_QUOTE");
+    outbound.sendInvoiceToClient.mockResolvedValue({ ok: true, via: "template", messageId: "out_1", qrisSent: 0, qrisFailed: 0 });
+    const body = await (await quote(req({ agreedPrice: 1000, deadline: tomorrow }), ctx)).json();
+    expect(body.warnings).toContain("INVOICE_VIA_TEMPLATE");
+    expect(db.waIntake.updateMany).toHaveBeenLastCalledWith({ where: { id: "in_1" }, data: { invoiceResendPending: true } });
+  });
+
   it("pengiriman gagal → status tetap tersimpan, hasil gagal dikembalikan", async () => {
     intake("AWAITING_QUOTE");
-    outbound.sendToClient.mockResolvedValue({ ok: false, via: "template", errorCode: "132001", messageId: "out_1" });
+    outbound.sendInvoiceToClient.mockResolvedValue({ ok: false, via: "template", errorCode: "132001", messageId: "out_1" });
     const res = await quote(req({ agreedPrice: 1000, deadline: tomorrow }), ctx);
     expect(res.status).toBe(200);
     expect((await res.json()).delivery).toMatchObject({ ok: false, errorCode: "132001" });

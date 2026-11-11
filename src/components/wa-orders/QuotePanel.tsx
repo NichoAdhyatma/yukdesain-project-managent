@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Send } from "lucide-react";
+import { AlertTriangle, Loader2, Send } from "lucide-react";
+import { toast } from "@/components/ui/toast";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +23,16 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
     intake.quote.deadline ? new Date(intake.quote.deadline) : undefined,
   );
   const quote = useIntakeAction<{ agreedPrice: number; deadline: string }>(intake.id, "/quote", "POST", {
-    successMessage: requote ? "Penawaran direvisi" : "Harga disimpan",
+    successMessage: requote ? "Invoice direvisi" : "Harga disimpan",
+    onSuccess: (data) => {
+      // Meta di luar 24 jam: klien baru menerima template pembuka; invoice lengkap + QRIS terkirim otomatis saat klien membalas.
+      if (data.delivery?.ok && data.delivery.via === "template") {
+        toast("Klien di luar 24 jam: baru pesan pembuka yang terkirim. Invoice lengkap dan QRIS dikirim otomatis saat klien membalas.", "error");
+        return;
+      }
+      const failed = data.delivery?.qrisFailed ?? 0;
+      if (failed > 0) toast(`${failed} gambar QRIS belum terkirim ke klien. Kirim manual dari chat.`, "error");
+    },
   });
   const fields = quote.error?.fields ?? {};
   // Hanya pratinjau; DP final dihitung server dengan persen Operasional yang sama.
@@ -38,8 +48,8 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
         <CardTitle>{requote ? "Revisi harga & deadline" : "Beri harga & deadline"}</CardTitle>
         <CardDescription>
           {requote
-            ? "Penawaran baru dikirim ulang ke klien. Klien belum mengirim bukti transfer."
-            : "Brief sudah dikonfirmasi klien. Setelah disimpan, bot mengirim penawaran beserta rekening pembayaran."}
+            ? "Invoice baru (nomor sama) dikirim ulang ke klien. Klien belum mengirim bukti transfer."
+            : "Brief sudah dikonfirmasi klien. Setelah disimpan, klien menerima invoice beserta semua metode bayar aktif."}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -53,6 +63,15 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
           }}
         >
           <PricingRulesNotice rules={intake.pricingRulesApplied} />
+          {intake.activePaymentMethods === 0 ? (
+            <div role="alert" className="flex gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+              <p>
+                Belum ada metode bayar aktif di Pengaturan. Invoice tetap terkirim dengan kalimat &quot;Metode pembayaran akan
+                dikirim tim kami&quot;, jadi kirim rekening ke klien secara manual.
+              </p>
+            </div>
+          ) : null}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="quote-price">Harga</Label>
@@ -90,7 +109,7 @@ export function QuotePanel({ intake }: { intake: WaIntakeDetail }) {
           <div className="flex justify-end">
             <Button type="submit" disabled={quote.isPending || price <= 0 || !deadline}>
               {quote.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              {requote ? "Kirim penawaran baru" : "Simpan & kirim penawaran"}
+              {requote ? "Kirim invoice revisi" : "Simpan & kirim invoice"}
             </Button>
           </div>
         </form>

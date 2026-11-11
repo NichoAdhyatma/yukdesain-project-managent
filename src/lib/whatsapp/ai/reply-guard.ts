@@ -137,6 +137,30 @@ export function stripPriceMentions(
   return { text: body ? `${body}\n\n${PRICE_PLACEHOLDER}` : PRICE_PLACEHOLDER, changed: true };
 }
 
+export const DP_PLACEHOLDER = "Nominal DP dan cara pembayarannya ada di invoice yang sudah kami kirim ya kak.";
+const DP_WORD = /\b(dp|uang\s?muka|panjar|tanda\s?jadi|down\s?payment)(-?nya)?\b/i;
+// Persen yang ditulis dengan kata ("50 persen").
+const PERCENT_WORD = /\d+\s?persen\b/i;
+// Angka biasa ("DP 750000") di kalimat yang berkata DP juga dianggap nominal.
+const BARE_NUMBER = /\d{2,}/;
+
+/**
+ * Setelah invoice terkirim (QUOTED / DP_REVIEW), bot merujuk invoice dan tidak menyebut nominal atau persen DP
+ * (spec 2026-11-11-kb-merge-design §5). Dibuang: kalimat berkata DP/uang muka/panjar/tanda jadi yang memuat angka,
+ * dan kalimat apa pun yang memuat nominal DP / sisa pelunasan order ini (`dpNumbers`).
+ */
+export function stripDpMentions(text: string, dpNumbers: string[] = []): { text: string; changed: boolean } {
+  const dp = new Set(dpNumbers.flatMap(amountsOf));
+  const mentionsDp = (p: string) =>
+    (DP_WORD.test(p) && (moneyAmounts(p).length > 0 || percentAmounts(p).length > 0 || PERCENT_WORD.test(p) || BARE_NUMBER.test(p))) ||
+    amountsOf(p).some((n) => dp.has(n));
+  const parts = text.split(/(?<=[.!?])(?=\s)|(?<=\n)/);
+  const kept = parts.filter((p) => !mentionsDp(p));
+  if (kept.length === parts.length) return { text, changed: false };
+  const body = kept.join("").trim();
+  return { text: body ? `${body}\n\n${DP_PLACEHOLDER}` : DP_PLACEHOLDER, changed: true };
+}
+
 // Batas teks WhatsApp 4096 karakter.
 export const WA_TEXT_LIMIT = 4000;
 

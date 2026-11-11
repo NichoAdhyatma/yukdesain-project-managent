@@ -42,6 +42,14 @@ export async function fonnteSendText(to: string, message: string): Promise<strin
   return `fonnte:${id ?? `${Date.now()}`}`;
 }
 
+/** Kirim gambar dari URL publik: `url` + caption sebagai `message`. */
+export async function fonnteSendImage(to: string, imageUrl: string, caption: string): Promise<string> {
+  const json = await fonnteFetch("/send", { target: to, message: caption, url: imageUrl });
+  if (json.status !== true) throw new FonnteApiError(200, reasonOf(json));
+  const id = Array.isArray(json.id) ? json.id[0] : json.id;
+  return `fonnte:${id ?? `${Date.now()}`}`;
+}
+
 export type FonnteDevice = {
   device: string | null;
   name: string | null;

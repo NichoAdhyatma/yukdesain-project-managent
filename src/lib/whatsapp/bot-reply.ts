@@ -5,7 +5,7 @@ import { maskPhone } from "./phone";
 import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
 import { setHumanMode } from "./handoff";
-import { clampReply, sanitizeReply, stripPriceMentions } from "./ai/reply-guard";
+import { clampReply, sanitizeReply, stripDpMentions, stripPriceMentions } from "./ai/reply-guard";
 
 // Bagian bersama bot: kirim/simpan balasan dan satu giliran AI → balasan ke klien.
 // Dipakai pesan masuk (bot.ts) dan penerusan jawaban owner (owner/queries.ts).
@@ -28,6 +28,8 @@ export const BOT_REPLIES = {
 
 // Status sebelum admin memberi harga: balasan tidak boleh memuat harga/durasi.
 const PRE_QUOTE_STATUSES = new Set([null, "COLLECTING", "AWAITING_QUOTE"]);
+// Invoice sudah terkirim: nominal/persen DP hanya ada di invoice (spec 2026-11-11 §5).
+const INVOICE_STATUSES = new Set<string | null>(["QUOTED", "DP_REVIEW"]);
 
 /**
  * Kirim teks bebas lalu simpan sebagai WaMessage OUTBOUND, supaya status
@@ -125,7 +127,9 @@ export async function replyWithAi(
 
   const safe = PRE_QUOTE_STATUSES.has(turn.intakeStatus)
     ? stripPriceMentions(sanitized.text, turn.briefText, turn.allowedPriceNumbers, turn.guardExtras).text
-    : sanitized.text;
+    : INVOICE_STATUSES.has(turn.intakeStatus)
+      ? stripDpMentions(sanitized.text, turn.dpGuardNumbers ?? []).text
+      : sanitized.text;
   const sent = await sendBotText(conversation, clampReply(safe));
   if (sent) {
     // Jawaban owner yang ada di STATE giliran ini sudah disampaikan ke klien (owner/queries.ts).

@@ -216,6 +216,7 @@ describe("runAiTurn", () => {
       agreedPrice: 2500000,
       dpAmount: 1250000,
       deadline: new Date("2026-12-01T00:00:00Z"),
+      invoiceNumber: "INV-WA-20261111-AB12",
       service: { code: "SVC-01", name: "Logo Minimalis" },
     });
     db.paymentAccount.findMany.mockResolvedValue([{ name: "BCA", accountNumber: "123", accountHolder: "YukDesain" }]);
@@ -223,9 +224,12 @@ describe("runAiTurn", () => {
     await runAiTurn(params);
     const state = stateOf();
     expect(state).toContain("Rp2.500.000");
-    expect(state).toContain("Rp1.250.000");
     expect(state).toContain("1 Desember 2026");
-    expect(state).toContain("BCA 123 a.n. YukDesain");
+    expect(state).toContain("INV-WA-20261111-AB12");
+    // Bot tidak menyebut DP dan tidak mengirim rekening: invoice dikirim tim (spec 2026-11-11 §5).
+    expect(state).not.toContain("Rp1.250.000");
+    expect(state).not.toContain("BCA 123");
+    expect(db.paymentAccount.findMany).not.toHaveBeenCalled();
   });
 
   it("COLLECTING: STATE tidak memuat harga walau kolom terisi", async () => {

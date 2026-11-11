@@ -8,6 +8,7 @@ import { resolveOwner } from "./owner/identity";
 import { handleOwnerMessage } from "./owner/handle";
 import { notifyNewClient } from "@/lib/notifications/owner-events";
 import { SMALL_TALK_SILENT_STATUSES, getMonthlyBrake, isSmallTalk, notifyOwnersBrakeOnce } from "./spam-guard";
+import { resendPendingInvoice } from "./invoice";
 
 export { BOT_REPLIES, sendBotText } from "./bot-reply";
 
@@ -68,6 +69,11 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
       select: { id: true },
     });
     if (first?.id === message.id) void notifyNewClient(conversation.id);
+    // Invoice yang baru sampai sebagai template (Meta di luar 24 jam) dikirim lengkap sekarang, juga saat bot nonaktif:
+    // ini pesan sistem dari aksi admin, bukan balasan bot (spec 2026-11-11 §5).
+    await resendPendingInvoice(conversation.id).catch((error) =>
+      console.error("[whatsapp] kirim ulang invoice gagal:", (error as Error).name),
+    );
   }
 
   // Saklar dibaca langsung tanpa cache: mematikan bot harus langsung berlaku. Uji bot dan owner yang

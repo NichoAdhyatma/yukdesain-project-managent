@@ -236,6 +236,8 @@ export async function toDetail(row: DetailRow) {
       suggested: suggestQuotePrice(row.service, draft),
     },
     dpPercentForNewQuote: (await getStudioOperations()).dpPercent,
+    // Metode bayar aktif di Pengaturan: invoice menyebut semuanya; 0 → panel harga memberi peringatan.
+    activePaymentMethods: await prisma.paymentAccount.count({ where: { isActive: true } }),
     // Aturan harga owner yang dijanjikan bot: diterapkan admin saat mengisi harga (§6)
     pricingRulesApplied: Array.isArray(row.pricingRulesApplied)
       ? (row.pricingRulesApplied as {

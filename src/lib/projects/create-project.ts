@@ -50,6 +50,8 @@ export type CreateProjectInput = {
   payment?: { method?: string | null; reference?: string | null; notes?: string | null };
   // Kuota revisi gratis; kosong = nilai Operasional studio saat ini (snapshot, docs/STUDIO_OPERATIONS.md)
   revisionQuota?: number;
+  // Nomor invoice WA yang sudah dikirim ke klien (INV-WA-…); dipakai bila belum dipakai invoice lain.
+  invoiceNumber?: string | null;
 };
 
 /**
@@ -96,7 +98,11 @@ export async function createProject(db: Db, input: CreateProjectInput) {
 
   // Struk otomatis dengan layanan sebagai line item
   const now = new Date();
-  const invoiceNumber = await generateInvoiceNumber(db, now);
+  const reusable =
+    input.invoiceNumber && !(await db.invoice.findUnique({ where: { invoiceNumber: input.invoiceNumber }, select: { id: true } }))
+      ? input.invoiceNumber
+      : null;
+  const invoiceNumber = reusable ?? (await generateInvoiceNumber(db, now));
 
   const invoice = await db.invoice.create({
     data: {

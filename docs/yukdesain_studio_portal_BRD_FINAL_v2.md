@@ -350,7 +350,7 @@ CLIENT CONFIRMS BRIEF SUMMARY
 ADMIN SETS PRICE + DEADLINE IN PORTAL (DP = 50%)
         |
         v
-BOT SENDS OFFER + DP + STUDIO ACCOUNTS
+SYSTEM SENDS INVOICE (DP BILL + REMAINING BALANCE) + ALL ACTIVE PAYMENT METHODS + QRIS IMAGES
         |
         v
 CLIENT SENDS TRANSFER PROOF (AI reads, system flags anomalies)
@@ -376,7 +376,7 @@ Owner decisions for this flow (must not be changed without new approval):
 |---|---|
 | Provider | WhatsApp Cloud API (Meta), official |
 | Price | Order price is confirmed by admin in WA Orders (prefilled from the catalog). The bot may state catalog prices before the brief is complete, exactly as set in the Services menu: fixed prices without "mulai", starting prices with "mulai". Quantity/package totals come only from the server calculator (`calculate_price`); combined services, discounts, and express go to the owner. Durations only as the service's catalog estimate. (Changed 2026-11-11, owner decision; previously 2026-11-08. See docs/SERVICES_CATALOG.md §5.) |
-| DP | Percent of price set in **Operasional studio** (default 50%). Snapshot per order when the admin saves the price (change 2026-11-08, docs/STUDIO_OPERATIONS.md). |
+| DP | Percent of price set in **Operasional studio** (default 50%). Snapshot per order when the admin saves the price (change 2026-11-08, docs/STUDIO_OPERATIONS.md). Billed through a WA invoice (`INV-WA-YYYYMMDD-XXXX`, same number on price revisions and reused as the project invoice number) listing every active payment method and QRIS images; the bot never states the DP amount or percent itself (change 2026-11-11, docs/WHATSAPP_AI_CHATBOT.md "Invoice WA"). |
 | Deadline | Set by admin, together with the price |
 | DP validation | Admin via checklist. AI reading is assistance only, never a decision. |
 | Old flow (form link) | Remains available as an alternative |
