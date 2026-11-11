@@ -45,7 +45,29 @@ export type GuardExtras = {
   policyNumbers?: string[];
   /** Angka katalog per layanan (harga mulai + catatan harga): hanya untuk kalimat "mulai …" satu layanan. */
   catalogGroups?: string[][];
+  /** Angka layanan berharga pasti (harga, paket, jumlah termasuk, tambahan per unit): lolos tanpa "mulai", tanpa kata total. */
+  fixedPrices?: string[];
+  /** Total + rincian calculate_price pada giliran ini: lolos termasuk kalimat "total"/"jadi". */
+  calculatedTotals?: string[];
+  /** Angka estimasi layanan ("3 hari" → "3"): satu-satunya lama pengerjaan yang boleh disebut. */
+  estimateDays?: string[];
 };
+
+// Angka yang langsung diikuti satuan waktu: "3 hari", "5-7 hari", "2 minggu".
+const DURATION_NUMBERS = /(\d+)\s?(?:[-–]\s?(\d+)\s?)?(?:hari|minggu|jam|bulan)/gi;
+
+function durationNumbers(sentence: string): string[] {
+  return [...sentence.matchAll(DURATION_NUMBERS)].flatMap((m) => [m[1], ...(m[2] ? [m[2]] : [])].map((n) => String(Number(n))));
+}
+
+function withoutOnce(list: string[], remove: string[]): string[] {
+  const out = [...list];
+  for (const r of remove) {
+    const i = out.indexOf(r);
+    if (i >= 0) out.splice(i, 1);
+  }
+  return out;
+}
 
 /**
  * Buang kalimat yang menyebut harga/lama pengerjaan, lalu tambahkan kalimat
@@ -54,8 +76,12 @@ export type GuardExtras = {
  * Angka yang diizinkan, dibandingkan sebagai nilai rupiah (amountsOf):
  * - `briefText` (isi brief klien) dan `allowedNumbers` (aturan harga owner): kalimat apa pun.
  * - `policyNumbers` (teks kebijakan / FAQ owner): bukan kalimat lama pengerjaan.
- * - `catalogGroups` (menu Layanan): bukan lama pengerjaan, wajib kata "mulai", tanpa kata total, dan semua
- *   angka sisanya dari satu layanan, supaya bot tidak menghitung total atau mencampur harga layanan lain.
+ * - `catalogGroups` (menu Layanan): wajib kata "mulai", tanpa kata total, dan semua angka sisanya dari satu
+ *   layanan, supaya bot tidak menghitung total atau mencampur harga layanan lain.
+ * - `fixedPrices` (layanan berharga pasti): tanpa syarat "mulai", tetap tanpa kata total.
+ * - `calculatedTotals` (hasil calculate_price giliran ini): boleh dengan kata total.
+ * - Lama pengerjaan: angka sebelum "hari/minggu/…" wajib dari `estimateDays` (atau brief/aturan owner);
+ *   angka lain di kalimat itu diperiksa seperti harga, tanpa teks kebijakan.
  */
 export function stripPriceMentions(
   text: string,
@@ -67,16 +93,27 @@ export function stripPriceMentions(
   const always = new Set([...amountsOf(briefText), ...allowedNumbers.flatMap(amountsOf)]);
   const policy = new Set((extras.policyNumbers ?? []).flatMap(amountsOf));
   const groups = (extras.catalogGroups ?? []).map((g) => new Set(g.flatMap(amountsOf)));
+  const fixed = new Set((extras.fixedPrices ?? []).flatMap(amountsOf));
+  const calculated = new Set((extras.calculatedTotals ?? []).flatMap(amountsOf));
+  const estimate = new Set((extras.estimateDays ?? []).flatMap(amountsOf));
+  const pricesAllowed = (sentence: string, numbers: string[]) => {
+    if (numbers.length === 0) return true;
+    if (numbers.some((n) => calculated.has(n)) && numbers.every((n) => calculated.has(n) || fixed.has(n))) return true;
+    if (TOTAL.test(sentence)) return false;
+    if (numbers.every((n) => fixed.has(n))) return true;
+    return STARTING.test(sentence) && groups.some((g) => numbers.every((n) => g.has(n)));
+  };
   const allowedSentence = (sentence: string) => {
     const numbers = amountsOf(sentence);
     if (numbers.length === 0) return false;
     const rest = numbers.filter((n) => !always.has(n));
     if (rest.length === 0) return true;
-    if (DURATION.test(sentence)) return false;
-    const afterPolicy = rest.filter((n) => !policy.has(n));
-    if (afterPolicy.length === 0) return true;
-    if (!STARTING.test(sentence) || TOTAL.test(sentence)) return false;
-    return groups.some((g) => afterPolicy.every((n) => g.has(n)));
+    if (DURATION.test(sentence)) {
+      const durations = durationNumbers(sentence).filter((n) => !always.has(n));
+      if (durations.some((n) => !estimate.has(n))) return false;
+      return pricesAllowed(sentence, withoutOnce(rest, durations));
+    }
+    return pricesAllowed(sentence, rest.filter((n) => !policy.has(n)));
   };
   // Pisah kalimat hanya di tanda baca yang diikuti spasi/baris baru, supaya
   // pemisah ribuan ("Rp500.000") tidak memecah kalimat.

@@ -28,14 +28,31 @@ ${revision}
  */
 export function renderServiceCatalog(services: BotService[]): string {
   const lines = services.map((s) => {
-    const price = s.startingPrice
-      ? `mulai ${formatRupiah(s.startingPrice)}${s.priceNote ? ` (${s.priceNote})` : ""}`
-      : "harga dikirim tim setelah brief";
-    return `- ${s.name} (${s.code}): ${price}${s.suitableFor ? `. Cocok untuk: ${s.suitableFor}` : ""}`;
+    const price = renderPrice(s);
+    const priced = price ? `${price}${s.priceNote ? ` (${s.priceNote})` : ""}` : "harga dikirim tim setelah brief";
+    return `- ${s.name} (${s.code}): ${priced}${s.estimate ? `. Estimasi ${s.estimate}` : ""}${s.suitableFor ? `. Cocok untuk: ${s.suitableFor}` : ""}`;
   });
   return `# Layanan
 Layanan yang bisa dipesan lewat chat ini (kode hanya untuk start_intake, jangan disebut ke klien):
 ${lines.length ? lines.join("\n") : "- Belum ada layanan aktif; alihkan ke admin (request_human_handoff)."}`;
+}
+
+/** Harga satu layanan untuk daftar Layanan; null = belum ada harga. Mode "mulai" menambahkan kata "mulai". */
+function renderPrice(s: BotService): string | null {
+  const unit = s.unitPricing;
+  const mulai = s.priceMode === "STARTING" ? "mulai " : "";
+  const unitText = unit
+    ? `${unit.includedUnits ? ` termasuk ${unit.includedUnits} ${unit.unitLabel}` : ""}, tambahan ${formatRupiah(unit.extraUnitPrice)} per ${unit.unitLabel}${unit.minUnits ? `, minimal ${unit.minUnits} ${unit.unitLabel}` : ""}`
+    : "";
+  if (s.packages.length) {
+    const list = s.packages.map((p) => `${p.name} ${mulai}${formatRupiah(p.price)}${p.note ? ` (${p.note})` : ""}`).join("; ");
+    return `${list}${unitText}`;
+  }
+  if (unit && !s.startingPrice) {
+    return `${mulai}${formatRupiah(unit.extraUnitPrice)} per ${unit.unitLabel}${unit.minUnits ? `, minimal ${unit.minUnits} ${unit.unitLabel}` : ""}`;
+  }
+  if (!s.startingPrice) return null;
+  return `${mulai}${formatRupiah(s.startingPrice)}${unitText}`;
 }
 
 /** Detail layanan order di STATE: hanya saat order sudah punya layanan. */
@@ -60,7 +77,10 @@ export function buildSystemPrompt(studioName: string, guide: BotGuide | null, op
 Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, dan status order. Untuk topik lain (pertanyaan umum, tugas sekolah, coding, berita, dll.) tolak singkat dan ramah, lalu arahkan kembali ke layanan desain.
 
 # Batas yang tidak boleh dilanggar
-- Harga final dan deadline ditentukan tim kami, bukan kamu. Kamu boleh menyebut harga mulai sebuah layanan hanya persis seperti di daftar Layanan, selalu dengan kata "mulai", lalu tambahkan bahwa harga final dikirim tim kami setelah brief lengkap. Selain itu jangan pernah menyebut, menghitung total, memperkirakan, atau memberi kisaran harga maupun lama pengerjaan sebelum angkanya ada di blok STATE. Untuk layanan tanpa harga mulai, atau jika ditanya lama pengerjaan: "Harga dan estimasi waktu akan dikirim tim kami setelah brief lengkap ya."
+- Harga final dan deadline ditentukan tim kami, bukan kamu. Sebut harga hanya persis seperti di daftar Layanan. Untuk layanan berharga pasti, sebut angkanya langsung tanpa kata "mulai". Untuk layanan bertanda "mulai", selalu pakai kata "mulai" lalu tambahkan bahwa harga final dikirim tim kami setelah brief lengkap.
+- Hitungan harga (item, halaman, varian, pose, paket) hanya dari calculate_price: kutip total dan rinciannya apa adanya, untuk satu layanan. Jika jumlahnya kira-kira ("40an item", "sekitar 6 halaman"), tanyakan angka pastinya dulu. Jangan menjumlahkan beberapa layanan, memberi diskon, atau menghitung express sendiri: tanyakan ke owner (ask_owner). Harga di Order tetap dikonfirmasi tim kami.
+- Lama pengerjaan hanya boleh disebut persis seperti estimasi di daftar Layanan. Pengerjaan express wajib dikonfirmasi owner (ask_owner).
+- Selain itu jangan pernah menyebut, menghitung total, memperkirakan, atau memberi kisaran harga maupun lama pengerjaan sebelum angkanya ada di blok STATE. Untuk layanan tanpa harga atau tanpa estimasi: "Harga dan estimasi waktu akan dikirim tim kami setelah brief lengkap ya."
 - Jangan bernegosiasi. Jika klien keberatan dengan harga, minta diskon, atau menawar, panggil request_human_handoff.
 - Jangan menjanjikan revisi tambahan, percepatan, refund, atau hal lain di luar yang tertulis di STATE.
 - Jangan pernah bilang DP "sudah valid", "sudah diterima", atau "sudah masuk". Pembayaran hanya dicek oleh tim kami.

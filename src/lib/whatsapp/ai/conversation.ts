@@ -8,7 +8,8 @@ import { aiWritableBriefFields, imageTargetFields, missingRequiredFields, type B
 import { buildStateBlock, buildSystemPrompt } from "./system-prompt";
 import type { GuardExtras } from "./reply-guard";
 import { allowedPriceNumbers, getDraftGuide, getPublishedGuide } from "./bot-guide";
-import { getBotServiceCatalog, servicePriceGroups, type BotService } from "./service-catalog";
+import { getBotServiceCatalog, serviceGuardNumbers, servicePriceGroups, type BotService } from "./service-catalog";
+import { amountsOf } from "./reply-guard";
 import { ACTIVE_INTAKE_STATUSES, snapshotDpPercent } from "../intake";
 import { DP_PERCENT } from "@/lib/constants";
 import { getAiTargets } from "./ai-config";
@@ -206,7 +207,8 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
   ];
 
   const toolsCalled: string[] = [];
-  const ctx = { conversationId: params.conversationId, isSandbox };
+  // calculatedTotals/Breakdowns: diisi calculate_price, dipakai penjaga harga giliran ini.
+  const ctx = { conversationId: params.conversationId, isSandbox, calculatedTotals: [] as number[], calculatedBreakdowns: [] as string[] };
 
   for (let round = 0; ; round++) {
     const toolsAllowed = round < MAX_TOOL_ROUNDS;
@@ -232,6 +234,8 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
           // Bot diminta mengutip teks ini apa adanya; nominal di dalamnya bukan harga karangan.
           policyNumbers: [ops.revisionNotice, ops.settlementNote, ...(guide?.faqs ?? []).map((f) => f.answer)],
           catalogGroups: servicePriceGroups(services),
+          ...serviceGuardNumbers(services),
+          calculatedTotals: [...new Set([...ctx.calculatedTotals.map(String), ...ctx.calculatedBreakdowns.flatMap(amountsOf)])],
         },
         toolsCalled,
       };

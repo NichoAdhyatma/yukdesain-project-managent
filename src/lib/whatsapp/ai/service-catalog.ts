@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { amountsOf } from "./reply-guard";
 import { prisma } from "@/lib/db";
 import { SERVICE_BOT_LIMITS as LIMITS } from "@/lib/constants";
 import { getBriefConfig } from "./brief-schema";
@@ -148,4 +149,21 @@ export function servicePriceGroups(
       ...(s.packages ?? []).map((p) => String(p.price)),
       ...(s.priceNote ? [s.priceNote] : []),
     ]);
+}
+
+/** Angka untuk penjaga harga: harga layanan FIXED dan angka estimasi semua layanan (spec §4.3). */
+export function serviceGuardNumbers(services: Pick<BotService, "priceMode" | "startingPrice" | "packages" | "unitPricing" | "estimate">[]): {
+  fixedPrices: string[];
+  estimateDays: string[];
+} {
+  const fixed = services
+    .filter((s) => s.priceMode === "FIXED")
+    .flatMap((s) => [
+      ...(s.startingPrice ? [s.startingPrice] : []),
+      ...s.packages.map((p) => p.price),
+      ...(s.unitPricing ? [s.unitPricing.includedUnits, s.unitPricing.extraUnitPrice, s.unitPricing.minUnits ?? 0].filter((n) => n > 0) : []),
+    ])
+    .map(String);
+  const days = services.flatMap((s) => (s.estimate ? amountsOf(s.estimate) : []));
+  return { fixedPrices: [...new Set(fixed)], estimateDays: [...new Set(days)] };
 }

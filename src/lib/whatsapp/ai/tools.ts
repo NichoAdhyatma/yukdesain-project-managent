@@ -39,6 +39,7 @@ export type ToolContext = {
   isSandbox?: boolean;
   // Total hasil calculate_price pada giliran ini: penjaga harga meloloskan angka ini (spec §4.3).
   calculatedTotals?: number[];
+  calculatedBreakdowns?: string[];
 };
 
 export type ToolOutcome = { content: string; isError: boolean };
@@ -282,7 +283,19 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     const services = await prisma.service.findMany({
       where: { isActive: true },
       // Tanpa botNotes: catatan internal hanya masuk STATE dengan label "jangan dikutip".
-      select: { code: true, name: true, description: true, outputFormat: true, startingPrice: true, priceNote: true, suitableFor: true },
+      select: {
+        code: true,
+        name: true,
+        description: true,
+        outputFormat: true,
+        startingPrice: true,
+        priceNote: true,
+        suitableFor: true,
+        priceMode: true,
+        packages: true,
+        unitPricing: true,
+        estimate: true,
+      },
       orderBy: { code: "asc" },
     });
     // Hanya layanan yang punya konfigurasi brief yang bisa dipesan lewat WA.
@@ -565,6 +578,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     const result = calculatePrice(service, { packageName: input.package, units: input.units });
     if (!result.ok) return fail(result.error);
     ctx.calculatedTotals?.push(result.total);
+    ctx.calculatedBreakdowns?.push(result.breakdown);
     return ok({ total: result.total, breakdown: result.breakdown, priceMode: service.priceMode });
   },
 

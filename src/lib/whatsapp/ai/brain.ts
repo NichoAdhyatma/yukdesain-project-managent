@@ -64,6 +64,7 @@ export const CAPABILITY_LABELS: Record<string, { label: string; detail: string }
   get_my_projects: { label: "Melihat project klien", detail: "Ringkasan project milik nomor yang sedang chat." },
   get_project_by_code: { label: "Melihat detail project", detail: "Progres satu project berdasarkan kodenya." },
   get_studio_info: { label: "Membaca identitas studio", detail: "Nama, email, telepon, dan alamat studio." },
+  calculate_price: { label: "Menghitung harga", detail: "Menghitung harga satu layanan dari paket dan jumlah item/halaman di katalog Layanan." },
   ask_owner: { label: "Bertanya ke owner", detail: "Untuk permintaan di luar daftar layanan; jawaban owner diteruskan ke klien." },
   apply_pricing_rule: { label: "Menandai aturan harga", detail: "Mencatat potongan atau biaya tambahan yang berlaku untuk order." },
   request_human_handoff: { label: "Mengalihkan ke admin", detail: "Saat klien minta admin, menawar harga, atau bot tidak bisa membantu." },

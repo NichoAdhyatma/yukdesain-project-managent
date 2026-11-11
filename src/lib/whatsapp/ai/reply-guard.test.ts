@@ -169,3 +169,38 @@ describe("stripPriceMentions: harga mulai dari katalog Layanan (docs/SERVICES_CA
   });
 });
 
+
+describe("stripPriceMentions: harga pasti, hasil kalkulator, estimasi (spec 2026-11-11 §4.3)", () => {
+  const extras = { fixedPrices: ["135000", "35", "5000"], calculatedTotals: [] as string[], estimateDays: ["3"], catalogGroups: [["150000"]] };
+  const guard = (text: string, over: Partial<typeof extras> = {}) => stripPriceMentions(text, "", [], { ...extras, ...over });
+
+  it("harga pasti katalog lolos tanpa kata mulai", () => {
+    expect(guard("Desain banner Rp135.000 ya, Kak.").changed).toBe(false);
+    expect(guard("Poster menu Rp135.000 termasuk 35 item, tambahan Rp5.000 per item ya, Kak.").changed).toBe(false);
+  });
+
+  it("harga pasti dengan kata total tetap dihapus kecuali dari kalkulator", () => {
+    expect(guard("Totalnya Rp135.000 ya, Kak.").changed).toBe(true);
+    expect(guard("Totalnya Rp160.000 ya, Kak.", { calculatedTotals: ["160000"] }).changed).toBe(false);
+    expect(guard("Totalnya Rp170.000 ya, Kak.", { calculatedTotals: ["160000"] }).changed).toBe(true);
+  });
+
+  it("rincian kalkulator lolos", () => {
+    expect(
+      guard("Rp135.000 (sampai 35 item) + 5 item × Rp5.000 = Rp160.000 ya, Kak.", { calculatedTotals: ["160000", "135000", "35", "5", "5000"] }).changed,
+    ).toBe(false);
+  });
+
+  it("estimasi dari katalog lolos, lama lain dihapus", () => {
+    expect(guard("Estimasi pengerjaan 3 hari ya, Kak.").changed).toBe(false);
+    expect(guard("Banner Rp135.000, estimasi 3 hari ya, Kak.").changed).toBe(false);
+    expect(guard("Selesai 1 hari kak.").changed).toBe(true);
+    expect(guard("Estimasi 5-7 hari ya kak.").changed).toBe(true);
+    expect(guard("Estimasi 5-7 hari ya kak.", { estimateDays: ["5", "7"] }).changed).toBe(false);
+  });
+
+  it("layanan pindah ke mode mulai: harga tanpa kata mulai dihapus", () => {
+    expect(guard("Banner Rp135.000 ya, Kak.", { fixedPrices: [], catalogGroups: [["135000"]] }).changed).toBe(true);
+    expect(guard("Banner mulai Rp135.000 ya, Kak.", { fixedPrices: [], catalogGroups: [["135000"]] }).changed).toBe(false);
+  });
+});
