@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { STUDIO_DEFAULTS } from "@/lib/constants";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   AlertTriangle,
   FileText,
@@ -28,9 +28,12 @@ import {
   Smartphone,
   ExternalLink,
   Lock,
+  ArrowRight,
+  MessageCircle,
 } from "lucide-react";
 import { ServiceBriefForm } from "@/components/forms/brief/ServiceBriefForm";
 import type { BriefResponses } from "@/components/forms/brief/types";
+import { BRIEF_FIELD_LABELS } from "@/components/forms/brief/field-labels";
 import { FileUploadField } from "@/components/ui/file-upload-field";
 import { toast } from "@/components/ui/toast";
 import { pdf } from "@react-pdf/renderer";
@@ -179,6 +182,13 @@ function formatDateShort(dateStr: string) {
   return new Date(dateStr).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
 }
 
+/** wa.me dari nomor studio ("0812…" / "+62 812…" → "62812…"); null bila nomor belum diisi. */
+function waLink(phone: string): string | null {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length < 8) return null;
+  return `https://wa.me/${digits.startsWith("0") ? `62${digits.slice(1)}` : digits}`;
+}
+
 function formatCurrency(amount: number) {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0 }).format(amount);
 }
@@ -220,8 +230,8 @@ function HeroBanner({ project, workPct, deadlineStr, statusCfg, paymentCfg }: {
       {/* Status description */}
       <p className="text-sm text-muted-foreground">{statusCfg.description}</p>
 
-      {/* Progress + Deadline row */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* Progress + estimasi selesai (di HP tanggal mendapat baris sendiri supaya tidak terpotong) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Progress */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
@@ -240,8 +250,8 @@ function HeroBanner({ project, workPct, deadlineStr, statusCfg, paymentCfg }: {
         <div className="flex items-center gap-2 rounded-lg bg-background/60 px-3 py-2">
           <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
           <div className="min-w-0">
-            <p className="text-[10px] text-muted-foreground">Deadline</p>
-            <p className="text-sm font-medium text-foreground truncate">{deadlineStr}</p>
+            <p className="text-xs text-muted-foreground">Estimasi selesai</p>
+            <p className="text-sm font-medium text-foreground">{deadlineStr}</p>
           </div>
         </div>
       </div>
@@ -252,7 +262,7 @@ function HeroBanner({ project, workPct, deadlineStr, statusCfg, paymentCfg }: {
           <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
             <UserCheck className="h-3.5 w-3.5 text-primary" />
           </div>
-          <span className="text-muted-foreground">Designer:</span>
+          <span className="text-muted-foreground">Desainer:</span>
           <span className="font-medium text-foreground">{project.assignedDesigner.name}</span>
         </div>
       )}
@@ -269,30 +279,59 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
   isQuotaExhausted: boolean;
   latestInvoice?: NonNullable<ClientLink["project"]>["invoices"][number];
   paymentCfg: typeof paymentStatusConfig[string];
-  onPaymentClick?: () => void;
-  onInvoiceClick?: () => void;
+  onPaymentClick: () => void;
+  onInvoiceClick: () => void;
 }) {
+  const balance = Math.max(0, project.agreedPrice - project.paidAmount);
+  // Kartu yang bisa diketuk diberi teks aksi + panah; kartu Revisi hanya informasi (audit 009 #4).
+  const clickable =
+    "group rounded-xl border bg-card text-left p-4 hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98] cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+  const action = (label: string) => (
+    <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary">
+      {label}
+      <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
+    </span>
+  );
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-      {/* Payment Status Card */}
-      <button
-        className="rounded-xl border bg-card text-left p-4 hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98] cursor-pointer"
-        onClick={onPaymentClick}
-      >
-        <div className="flex items-center gap-2 mb-2">
-          <CreditCard className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">Pembayaran</span>
+      {/* Pembayaran: yang sudah dibayar dan sisanya langsung terlihat (audit 009 #2) */}
+      <button type="button" className={clickable} onClick={onPaymentClick}>
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+            <CreditCard className="h-4 w-4" aria-hidden />
+            Pembayaran
+          </span>
+          <Badge className={cn("text-xs font-medium", paymentCfg.bgColor, paymentCfg.bgColorDark, paymentCfg.textColor, paymentCfg.textColorDark)}>
+            {paymentCfg.label}
+          </Badge>
         </div>
-        <Badge className={cn("text-xs font-medium mb-2", paymentCfg.bgColor, paymentCfg.bgColorDark, paymentCfg.textColor, paymentCfg.textColorDark)}>
-          {paymentCfg.label}
-        </Badge>
-        <p className="text-xs text-muted-foreground mt-1">{paymentCfg.description}</p>
+        {balance > 0 ? (
+          <>
+            <p className="text-sm text-muted-foreground">Sisa yang perlu dibayar</p>
+            <p className="text-lg font-bold text-foreground tabular-nums">{formatCurrency(balance)}</p>
+          </>
+        ) : (
+          <p className="text-lg font-bold text-foreground tabular-nums">{formatCurrency(project.agreedPrice)} lunas</p>
+        )}
+        <div
+          className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={paymentPct}
+          aria-label={`Sudah dibayar ${paymentPct}%`}
+        >
+          <div className="h-full rounded-full bg-primary" style={{ width: `${paymentPct}%` }} />
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground tabular-nums">Dibayar {formatCurrency(project.paidAmount)}</p>
+        {action("Lihat pembayaran")}
       </button>
 
-      {/* Revision Quota Card */}
+      {/* Revisi: informasi, tidak bisa diketuk */}
       <div className="rounded-xl border bg-card text-left p-4">
         <div className="flex items-center gap-2 mb-2">
-          <RefreshCw className="h-4 w-4 text-muted-foreground" />
+          <RefreshCw className="h-4 w-4 text-muted-foreground" aria-hidden />
           <span className="text-xs font-medium text-muted-foreground">Revisi</span>
         </div>
         {isQuotaExhausted ? (
@@ -303,38 +342,85 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
         ) : (
           <>
             <div className="flex items-baseline gap-1 mb-2">
-              <span className="text-2xl font-bold text-foreground">{remainingQuota}</span>
-              <span className="text-sm text-muted-foreground">/ {project.revisionQuota}x tersisa</span>
+              <span className="text-2xl font-bold text-foreground tabular-nums">{remainingQuota}</span>
+              <span className="text-sm text-muted-foreground">dari {project.revisionQuota}x tersisa</span>
             </div>
-            <p className="text-xs text-muted-foreground">Ajukan revisi jika perlu perubahan</p>
+            <p className="text-xs text-muted-foreground">Pakai tombol Minta revisi di bawah bila perlu perubahan.</p>
           </>
         )}
       </div>
 
-      {/* Invoice Card */}
-      <button
-        className="rounded-xl border bg-card text-left p-4 hover:border-primary/40 hover:shadow-sm transition-all active:scale-[0.98]"
-        onClick={onInvoiceClick}
-      >
+      {/* Invoice */}
+      <button type="button" className={clickable} onClick={onInvoiceClick}>
         <div className="flex items-center gap-2 mb-2">
-          <Receipt className="h-4 w-4 text-muted-foreground" />
-          <span className="text-xs font-medium text-muted-foreground">Tagihan</span>
+          <Receipt className="h-4 w-4 text-muted-foreground" aria-hidden />
+          <span className="text-xs font-medium text-muted-foreground">Invoice</span>
         </div>
         {latestInvoice ? (
           <>
-            <p className="text-lg font-bold text-foreground mb-1">{formatCurrency(latestInvoice.total)}</p>
-            <Badge className="text-xs font-medium bg-blue-100 text-blue-950 dark:bg-blue-900 dark:text-blue-100">
-              {latestInvoice.invoiceNumber}
-            </Badge>
+            <p className="text-sm font-semibold text-foreground">{latestInvoice.invoiceNumber}</p>
+            <p className="text-xs text-muted-foreground tabular-nums">Total {formatCurrency(latestInvoice.total)}</p>
           </>
         ) : (
-          <>
-            <Badge className="text-xs font-medium bg-muted text-muted-foreground mb-2">-</Badge>
-            <p className="text-xs text-muted-foreground mt-1">Invoice belum tersedia</p>
-          </>
+          <p className="text-xs text-muted-foreground">Invoice belum tersedia</p>
         )}
+        {action(latestInvoice ? "Lihat & unduh" : "Lihat detail")}
       </button>
     </div>
+  );
+}
+
+// ── Langkah berikutnya (audit 009 #10) ─────────────────────────────────────────
+
+/** Apa yang ditunggu dari klien sekarang, tepat di bawah hero, supaya aksinya tidak tertimbun di bawah halaman. */
+function NextStepCard({
+  project,
+  onPayment,
+  onFinal,
+}: {
+  project: NonNullable<ClientLink["project"]>;
+  onPayment: () => void;
+  onFinal: () => void;
+}) {
+  const balance = Math.max(0, project.agreedPrice - project.paidAmount);
+  const hasFinalFiles = project.finalFiles.files.length > 0;
+  const pendingRevision = project.revisions.find((r) => !r.completedAt);
+
+  let title: string;
+  let body: string;
+  let cta: { label: string; onClick: () => void } | null = null;
+  if (project.finalApprovedAt && balance > 0 && hasFinalFiles) {
+    title = "Bayar pelunasan untuk membuka file final";
+    body = `Sisa ${formatCurrency(balance)}. Setelah admin mencatat pelunasan, file final langsung bisa diunduh.`;
+    cta = { label: "Lihat cara bayar", onClick: onPayment };
+  } else if (project.finalApprovedAt) {
+    title = hasFinalFiles ? "File final siap diunduh" : "Project selesai";
+    body = hasFinalFiles ? "Terima kasih sudah mempercayakan desainnya ke kami." : "Terima kasih! File akhir dikirim admin lewat WhatsApp.";
+    cta = hasFinalFiles ? { label: "Unduh file final", onClick: onFinal } : null;
+  } else if (project.finalSubmittedAt && !pendingRevision) {
+    title = "Hasil akhir menunggu persetujuan kamu";
+    body = "Cek hasilnya, lalu setujui atau minta revisi kalau masih ada yang perlu diubah.";
+    cta = { label: "Cek hasil akhir", onClick: onFinal };
+  } else if (pendingRevision) {
+    title = `Revisi #${pendingRevision.number} sedang dikerjakan`;
+    body = "Kamu dikabari lewat WhatsApp begitu revisinya selesai.";
+  } else {
+    // Belum ada yang ditunggu dari klien: status di hero sudah cukup, kartu ini tidak mengulangnya.
+    return null;
+  }
+
+  return (
+    <section aria-labelledby="next-step-title" className="rounded-xl border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground">Langkah berikutnya</p>
+      <h3 id="next-step-title" className="mt-1 text-base font-semibold text-foreground">{title}</h3>
+      <p className="mt-1 text-sm text-muted-foreground">{body}</p>
+      {cta && (
+        <Button type="button" className="mt-3 h-11 w-full rounded-xl sm:w-auto" onClick={cta.onClick}>
+          {cta.label}
+          <ArrowRight className="ml-2 h-4 w-4" aria-hidden />
+        </Button>
+      )}
+    </section>
   );
 }
 
@@ -360,12 +446,12 @@ function TimelineStep({ event, isActive, isCompleted }: { event: TimelineEvent; 
         )} />
       </div>
       <p className={cn(
-        "text-[10px] sm:text-xs mt-2 font-medium leading-tight max-w-[70px] sm:max-w-[80px] truncate",
+        "text-xs mt-2 font-medium leading-tight max-w-[80px] truncate",
         isActive ? "text-primary" : isCompleted ? "text-foreground" : "text-muted-foreground"
       )}>
         {event.titleShort}
       </p>
-      <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
+      <p className="text-xs text-muted-foreground mt-0.5">
         {formatDateShort(event.date)}
       </p>
     </div>
@@ -460,7 +546,7 @@ function TimelineDetail({ events }: { events: TimelineEvent[] }) {
                 {event.progress !== undefined && event.progress !== null && (
                   <div className="mt-2">
                     <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                      <span>Progress</span>
+                      <span>Progres</span>
                       <span className="font-medium">{event.progress}%</span>
                     </div>
                     <div className="h-1.5 bg-muted rounded-full overflow-hidden">
@@ -515,26 +601,9 @@ function BriefTab({ project }: { project: BriefTabProject }) {
   const logosJson: Array<{ url: string; caption?: string }> = [];
   let KopiMenuItems: Array<{ id: string; name: string; price?: string; image?: string; caption?: string }> = [];
 
-  const FIELD_LABELS: Record<string, string> = {
-    brand_name: "Nama Brand / Usaha",
-    tagline: "Tagline",
-    business_desc: "Deskripsi Bisnis",
-    colors: "Warna yang Diinginkan",
-    main_text: "Teks Utama",
-    size: "Ukuran",
-    style: "Gaya / Style",
-    dimensions: "Dimensi",
-    mandatory_info: "Informasi Wajib",
-    color_concept: "Konsep Warna",
-    sticker_shape: "Bentuk Sticker",
-    sticker_media: "Media Cetak",
-    sticker_text: "Teks Sticker",
-    photobooth_size: "Ukuran Fotobooth",
-    vendor_name: "Nama Vendor / Tempat",
-    event_theme: "Tema Acara",
-    sosmed_platform: "Platform Social Media",
-    sosmed_vibe: "Vibe / Gaya",
-  };
+  // Label bersama dengan Order WA dan workspace desainer (audit 009 #1: "client_notes" sempat tampil mentah).
+  const fieldLabel = (key: string) => BRIEF_FIELD_LABELS[key] ?? key.replace(/_/g, " ");
+
 
   function isImageUrl(val: string) {
     if (!val) return false;
@@ -611,7 +680,7 @@ function BriefTab({ project }: { project: BriefTabProject }) {
       continue;
     }
 
-    textFields.push({ label: FIELD_LABELS[q] || q, value: a });
+    textFields.push({ label: fieldLabel(q), value: a });
   }
 
   const textFieldsNonImage = textFields.filter(f => !isImageUrl(f.value));
@@ -673,7 +742,7 @@ function BriefTab({ project }: { project: BriefTabProject }) {
       {textFieldsNonImage.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Informasi Project</CardTitle>
+            <CardTitle role="heading" aria-level={3} className="text-sm">Informasi Project</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2.5">
             {textFieldsNonImage.map((f) => (
@@ -1056,7 +1125,7 @@ function PaymentTab({
           <div className="flex items-center gap-3 mb-4">
             <CreditCard className="h-5 w-5 text-primary shrink-0" />
             <div>
-              <p className="text-xs text-muted-foreground">Status Pembayaran</p>
+              <p role="heading" aria-level={3} className="text-xs text-muted-foreground">Status Pembayaran</p>
               <Badge className={cn("text-sm font-semibold mt-1 px-3 py-1", paymentCfg.bgColor, paymentCfg.bgColorDark, paymentCfg.textColor, paymentCfg.textColorDark)}>
                 {paymentCfg.label}
               </Badge>
@@ -1139,7 +1208,7 @@ function PaymentTab({
           <CardContent className="p-4 space-y-3">
             <div className="flex items-center gap-2 mb-1">
               <CreditCard className="h-4 w-4 text-muted-foreground" />
-              <p className="text-xs font-medium text-muted-foreground">Rekening Pembayaran</p>
+              <p role="heading" aria-level={3} className="text-xs font-medium text-muted-foreground">Rekening Pembayaran</p>
             </div>
             {paymentAccounts.map((acc) => (
               <div key={acc.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30">
@@ -1203,6 +1272,8 @@ function FinalApprovalCard({
   onApprove: () => void;
   formatDate: (d: string) => string;
 }) {
+  // Ada file final: kartu File final menjadi kartu penutup (selesai + unduh / pelunasan), audit 009 #14.
+  if (project.finalApprovedAt && project.finalFiles.files.length > 0) return null;
   if (project.finalApprovedAt) {
     return (
       <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50">
@@ -1212,7 +1283,7 @@ function FinalApprovalCard({
               <CheckCircle2 className="h-5 w-5 text-emerald-600" />
             </div>
             <div>
-              <p className="font-semibold text-emerald-900 dark:text-emerald-100">Project Selesai!</p>
+              <p className="font-semibold text-emerald-900 dark:text-emerald-100">Project selesai</p>
               <p className="text-sm text-emerald-900 dark:text-emerald-100">
                 Disetujui pada {formatDate(project.finalApprovedAt)}
               </p>
@@ -1234,9 +1305,9 @@ function FinalApprovalCard({
               <Star className="h-4 w-4 text-blue-600" />
             </div>
             <div className="flex-1">
-              <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">Final Work Sudah Disubmit!</p>
+              <p className="text-sm font-semibold text-blue-900 dark:text-blue-100">Hasil akhir sudah dikirim</p>
               <p className="text-xs text-blue-950 dark:text-blue-100 mt-0.5">
-                Designer sudah submit hasil akhir. Review dan approve jika sudah sesuai.
+                Desainer sudah mengirim hasil akhir. Cek dulu, lalu setujui kalau sudah sesuai.
               </p>
             </div>
           </div>
@@ -1244,36 +1315,36 @@ function FinalApprovalCard({
       </Card>
 
       <Button
-        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-3 rounded-xl shadow-sm"
+        className="h-11 w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-xl shadow-sm"
         onClick={() => setApproveOpen(true)}
       >
         <CheckCircle2 className="h-4 w-4 mr-2" />
-        Approve Final Work
+        Setujui hasil akhir
       </Button>
 
       {isApproveOpen && (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Konfirmasi Approval</CardTitle>
+            <CardTitle role="heading" aria-level={3} className="text-base">Setujui hasil akhir?</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 p-3">
               <p className="text-sm text-emerald-950 dark:text-emerald-100">
-                Dengan menekan <strong>&quot;Ya, Approve&quot;</strong>, project akan ditandai SELESAI. Pastikan kamu sudah puas dengan hasilnya. Jika ada revisi, gunakan tombol Request Revision di atas.
+                Setelah disetujui, project ditandai selesai. Kalau masih ada yang perlu diubah, pakai tombol <strong>Minta revisi</strong>.
               </p>
             </div>
             <div className="flex gap-3">
-              <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setApproveOpen(false)}>
+              <Button variant="outline" className="h-11 flex-1 rounded-xl" onClick={() => setApproveOpen(false)}>
                 Batal
               </Button>
               <Button
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
+                className="h-11 flex-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl"
                 onClick={onApprove}
                 disabled={approvingFinal}
               >
                 {approvingFinal ? (
                   <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Memproses...</>
-                ) : "Ya, Approve"}
+                ) : "Ya, setujui"}
               </Button>
             </div>
           </CardContent>
@@ -1297,11 +1368,20 @@ function FinalFilesCard({
   const { locked, files } = project.finalFiles;
   if (!project.finalSubmittedAt || files.length === 0) return null;
   const balance = Math.max(0, project.agreedPrice - project.paidAmount);
+  const approvedAt = project.finalApprovedAt;
 
   return (
-    <Card>
+    <Card id="final-files" className={cn("scroll-mt-4", approvedAt && "border-emerald-200 dark:border-emerald-800")}>
+      {approvedAt && (
+        <div className="flex items-center gap-2 border-b border-emerald-200 bg-emerald-50 px-6 py-3 text-sm text-emerald-900 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-100">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+          <span>
+            <span className="font-semibold">Project selesai</span>, disetujui {formatDate(approvedAt)}. Terima kasih!
+          </span>
+        </div>
+      )}
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
+        <CardTitle role="heading" aria-level={3} className="flex items-center gap-2 text-base">
           {locked ? <Lock className="h-4 w-4" aria-hidden /> : <Download className="h-4 w-4" aria-hidden />}
           File final
         </CardTitle>
@@ -1386,7 +1466,7 @@ function RevisionForm({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Request Revisi</CardTitle>
+        <CardTitle role="heading" aria-level={3} className="text-base">Minta revisi</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Warning */}
@@ -1468,15 +1548,30 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const [approveFinalOpen, setApproveFinalOpen] = useState(false);
   const [approvingFinal, setApprovingFinal] = useState(false);
   const [activeTab, setActiveTab] = useState<"brief" | "invoice" | "payment">("brief");
+
+  // Gulir ke bagian yang dituju; tanpa animasi bila pengguna meminta gerakan dikurangi.
+  const scrollToSection = (id: string) => {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById(id)?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+  };
+  // Ganti tab lalu gulir ke tab itu: di HP tab ada ±1.000px di bawah kartu (audit 009 #3).
+  const goToTab = (tab: "brief" | "invoice" | "payment") => {
+    setActiveTab(tab);
+    scrollToSection("project-tabs");
+  };
   const [isDownloadingInvoice, setIsDownloadingInvoice] = useState(false);
   const [paymentAccounts, setPaymentAccounts] = useState<PaymentAccount[]>([]);
   const [revisionNotice, setRevisionNotice] = useState<string>(REVISION_NOTICE);
   const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
+  const [studioPhone, setStudioPhone] = useState("");
 
   useEffect(() => {
     fetch("/api/settings/studio")
       .then((r) => r.json())
-      .then((s) => { if (s.name) setStudioName(s.name); })
+      .then((s) => {
+        if (s.name) setStudioName(s.name);
+        if (typeof s.phone === "string") setStudioPhone(s.phone);
+      })
       .catch(() => {});
   }, []);
 
@@ -1484,7 +1579,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
     try {
       const res = await fetch(`/api/client-links/${token}`);
       if (!res.ok) {
-        if (res.status === 410) setError("Link sudah expired atau sudah digunakan");
+        if (res.status === 410) setError("Link ini sudah tidak berlaku.");
         else setError("Link tidak ditemukan");
         return;
       }
@@ -1493,7 +1588,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
       setPaymentAccounts(data.paymentAccounts || []);
       if (typeof data.revisionNotice === "string" && data.revisionNotice) setRevisionNotice(data.revisionNotice);
     } catch {
-      setError("Terjadi kesalahan");
+      setError("Halaman belum bisa dimuat. Periksa koneksi internet, lalu coba lagi.");
     } finally {
       setIsLoading(false);
     }
@@ -1616,12 +1711,20 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   };
 
   // Loading state
+  // Kerangka bentuk halaman, bukan spinner layar penuh (audit 009 #13).
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-3">
-          <div className="animate-spin h-10 w-10 border-3 border-primary border-t-transparent rounded-full mx-auto" />
-          <p className="text-sm text-muted-foreground">Memuat...</p>
+      <div className="min-h-screen bg-background" role="status" aria-live="polite">
+        <span className="sr-only">Memuat progres project…</span>
+        <div className="max-w-2xl mx-auto px-3 sm:px-4 py-5 sm:py-6 space-y-4 motion-safe:animate-pulse" aria-hidden>
+          <div className="mx-auto h-6 w-40 rounded bg-muted" />
+          <div className="h-44 rounded-2xl bg-muted" />
+          <div className="h-24 rounded-xl bg-muted" />
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="h-32 rounded-xl bg-muted" />
+            <div className="h-32 rounded-xl bg-muted" />
+            <div className="h-32 rounded-xl bg-muted" />
+          </div>
         </div>
       </div>
     );
@@ -1635,8 +1738,20 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
           <div className="w-14 h-14 rounded-full bg-yellow-100 dark:bg-yellow-900/50 flex items-center justify-center mx-auto mb-4">
             <AlertTriangle className="h-7 w-7 text-yellow-600" />
           </div>
-          <h2 className="text-lg font-semibold text-foreground mb-2">Link Tidak Valid</h2>
-          <p className="text-sm text-muted-foreground">{error || "Link tidak ditemukan"}</p>
+          <h2 className="text-lg font-semibold text-foreground mb-2">Halaman project tidak bisa dibuka</h2>
+          <p className="text-sm text-muted-foreground">{error || "Link tidak ditemukan."}</p>
+          <p className="mt-2 text-sm text-muted-foreground">Minta link terbaru ke admin, nanti kami kirimkan lewat WhatsApp.</p>
+          {waLink(studioPhone) && (
+            <a
+              href={waLink(studioPhone)!}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={cn(buttonVariants(), "mt-4 h-11 w-full rounded-xl")}
+            >
+              <MessageCircle className="mr-2 h-4 w-4" aria-hidden />
+              Hubungi admin di WhatsApp
+            </a>
+          )}
         </Card>
       </div>
     );
@@ -1856,7 +1971,8 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
       id: "invoice" as const,
       label: "Invoice",
       icon: Receipt,
-      badge: latestInvoice ? latestInvoice.invoiceNumber : undefined,
+      // Nomor invoice ada di dalam tab; badge panjang terlipat 3 baris di HP (audit 009 #8).
+      badge: undefined,
     },
     {
       id: "payment" as const,
@@ -1873,7 +1989,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         {/* Header */}
         <div className="text-center pb-1">
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">{studioName}</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">Tracking Project</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">Progres project</p>
         </div>
 
         {/* Hero Banner — status + progress + deadline */}
@@ -1885,6 +2001,12 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
           paymentCfg={paymentCfg}
         />
 
+        <NextStepCard
+          project={project}
+          onPayment={() => goToTab("payment")}
+          onFinal={() => scrollToSection(project.finalFiles.files.length > 0 && project.finalApprovedAt ? "final-files" : "final-actions")}
+        />
+
         {/* Quick Action Cards */}
         <QuickActionCards
           project={project}
@@ -1893,20 +2015,21 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
           isQuotaExhausted={isQuotaExhausted}
           latestInvoice={latestInvoice}
           paymentCfg={paymentCfg}
-          onPaymentClick={() => setActiveTab("payment")}
-          onInvoiceClick={() => setActiveTab("invoice")}
+          onPaymentClick={() => goToTab("payment")}
+          onInvoiceClick={() => goToTab("invoice")}
         />
 
-        {/* Horizontal Timeline */}
-        <Card>
+        {/* Timeline horizontal mulai tablet; di HP langkah terakhir terpotong dan isinya sama dengan daftar di bawah
+            (audit 009 #9). */}
+        <Card className="hidden sm:block">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <History className="h-4 w-4" />
-                Timeline
+              <CardTitle role="heading" aria-level={3} className="text-sm font-semibold flex items-center gap-2">
+                <History className="h-4 w-4" aria-hidden />
+                Riwayat
               </CardTitle>
               <span className="text-xs text-muted-foreground">
-                {timelineEvents.length} step{timelineEvents.length !== 1 ? "s" : ""}
+                {timelineEvents.length} langkah
               </span>
             </div>
           </CardHeader>
@@ -1930,7 +2053,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-medium transition-all",
+                  "flex-1 flex min-h-11 items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs font-medium transition-all",
                   isActive
                     ? "bg-background text-foreground shadow-sm"
                     : "text-muted-foreground hover:text-foreground"
@@ -1941,7 +2064,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
                 <span className="sm:hidden">{tab.label.split(" ")[0]}</span>
                 {tab.badge && (
                   <span className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                    "text-xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap",
                     isActive ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
                   )}>
                     {tab.badge}
@@ -1974,20 +2097,21 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         </div>
 
         {/* Final Approval / Revision Actions */}
-        <div className="space-y-3 pt-2">
+        <div id="final-actions" className="space-y-3 pt-2 scroll-mt-4">
           {/* Show revision button if not yet final approved, quota available, and has final submission */}
           {!project.finalApprovedAt && !isQuotaExhausted && (
             <Button
-              className="w-full rounded-xl text-sm font-medium py-3 border-2 border-dashed border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/30"
+              variant="outline"
+              className="h-11 w-full rounded-xl text-sm font-medium"
               onClick={() => setIsRevisionOpen(true)}
             >
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Request Revisi ({remainingQuota}x tersisa)
+              <RefreshCw className="h-4 w-4 mr-2" aria-hidden />
+              Minta revisi ({remainingQuota}x tersisa)
             </Button>
           )}
 
           {isQuotaExhausted && !project.finalApprovedAt && (
-            <Button className="w-full rounded-xl" disabled>
+            <Button className="h-11 w-full rounded-xl" disabled>
               <AlertTriangle className="h-4 w-4 mr-2" />
               Kuota Revisi Habis
             </Button>
@@ -2005,11 +2129,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
           <FinalFilesCard
             project={project}
             formatCurrency={formatCurrency}
-            onPaymentClick={() => {
-              setActiveTab("payment");
-              const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-              document.getElementById("project-tabs")?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
-            }}
+            onPaymentClick={() => goToTab("payment")}
           />
 
           <RevisionForm
@@ -2045,8 +2165,8 @@ function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEve
 
   const shortTitles: Record<string, string> = {
     brief_submitted: "Brief",
-    designer_assigned: "Designer",
-    progress: "Progress",
+    designer_assigned: "Desainer",
+    progress: "Progres",
     revision: "Revisi",
     final_submitted: "Final",
     final_approved: "Selesai",
@@ -2056,9 +2176,9 @@ function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEve
     events.push({
       id: "brief-submitted",
       type: "brief_submitted",
-      title: "Brief Submitted",
+      title: "Brief dikirim",
       titleShort: shortTitles.brief_submitted,
-      description: "Brief berhasil disubmit. Project siap diproses.",
+      description: "Brief sudah kami terima. Project siap dikerjakan.",
       date: project.brief.submittedAt,
     });
   }
@@ -2067,7 +2187,7 @@ function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEve
     events.push({
       id: "designer-assigned",
       type: "designer_assigned",
-      title: "Designer Ditugaskan",
+      title: "Desainer ditugaskan",
       titleShort: shortTitles.designer_assigned,
       description: `${project.assignedDesigner.name} telah ditugaskan untuk project ini.`,
       date: project.assignedDesigner.assignedAt,
@@ -2081,7 +2201,7 @@ function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEve
     events.push({
       id: `progress-${update.id}`,
       type: "progress",
-      title: "Progress Update",
+      title: "Update progres",
       titleShort: shortTitles.progress,
       description: update.description,
       date: update.createdAt,
@@ -2124,9 +2244,9 @@ function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEve
     events.push({
       id: "final-submitted",
       type: "final_submitted",
-      title: "Final Work Submitted",
+      title: "Hasil akhir dikirim",
       titleShort: shortTitles.final_submitted,
-      description: "Designer telah submit hasil akhir. Menunggu approval kamu.",
+      description: "Desainer sudah mengirim hasil akhir. Menunggu persetujuan kamu.",
       date: project.finalSubmittedAt,
     });
   }
@@ -2135,9 +2255,9 @@ function buildTimeline(project: NonNullable<ClientLink["project"]>): TimelineEve
     events.push({
       id: "final-approved",
       type: "final_approved",
-      title: "Project Selesai!",
+      title: "Project selesai",
       titleShort: shortTitles.final_approved,
-      description: "Final work telah disetujui. Terima kasih!",
+      description: "Hasil akhir sudah kamu setujui. Terima kasih!",
       date: project.finalApprovedAt,
     });
   }
