@@ -477,6 +477,13 @@ Wajib memuat:
   tidak meralat, membantah, atau meminta klien mengabaikan pesan sebelumnya kecuali klien sendiri menunjukkan ada yang
   keliru. Sebelumnya bot menulis "abaikan info kode project tadi" untuk project yang benar. `sanitizeReply` membuang
   label itu bila ditiru model.
+- **Lebih mirip admin manusia (2026-11-12, evaluasi chat sejak 15:45: 40% balasan dibuka "Siap kak", 39% melapor
+  "sudah kami catat"):** sering tanpa pembuka; tidak melapor "sudah kami catat/simpan/terima" atau membeo jawaban
+  klien di setiap pesan (data klien diulang hanya di ringkasan); bahasa lisan, bukan bahasa surat (hindari
+  "pencatatan", "mohon", "dikonfirmasi", "ditindaklanjuti", "untuk melanjutkan", "berikut"); emoji paling banyak satu,
+  sesekali. STATE memuat waktu sekarang ("Kamis, 12 November 2026 pukul 16.39 WIB (sore)") supaya sapaan
+  pagi/siang/sore/malam benar. Kalimat tempelan penjaga: "Soal harga dan lama pengerjaannya nanti dikirim tim setelah
+  brief-nya lengkap ya kak." dan "Nominal DP-nya ada di invoice yang tadi kami kirim ya kak."
 - **Tidak mengulang kalimat (2026-11-12, kasus Knn, Mif, Virgi):** penjaga server `dropRepeatedSentences` membuang
   kalimat balasan yang sama atau mirip dengan kalimat di 5 pesan keluar terakhir (≥5 kata; Jaccard ≥0,6 atau ≥80%
   katanya sudah ada). Kalimat yang membawa angka, teks *tebal*, atau teks "berkutip" baru tidak dianggap ulangan.

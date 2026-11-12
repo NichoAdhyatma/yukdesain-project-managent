@@ -298,3 +298,33 @@ describe("tidak meralat pesan tim (2026-11-12, kasus Nicho dan ayubbb)", () => {
     expect(prompt).toContain("kecuali klien sendiri menunjukkan ada yang keliru");
   });
 });
+
+// Evaluasi chat 12 Nov sejak 15:45: 40% balasan dibuka "Siap kak", 39% melapor "sudah kami catat/simpan/terima",
+// Isel jam 16:39 dibalas "Pagi juga kak", kata kaku ("pencatatan", "mohon dikonfirmasi", "ditindaklanjuti").
+describe("lebih mirip admin manusia (humanize, 2026-11-12)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("tidak melapor 'sudah kami catat' untuk setiap jawaban dan tidak membeo jawaban klien", () => {
+    expect(prompt).toContain('Jangan melaporkan "sudah kami catat/simpan/terima" untuk setiap jawaban klien');
+    expect(prompt).toContain("Data klien diulang hanya di ringkasan brief");
+  });
+
+  it("sering tanpa pembuka; bahasa lisan, bukan bahasa surat; emoji seperlunya", () => {
+    expect(prompt).toContain("Sering kali tidak perlu pembuka");
+    expect(prompt).toContain("Pakai bahasa lisan admin, bukan bahasa surat");
+    expect(prompt).toContain('"pencatatan"');
+    expect(prompt).toContain("Emoji boleh sesekali");
+  });
+
+  it("sapaan waktu mengikuti waktu sekarang di STATE", () => {
+    expect(prompt).toContain("Sapaan waktu (pagi/siang/sore/malam) mengikuti waktu sekarang di STATE");
+  });
+
+  it("STATE memuat waktu sekarang dalam WIB dengan bagian hari", () => {
+    const state = buildStateBlock({ intake: null, pendingImageMessageIds: [], now: new Date("2026-11-12T09:39:00Z") });
+    expect(state).toContain("- Waktu sekarang: Kamis, 12 November 2026 pukul 16.39 WIB (sore)");
+    expect(buildStateBlock({ intake: null, pendingImageMessageIds: [], now: new Date("2026-11-12T13:05:00Z") })).toContain("(malam)");
+    expect(buildStateBlock({ intake: null, pendingImageMessageIds: [], now: new Date("2026-11-12T01:00:00Z") })).toContain("(pagi)");
+    expect(buildStateBlock({ intake: null, pendingImageMessageIds: [], now: new Date("2026-11-12T05:30:00Z") })).toContain("(siang)");
+  });
+});

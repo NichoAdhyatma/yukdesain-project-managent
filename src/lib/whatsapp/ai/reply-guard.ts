@@ -13,7 +13,7 @@ const DURATION = /(selesai|jadi|estimasi|deadline|pengerjaan|dikerjakan|proses)[
 const STARTING = /\bmulai\b/i;
 const TOTAL = /\b(total|totalnya|jadi|semua|seluruh|sekalian|dikali)\b|\d\s?x\b|\bx\s?\d/i;
 
-export const PRICE_PLACEHOLDER = "Untuk harga dan estimasi waktu, tim kami akan mengirimkannya setelah brief lengkap ya kak.";
+export const PRICE_PLACEHOLDER = "Soal harga dan lama pengerjaannya nanti dikirim tim setelah brief-nya lengkap ya kak.";
 
 export function mentionsPriceOrDeadline(sentence: string): boolean {
   return PRICE.test(sentence) || PRICE_REVERSED.test(sentence) || RUPIAH.test(sentence) || DISCOUNT.test(sentence) || DURATION.test(sentence);
@@ -137,7 +137,7 @@ export function stripPriceMentions(
   return { text: body ? `${body}\n\n${PRICE_PLACEHOLDER}` : PRICE_PLACEHOLDER, changed: true };
 }
 
-export const DP_PLACEHOLDER = "Nominal DP dan cara pembayarannya ada di invoice yang sudah kami kirim ya kak.";
+export const DP_PLACEHOLDER = "Nominal DP-nya ada di invoice yang tadi kami kirim ya kak.";
 const DP_WORD = /\b(dp|uang\s?muka|panjar|tanda\s?jadi|down\s?payment)(-?nya)?\b/i;
 // Persen yang ditulis dengan kata ("50 persen").
 const PERCENT_WORD = /\d+\s?persen\b/i;

@@ -339,3 +339,10 @@ describe("dropRepeatedSentences: kalimat yang sudah terkirim tidak diulang", () 
     expect(dropRepeatedSentences("Halo kak, mau desain apa hari ini?", [])).toBe("Halo kak, mau desain apa hari ini?");
   });
 });
+
+describe("kalimat tempelan penjaga terdengar seperti admin", () => {
+  it("tanpa kata baku 'mengirimkannya' dan 'cara pembayarannya'", () => {
+    expect(PRICE_PLACEHOLDER).toBe("Soal harga dan lama pengerjaannya nanti dikirim tim setelah brief-nya lengkap ya kak.");
+    expect(DP_PLACEHOLDER).toBe("Nominal DP-nya ada di invoice yang tadi kami kirim ya kak.");
+  });
+});

@@ -153,6 +153,7 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       ? rows.filter((r) => r.direction === "INBOUND" && r.type === "image" && r.mediaStorageKey && !draftJson.includes(r.id)).map((r) => r.id)
       : [];
   return buildStateBlock({
+    now: new Date(),
     intake: intake && {
       status: intake.status,
       service: intake.service,
