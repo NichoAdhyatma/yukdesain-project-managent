@@ -257,14 +257,18 @@ describe("invoice (spec 2026-11-11 §5, Plan B Task 2)", () => {
     expect(invoiceNumberFor(new Date("2026-11-11T18:30:00Z"))).toMatch(/^INV-WA-20261112-[A-Z0-9]{4}$/);
   });
 
-  it("isi: nomor, rincian, total, tagihan DP, sisa pelunasan, deadline, semua metode bayar, bukti transfer", () => {
+  it("isi: nomor, rincian, total, tagihan DP (satu-satunya yang tebal), sisa pelunasan, estimasi pengerjaan, semua metode bayar, bukti transfer", () => {
     const m = invoiceMessage(base);
     expect(m.text).toContain("Invoice INV-WA-20261111-AB12");
     expect(m.text).toContain("Rp135.000 (sampai 35 item) + 5 item × Rp5.000 = Rp160.000");
-    expect(m.text).toContain("Total: *Rp160.000*");
+    // Hanya DP yang ditebalkan: klien produksi 2026-11-12 mentransfer total karena total juga ditebalkan.
+    expect(m.text).toContain("Total: Rp160.000\n");
     expect(m.text).toContain("Tagihan DP 50%: *Rp80.000*");
-    expect(m.text).toContain("Sisa pelunasan: *Rp80.000*");
-    expect(m.text).toContain("Deadline: 15 November 2026");
+    expect(m.text).toContain("Sisa pelunasan: Rp80.000\n");
+    expect(m.text.match(/\*Rp/g)).toHaveLength(1);
+    // Owner: "jangan deadline wording-nya, tapi estimasi pengerjaan"
+    expect(m.text).toContain("Estimasi pengerjaan: sampai 15 November 2026");
+    expect(m.text).not.toMatch(/deadline/i);
     expect(m.text).toContain("• BCA 1234567890 a.n. YukDesain Studio");
     expect(m.text).toContain("• DANA 08123 a.n. Rizal");
     expect(m.text).toContain("bukti transfer");
