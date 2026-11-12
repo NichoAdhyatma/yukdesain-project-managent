@@ -43,6 +43,7 @@ export const BRIEF_FIELD_SCHEMAS: Record<BriefKey, z.ZodType> = {
   tagline: text,
   business_desc: text,
   colors: text,
+  client_notes: z.string().trim().min(1).max(4000),
   main_text: text,
   size: text,
   style: text,

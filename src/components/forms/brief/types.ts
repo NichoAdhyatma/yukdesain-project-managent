@@ -5,6 +5,8 @@ export interface BriefResponses {
   tagline?: string;
   business_desc?: string;
   colors?: string;
+  /** Tambahan brief dari klien setelah brief dikunci (WhatsApp, 2026-11-12) */
+  client_notes?: string;
   main_text?: string;
   size?: string;
   style?: string;
