@@ -6,6 +6,7 @@ import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
 import { setHumanMode } from "./handoff";
 import { clampReply, sanitizeReply, stripDpMentions, stripPriceMentions } from "./ai/reply-guard";
+import { AiProviderError, isTechnicalFailure } from "@/lib/ai/client";
 
 // Bagian bersama bot: kirim/simpan balasan dan satu giliran AI → balasan ke klien.
 // Dipakai pesan masuk (bot.ts) dan penerusan jawaban owner (owner/queries.ts).
@@ -76,6 +77,8 @@ export async function isSuperseded(conversationId: string, createdAt: Date): Pro
 // Model lewat gateway sesekali menulis tool call sebagai teks atau membalas kosong. Satu percobaan
 // ulang biasanya cukup; baru setelah itu klien menerima pesan "sibuk" dan percakapan dialihkan ke admin.
 const AI_ATTEMPTS = 2;
+// Jeda sebelum mencoba lagi setelah gangguan teknis (SDK sudah mencoba ulang sendiri dengan backoff pendek).
+const AI_RETRY_DELAY_MS = 4000;
 
 /**
  * Satu giliran AI untuk percakapan klien lalu kirim balasannya (dengan semua penjaga balasan).
@@ -93,13 +96,21 @@ export async function replyWithAi(
     try {
       turn = await runAiTurn({ conversationId: conversation.id, messageId: anchor.id });
     } catch (error) {
-      // Hanya nama error: pesan error API bisa memuat potongan isi chat.
+      // Hanya nama/status error: pesan error API bisa memuat potongan isi chat.
       const reason =
-        error instanceof Anthropic.APIError
-          ? `api_${error.status ?? "connection"}`
-          : (error as Error).message === "AI_REFUSAL"
-            ? "refusal"
-            : (error as Error).name;
+        error instanceof AiProviderError
+          ? `provider_${error.status ?? "network"}`
+          : error instanceof Anthropic.APIError
+            ? `api_${error.status ?? "connection"}`
+            : (error as Error).message === "AI_REFUSAL"
+              ? "refusal"
+              : (error as Error).name;
+      // Gangguan teknis (rate limit, 5xx, jaringan) dicoba sekali lagi sebelum chat dialihkan ke admin.
+      if (attempt < AI_ATTEMPTS && isTechnicalFailure(error)) {
+        console.warn(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)} (percobaan ${attempt}/${AI_ATTEMPTS}): ${reason}, dicoba lagi`);
+        await new Promise((resolve) => setTimeout(resolve, AI_RETRY_DELAY_MS));
+        continue;
+      }
       console.error(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)}: ${reason}`);
       await setHumanMode(conversation.id, "ai_failed");
       await sendBotText(conversation, BOT_REPLIES.busy);
@@ -114,7 +125,7 @@ export async function replyWithAi(
     // Hanya alasan dan panjang: isi balasan bisa memuat data klien.
     console.warn(
       `[whatsapp] balasan AI ditolak untuk ${maskPhone(conversation.waId)} (percobaan ${attempt}/${AI_ATTEMPTS}): ` +
-        `${sanitized?.reason ?? "empty"}, ${turn.reply?.length ?? 0} karakter`,
+        `${sanitized?.reason ?? "empty"}, ${turn.reply?.length ?? 0} karakter, stop=${turn.stopReason ?? "-"}`,
     );
   }
 

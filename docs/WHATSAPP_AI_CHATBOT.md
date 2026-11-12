@@ -184,7 +184,7 @@ WHATSAPP_TEMPLATE_LANG="id"
 ANTHROPIC_API_KEY="sk-ant-..."
 WA_AI_MODEL="claude-haiku-5-5"           # chat & caption gambar
 WA_AI_EXTRACTION_MODEL="claude-sonnet-5-5"  # ekstraksi bukti transfer & ringkasan brief (lebih teliti)
-WA_AI_MAX_TOKENS=800
+WA_AI_MAX_TOKENS=2000
 
 # Storage privat untuk bukti transfer (lihat §16)
 STORAGE_PRIVATE_BUCKET="yukdesain-private"

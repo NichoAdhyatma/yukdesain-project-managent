@@ -181,3 +181,18 @@ const FAKE_CONFIRMATION = /balas\s*\*?\s*(ya|batal)\b/i;
 export function looksLikeConfirmationRequest(text: string): boolean {
   return FAKE_CONFIRMATION.test(text);
 }
+
+/**
+ * Balasan AI dengan ajakan "balas YA/BATAL" tanpa usulan tersimpan: ajakannya dibuang, sisanya (mis. pertanyaan
+ * klarifikasi) tetap dikirim. Teks usulan palsu atau sisa yang terlalu pendek → null (pakai pesan "belum tercatat").
+ */
+export function withoutFakeConfirmation(text: string): string | null {
+  if (/usulan perubahan panduan/i.test(text)) return null;
+  const kept = text
+    .split(/\n/)
+    .flatMap((line) => (FAKE_CONFIRMATION.test(line) ? line.split(/(?<=[.!?])\s+/).filter((s) => !FAKE_CONFIRMATION.test(s)) : [line]))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return kept.length >= 15 ? kept : null;
+}

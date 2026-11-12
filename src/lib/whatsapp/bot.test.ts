@@ -225,6 +225,41 @@ describe("handleInboundMessage", () => {
     expect(logged).not.toContain("rahasia");
   });
 
+  it("error teknis provider sekali → dicoba ulang sekali, balasan terkirim, status dicatat di log", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      givenMessage("text");
+      const { AiProviderError } = await import("@/lib/ai/client");
+      ai.runAiTurn
+        .mockRejectedValueOnce(new AiProviderError("rate limited", 429))
+        .mockResolvedValueOnce({ reply: "Halo kak, ada yang bisa dibantu?", intakeStatus: "COLLECTING", briefText: "{}", allowedPriceNumbers: [], toolsCalled: [] });
+      const run = handleInboundMessage("msg_1");
+      await vi.runAllTimersAsync();
+      await run;
+      expect(ai.runAiTurn).toHaveBeenCalledTimes(2);
+      expect(sentBodies()).toEqual(["Halo kak, ada yang bisa dibantu?"]);
+      expect(humanModeSet()).toBe(false);
+      expect(vi.mocked(console.warn).mock.calls.flat().join(" ")).toContain("provider_429");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("error bukan teknis → tidak dicoba ulang", async () => {
+    givenMessage("text");
+    ai.runAiTurn.mockRejectedValue(new Error("boom"));
+    await handleInboundMessage("msg_1");
+    expect(ai.runAiTurn).toHaveBeenCalledTimes(1);
+    expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
+  });
+
+  it("balasan kosong: alasan berhenti AI dicatat di log", async () => {
+    givenMessage("text");
+    ai.runAiTurn.mockResolvedValue({ reply: null, intakeStatus: "COLLECTING", briefText: "{}", allowedPriceNumbers: [], toolsCalled: [], stopReason: "max_tokens" });
+    await handleInboundMessage("msg_1");
+    expect(vi.mocked(console.warn).mock.calls.flat().join(" ")).toContain("stop=max_tokens");
+  });
+
   it("balasan AI kosong → balasan sibuk + mode HUMAN", async () => {
     givenMessage("text");
     aiReply(null);

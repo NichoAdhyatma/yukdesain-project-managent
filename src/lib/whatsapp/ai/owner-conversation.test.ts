@@ -7,7 +7,7 @@ vi.mock("@/lib/studio", () => ({ getStudioSettings: async () => ({ name: "YukDes
 vi.mock("../owner/proposals", async (orig) => ({ ...(await orig<typeof import("../owner/proposals")>()), ...proposals }));
 vi.mock("../owner/query-store", () => queries);
 
-import { buildOwnerState, executeOwnerTool, type OwnerTurnResult } from "./owner-conversation";
+import { buildOwnerState, buildOwnerSystemPrompt, executeOwnerTool, type OwnerTurnResult } from "./owner-conversation";
 
 const owner = { user: { id: "u_owner", name: "Rizal" }, target: "PUBLISH" as const };
 const base = {
@@ -20,8 +20,8 @@ const base = {
 };
 
 function ctx() {
-  const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [] };
-  return { owner, conversationId: "conv_o", current: { guide: base, version: 4 }, openIds: new Set(["q_1"]), result };
+  const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [], resendQueryIds: [], stopReason: null };
+  return { owner, conversationId: "conv_o", current: { guide: base, version: 4 }, openIds: new Set(["q_1"]), unrelayedIds: new Set(["q_9"]), result };
 }
 
 beforeEach(() => {
@@ -92,6 +92,7 @@ describe("buildOwnerState", () => {
       current: { guide: base, version: 4 },
       pendingProposalSummary: null,
       queries: [{ id: "q_1", question: "kemasan sachet", createdAt: new Date(), conversation: { waId: "6281234567890", profileName: "Sari" } }],
+      unrelayed: [],
       repliedQueryId: "q_1",
     });
     expect(text).toContain("versi 4");
@@ -108,5 +109,51 @@ describe("propose_guide_change — file pengetahuan", () => {
     const c = ctx();
     await executeOwnerTool("propose_guide_change", { summary: "ubah jam", instructions: "Admin membalas 08.00-17.00." }, c);
     expect(proposals.createProposal.mock.calls[0][0].guide.knowledgeFiles).toEqual(base.knowledgeFiles);
+  });
+});
+
+describe("jawaban owner yang belum terkirim (review produksi 2026-11-11)", () => {
+  it("STATE memuat jawaban yang sudah dicatat tapi belum terkirim ke klien, dengan tanda gagal kirim", () => {
+    const text = buildOwnerState({
+      owner,
+      current: { guide: base, version: 4 },
+      pendingProposalSummary: null,
+      queries: [],
+      unrelayed: [
+        {
+          id: "q_9",
+          question: "desain 3D",
+          approved: false,
+          relayFailedAt: new Date(),
+          conversation: { waId: "6288123455389", profileName: "zidan" },
+        },
+      ],
+      repliedQueryId: null,
+    });
+    expect(text).toContain("Jawaban owner yang belum terkirim ke klien");
+    expect(text).toContain("id=q_9");
+    expect(text).toContain("zidan (6288****5389)");
+    expect(text).toContain("gagal dikirim");
+  });
+
+  it("resend_client_answer hanya untuk jawaban yang belum terkirim", async () => {
+    const c = ctx();
+    expect((await executeOwnerTool("resend_client_answer", { query_id: "q_9" }, c)).isError).toBe(false);
+    expect(c.result.resendQueryIds).toEqual(["q_9"]);
+    expect((await executeOwnerTool("resend_client_answer", { query_id: "q_1" }, c)).isError).toBe(true);
+  });
+
+  it("answer_client_query tidak lagi mengaku sudah terkirim", async () => {
+    const out = await executeOwnerTool("answer_client_query", { query_id: "q_1", approved: false, note: "tawarkan 2D" }, ctx());
+    expect(JSON.parse(out.content)).toEqual({ recorded: true });
+  });
+
+  it("prompt: jangan menyatakan sudah terkirim; harga khusus satu klien bukan perubahan panduan", () => {
+    const prompt = buildOwnerSystemPrompt("YukDesain");
+    expect(prompt).not.toContain("konfirmasi singkat ke owner bahwa jawabannya diteruskan ke klien");
+    expect(prompt).toContain("Jangan menyatakan jawaban sudah terkirim");
+    expect(prompt).toContain("resend_client_answer");
+    expect(prompt).toContain("Harga khusus untuk satu klien");
+    expect(prompt).not.toContain("bot tidak menyebut harga layanan");
   });
 });

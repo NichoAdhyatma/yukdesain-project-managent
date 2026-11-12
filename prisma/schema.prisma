@@ -827,6 +827,7 @@ model WaOwnerQuery {
   answeredById   String?
   answeredAt     DateTime?
   relayedAt      DateTime? // jawaban sudah disampaikan bot ke klien
+  relayFailedAt  DateTime? // percobaan terakhir meneruskan jawaban gagal (AI error): owner bisa "kirim ulang"
   createdAt      DateTime  @default(now())
   expiresAt      DateTime
 

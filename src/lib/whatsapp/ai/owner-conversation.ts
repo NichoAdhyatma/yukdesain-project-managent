@@ -22,7 +22,7 @@ export function buildOwnerSystemPrompt(studioName: string): string {
 
 # Tugas
 1. Mengubah instruksi owner menjadi panduan tertulis untuk bot lewat propose_guide_change: aturan tambahan, FAQ, atau aturan harga. Perubahan baru berlaku setelah owner membalas YA; itu diurus sistem, jadi setelah membuat usulan kamu tidak perlu menulis apa pun lagi.
-2. Meneruskan jawaban owner atas pertanyaan klien di luar katalog lewat answer_client_query.
+2. Mencatat jawaban owner atas pertanyaan klien di luar katalog lewat answer_client_query, dan mengirim ulang jawaban yang belum terkirim lewat resend_client_answer.
 3. Menjawab pertanyaan owner tentang panduan yang berlaku (lihat STATE).
 
 # Menyusun usulan
@@ -32,12 +32,14 @@ export function buildOwnerSystemPrompt(studioName: string): string {
 - Aturan harga hanya untuk potongan atau biaya tambahan dengan nilai pasti: kind DISCOUNT atau SURCHARGE; amountType FIXED (rupiah, angka bulat, mis. 50rb = 50000) atau PERCENT. condition = syarat dari owner. note = cara menyampaikan jika owner meminta (mis. "pakai kalimat promosi yang menarik"). Pertahankan id aturan yang sudah ada.
 - Bot sudah otomatis bertanya ke owner untuk permintaan di luar katalog. Jika owner memberi instruksi soal itu, cukup tambahkan aturan tambahan yang menjelaskan kapan bot perlu bertanya.
 - Jika nilai, syarat, atau maksud instruksi belum jelas, tanyakan dulu sebelum membuat usulan.
-- Tidak bisa diubah lewat panduan: bot tidak menyebut harga layanan, kisaran harga, atau total sebelum tim mengirim penawaran; tidak menyatakan DP valid; tidak membahas topik di luar studio. Jika owner meminta itu, jelaskan singkat dan tawarkan alternatif (mis. aturan harga).
+- Tidak bisa diubah lewat panduan: harga dan paket layanan (diatur di menu Layanan portal), bot menghitung total di luar kalkulator, menyebut nominal/persen DP, menyatakan DP valid, atau membahas topik di luar studio. Jika owner meminta itu, jelaskan singkat dan tawarkan alternatif (mis. aturan harga, atau ubah harga di menu Layanan).
+- Harga khusus untuk satu klien bukan perubahan panduan: harga order klien itu diisi admin di Order WA portal. Jika berkaitan dengan pertanyaan klien yang menunggu, catat sebagai note di answer_client_query.
 
 # Pertanyaan klien
 - STATE berisi pertanyaan klien yang menunggu jawaban owner. Jika pesan owner menjawab salah satunya (ditandai di STATE jika owner membalas pesan pertanyaannya) atau jelas merujuk satu pertanyaan, panggil answer_client_query: approved=true untuk bisa, false untuk tidak; note = catatan owner untuk bot (harga khusus, syarat, layanan yang dipakai).
 - Jika ada beberapa pertanyaan terbuka dan tidak jelas yang mana, tanyakan.
-- Setelah answer_client_query berhasil, konfirmasi singkat ke owner bahwa jawabannya diteruskan ke klien.
+- Setelah answer_client_query berhasil, cukup bilang jawabannya sudah dicatat. Jangan menyatakan jawaban sudah terkirim ke klien: sistem yang mengirimnya lalu melaporkan hasilnya ke owner.
+- STATE juga berisi jawaban owner yang belum terkirim ke klien (mis. gagal dikirim karena AI error). Jika owner minta mengirim ulang, panggil resend_client_answer dengan id-nya; jika ada beberapa dan tidak jelas yang mana, tanyakan.
 
 # Gaya
 Bahasa Indonesia santai dan singkat. Format WhatsApp (*tebal*, _miring_), tanpa Markdown lain dan tanpa tabel.`;
@@ -65,6 +67,7 @@ const inputs = {
     approved: z.boolean(),
     note: z.string().trim().max(1000).optional(),
   }),
+  resend_client_answer: z.object({ query_id: z.string().min(1) }),
 };
 
 export const OWNER_TOOLS: Anthropic.Tool[] = [
@@ -122,6 +125,16 @@ export const OWNER_TOOLS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "resend_client_answer",
+    description: "Kirim ulang ke klien jawaban owner yang sudah dicatat tapi belum terkirim (id dari STATE bagian jawaban yang belum terkirim).",
+    input_schema: {
+      type: "object",
+      properties: { query_id: { type: "string" } },
+      required: ["query_id"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 type GuideInEffect = { guide: BotGuide; version: number | null };
@@ -145,11 +158,27 @@ async function openQueries(owner: OwnerContext) {
   });
 }
 
+/** Jawaban owner yang sudah dicatat tapi belum sampai ke klien (24 jam terakhir). */
+async function unrelayedAnswers(owner: OwnerContext) {
+  return prisma.waOwnerQuery.findMany({
+    where: {
+      status: "ANSWERED",
+      relayedAt: null,
+      answeredAt: { gt: new Date(Date.now() - 24 * 3_600_000) },
+      conversation: owner.target === "DRAFT" ? { waId: sandboxWaId(owner.user.id) } : { isSandbox: false },
+    },
+    orderBy: { answeredAt: "desc" },
+    take: 10,
+    select: { id: true, question: true, approved: true, relayFailedAt: true, conversation: { select: { waId: true, profileName: true } } },
+  });
+}
+
 export function buildOwnerState(p: {
   owner: OwnerContext;
   current: GuideInEffect;
   pendingProposalSummary: string | null;
   queries: Awaited<ReturnType<typeof openQueries>>;
+  unrelayed: Awaited<ReturnType<typeof unrelayedAnswers>>;
   repliedQueryId: string | null;
 }): string {
   const { guide } = p.current;
@@ -179,6 +208,14 @@ export function buildOwnerState(p: {
   } else {
     lines.push("- Tidak ada pertanyaan klien yang menunggu.");
   }
+  if (p.unrelayed.length) {
+    lines.push("- Jawaban owner yang belum terkirim ke klien:");
+    for (const q of p.unrelayed) {
+      const client = `${q.conversation.profileName ?? "Klien"} (${maskPhone(q.conversation.waId)})`;
+      const state = q.relayFailedAt ? "gagal dikirim, bisa dikirim ulang" : "belum dikirim";
+      lines.push(`  • id=${q.id}; klien: ${client}; permintaan: ${JSON.stringify(q.question)}; jawaban: ${q.approved ? "BISA" : "TIDAK"}; ${state}`);
+    }
+  }
   if (p.repliedQueryId) lines.push(`- Pesan terbaru owner adalah balasan (reply) untuk pertanyaan id=${p.repliedQueryId}.`);
   return lines.join("\n");
 }
@@ -187,6 +224,10 @@ export type OwnerTurnResult = {
   reply: string | null;
   proposal: { id: string; guide: BotGuide; base: BotGuide; summary: string; baseVersion: number | null } | null;
   answeredQueryIds: string[];
+  /** Jawaban yang diminta owner untuk dikirim ulang (resend_client_answer) */
+  resendQueryIds: string[];
+  /** Alasan berhenti respons terakhir model (untuk log saat balasan kosong) */
+  stopReason: string | null;
 };
 
 /**
@@ -198,12 +239,13 @@ export async function runOwnerAiTurn(p: {
   conversationId: string;
   repliedQueryId: string | null;
 }): Promise<OwnerTurnResult> {
-  const [targets, studio, current, pending, queries, history] = await Promise.all([
+  const [targets, studio, current, pending, queries, unrelayed, history] = await Promise.all([
     getAiTargets(),
     getStudioSettings(),
     guideFor(p.owner),
     findPendingProposal(p.conversationId),
     openQueries(p.owner),
+    unrelayedAnswers(p.owner),
     prisma.waMessage.findMany({
       where: { conversationId: p.conversationId, NOT: { direction: "OUTBOUND", deliveryStatus: "failed" } },
       orderBy: { createdAt: "desc" },
@@ -213,6 +255,7 @@ export async function runOwnerAiTurn(p: {
   ]);
   const chat = createChatSession(targets);
   const openIds = new Set(queries.map((q) => q.id));
+  const unrelayedIds = new Set(unrelayed.map((q) => q.id));
 
   const messages: Anthropic.MessageParam[] = history
     .reverse()
@@ -228,22 +271,25 @@ export async function runOwnerAiTurn(p: {
         current,
         pendingProposalSummary: pending?.summary ?? null,
         queries,
+        unrelayed,
         repliedQueryId: p.repliedQueryId && openIds.has(p.repliedQueryId) ? p.repliedQueryId : null,
       }),
     },
   ];
 
-  const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [] };
+  const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [], resendQueryIds: [], stopReason: null };
 
   for (let round = 0; ; round++) {
     const response = await chat.create({
-      max_tokens: Math.max(targets.maxTokens, 1500),
+      // Usulan membawa teks panduan lengkap (aturan + FAQ); batas kecil memotongnya jadi balasan kosong.
+      max_tokens: Math.max(targets.maxTokens, 4000),
       system,
       tools: OWNER_TOOLS,
       tool_choice: round < MAX_TOOL_ROUNDS ? { type: "auto" } : { type: "none" },
       messages,
     });
     if (response.stop_reason === "refusal") throw new Error("AI_REFUSAL");
+    result.stopReason = response.stop_reason ?? null;
 
     const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
     if (response.stop_reason !== "tool_use" || toolUses.length === 0) {
@@ -259,7 +305,7 @@ export async function runOwnerAiTurn(p: {
     messages.push({ role: "assistant", content: response.content });
     const results: Anthropic.ToolResultBlockParam[] = [];
     for (const use of toolUses) {
-      const outcome = await executeOwnerTool(use.name, use.input, { ...p, current, openIds, result });
+      const outcome = await executeOwnerTool(use.name, use.input, { ...p, current, openIds, unrelayedIds, result });
       results.push({ type: "tool_result", tool_use_id: use.id, content: outcome.content, is_error: outcome.isError });
     }
     messages.push({ role: "user", content: results });
@@ -273,6 +319,7 @@ type OwnerToolContext = {
   conversationId: string;
   current: GuideInEffect;
   openIds: Set<string>;
+  unrelayedIds: Set<string>;
   result: OwnerTurnResult;
 };
 
@@ -324,7 +371,16 @@ export async function executeOwnerTool(name: string, rawInput: unknown, ctx: Own
     });
     if (!answered) return fail("Pertanyaan sudah dijawab atau kedaluwarsa");
     ctx.result.answeredQueryIds.push(input.data.query_id);
-    return ok({ forwarded: true });
+    // Belum terkirim: sistem meneruskan ke klien setelah giliran ini dan melaporkan hasilnya ke owner.
+    return ok({ recorded: true });
+  }
+
+  if (name === "resend_client_answer") {
+    const input = inputs.resend_client_answer.safeParse(rawInput);
+    if (!input.success) return fail("Input tidak valid");
+    if (!ctx.unrelayedIds.has(input.data.query_id)) return fail("Jawaban tidak ditemukan atau sudah terkirim");
+    ctx.result.resendQueryIds.push(input.data.query_id);
+    return ok({ queued: true });
   }
 
   return fail(`Tool ${name} tidak tersedia`);
