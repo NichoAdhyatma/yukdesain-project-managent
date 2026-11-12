@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { afterEach, vi } from "vitest";
-import { getProviderEnv, isAiConfigured, isWhatsAppConfigured, parseWhatsAppEnv } from "./env";
+import { getAiEnv, getProviderEnv, isAiConfigured, isWhatsAppConfigured, parseWhatsAppEnv } from "./env";
 
 const valid = {
   WHATSAPP_ACCESS_TOKEN: "EAAG-test-token",
@@ -84,5 +84,17 @@ describe("provider AI", () => {
     expect(isAiConfigured("ANTHROPIC")).toBe(false);
     expect(isAiConfigured("GATEWAY")).toBe(true);
     expect(isWhatsAppConfigured()).toBe(false);
+  });
+});
+
+describe("WA_AI_MAX_TOKENS (review produksi 2026-11-11)", () => {
+  it("default 2000: balasan yang menyimpan banyak item menu sekaligus tidak terpotong jadi kosong", () => {
+    const before = process.env.WA_AI_MAX_TOKENS;
+    delete process.env.WA_AI_MAX_TOKENS;
+    try {
+      expect(getAiEnv().WA_AI_MAX_TOKENS).toBe(2000);
+    } finally {
+      if (before !== undefined) process.env.WA_AI_MAX_TOKENS = before;
+    }
   });
 });

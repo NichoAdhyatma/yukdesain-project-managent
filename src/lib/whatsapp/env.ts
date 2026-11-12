@@ -68,7 +68,7 @@ const aiEnvSchema = z.object({
   ANTHROPIC_BASE_URL: httpsUrl.default("https://api.anthropic.com"),
   WA_AI_MODEL: nonEmpty.default("claude-haiku-5-5"),
   WA_AI_EXTRACTION_MODEL: nonEmpty.default("claude-sonnet-5-5"),
-  WA_AI_MAX_TOKENS: z.coerce.number().int().min(100).max(8000).default(800),
+  WA_AI_MAX_TOKENS: z.coerce.number().int().min(100).max(8000).default(2000),
 
   // Gateway untuk testing (format Anthropic Messages API). Data chat klien dikirim ke sini.
   AI_GATEWAY_API_KEY: nonEmpty.optional(),

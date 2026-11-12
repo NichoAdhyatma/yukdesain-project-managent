@@ -34,6 +34,8 @@ export type AiTurnResult = {
   // Nominal DP dan sisa pelunasan order ini: tidak boleh disebut bot setelah invoice (spec 2026-11-11 §5)
   dpGuardNumbers?: string[];
   toolsCalled: string[];
+  /** Alasan berhenti respons terakhir model (log saat balasan kosong, mis. max_tokens) */
+  stopReason?: string | null;
 };
 
 type HistoryRow = {
@@ -238,6 +240,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
           calculatedTotals: [...new Set([...ctx.calculatedTotals.map(String), ...ctx.calculatedBreakdowns.flatMap(moneyAmounts)])],
         },
         toolsCalled,
+        stopReason: response.stop_reason ?? null,
       };
     }
 

@@ -58,6 +58,28 @@ diskon Rp50.000, biaya express 50%). Bot tetap tidak boleh menyebut harga layana
 4. Selama menunggu, order tampil di Order WA dengan label **"Menunggu konfirmasi owner"**. Tidak dijawab 24 jam →
    chat klien masuk mode HUMAN (admin membalas dari portal).
 
+### 5.1 Hasil kirim jawaban owner (2026-11-12)
+
+Temuan produksi 11 Nov 22:04: jawaban owner tersimpan, tetapi AI gagal saat meneruskannya ke klien; bot sudah
+terlanjur bilang "sudah diteruskan", chat klien pindah ke admin, dan owner tidak bisa mengirim ulang.
+
+- Asisten owner hanya bilang jawabannya **dicatat**. Setelah itu server meneruskan ke klien (`relayOwnerAnswer`) dan
+  mengirim **laporan hasil yang sebenarnya** ke owner (disusun server, bukan AI): terkirim; gagal karena AI error
+  (`WaOwnerQuery.relayFailedAt` diisi, chat ke admin, owner diminta balas *kirim ulang*); tidak dikirim karena chat
+  ditangani admin; atau jendela 24 jam tutup.
+- **Kirim ulang:** owner membalas *kirim ulang*. Satu jawaban gagal → server langsung mengirim ulang tanpa AI;
+  beberapa → asisten menanyakan yang mana (tool `resend_client_answer`, STATE memuat jawaban yang belum terkirim 24
+  jam terakhir). Chat yang pindah ke admin karena kiriman gagal dikembalikan ke bot hanya bila admin belum membalas
+  sejak itu.
+- Gangguan teknis AI (rate limit, 5xx, jaringan) dicoba sekali lagi setelah 4 detik sebelum chat dialihkan ke admin.
+  Log mencatat status provider (`provider_429`, dst.) dan alasan berhenti AI saat balasan kosong (`stop=max_tokens`).
+- Balasan asisten yang meminta "balas YA" tanpa usulan tersimpan: ajakannya dibuang, pertanyaan klarifikasinya tetap
+  dikirim. Teks usulan palsu tetap diganti "usulannya belum tercatat".
+- Harga khusus untuk satu klien bukan perubahan panduan: harga order diisi admin di Order WA (atau catatan pada
+  jawaban pertanyaan klien).
+- Batas token: chat klien default 2.000 (`WA_AI_MAX_TOKENS`), asisten owner minimal 4.000 (usulan membawa teks
+  panduan lengkap).
+
 ## 6. Aturan harga di sisi klien
 
 - Bot boleh menyebut aturan harga yang terbit, persis: nama, syarat, dan nilainya ("diskon Rp50.000 untuk order
