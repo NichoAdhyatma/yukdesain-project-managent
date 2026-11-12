@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { calculatePrice } from "@/lib/services/price-calculator";
 import { getStudioOperations } from "@/lib/studio-operations";
-import { formatWorkingHours, type StudioOperations } from "@/lib/studio-operations-rules";
+import { formatSameDayCutoff, formatWorkingHours, type StudioOperations } from "@/lib/studio-operations-rules";
 import { describeRuleValue, getDraftGuide, getPublishedGuide, type BotGuide } from "./ai/bot-guide";
 import { BOT_SERVICE_SELECT, toBotService, type BotService } from "./ai/service-catalog";
 import { formatRupiah, formatTanggal } from "./format";
@@ -23,8 +23,11 @@ export type KirimiKnowledgeInput = {
   guide: BotGuide | null;
 };
 
-const MANDATORY_RULES = [
-  "Jawab dalam bahasa Indonesia yang ramah dan singkat, sapa klien dengan \"Kak\". Jangan menanyakan ulang informasi yang sudah diberikan klien.",
+/** Aturan wajib; `studioName` dipakai untuk arahan katalog di profil WhatsApp. Sama dengan aturan dasar bot portal. */
+const mandatoryRules = (studioName: string) => [
+  "Jawab dalam bahasa Indonesia yang ramah dan singkat, sapa klien dengan \"Kak\". Jangan menanyakan ulang informasi yang sudah diberikan klien (paket, jumlah halaman/item, dan lainnya).",
+  "Jawab harga layanan yang ada di Katalog layanan secara langsung dan singkat, sebelum meminta brief. Jangan menahan jawaban dengan \"harga menyusul dari tim\" bila harganya ada.",
+  `Jika klien menanyakan pricelist secara umum (daftar harga semua layanan), arahkan untuk melihat katalog di profil WhatsApp ${studioName}, lalu tanyakan kakak butuh desain apa. Jangan menyebut angka harga pada jawaban ini.`,
   "Sebut harga hanya persis seperti di Katalog layanan. Harga pasti disebut tanpa kata \"mulai\"; harga bertanda \"mulai\" selalu dengan kata \"mulai\" dan keterangan bahwa harga final dikirim tim setelah brief.",
   "Hitungan jumlah (item, halaman, varian, pose) hanya memakai rumus di katalog. Jika jumlahnya kira-kira (\"40an item\"), tanyakan angka pastinya dulu.",
   "Pesanan gabungan beberapa layanan, diskon, atau express: jangan dihitung sendiri. Catat kebutuhannya dan sampaikan bahwa akan dikonfirmasi ke owner, lalu teruskan ke admin.",
@@ -35,6 +38,8 @@ const MANDATORY_RULES = [
   "Lama pengerjaan hanya boleh disebut persis seperti estimasi di katalog.",
   "Jika klien mengirim link/file (Google Drive, Sheet, PDF), konfirmasi sudah diterima dan akan diteruskan ke owner. Jangan mengaku sudah membuka atau menghitung isinya.",
   "Layanan, harga, atau ketentuan yang tidak ada di dokumen ini: jangan menebak. Sampaikan akan ditanyakan ke owner, lalu teruskan ke admin.",
+  "Permintaan rekomendasi konsep atau referensi: tanyakan info dasar (jenis usaha, nama brand, kebutuhan, preferensi), catat, lalu teruskan ke owner. Jangan menjanjikan konsep tertentu.",
+  "Jika klien lama (order lewat sistem manual sebelumnya) menanyakan progres atau status pengerjaan: jangan menjawab status sendiri. Sampaikan dengan sopan bahwa pertanyaannya sedang dicek tim, lalu teruskan ke owner.",
 ];
 
 /** Jumlah unit untuk contoh hitungan: batas termasuk / minimal, satu di atasnya, dan beberapa di atasnya. */
@@ -94,11 +99,12 @@ export function buildKirimiKnowledge(input: KirimiKnowledgeInput): string {
     `Sumber: ${sourceText}, katalog Layanan portal. Dibuat ${formatTanggal(input.generatedAt)}. Buat ulang dari portal setiap kali harga, layanan, atau Panduan berubah.`,
     "",
     "## Aturan wajib",
-    ...MANDATORY_RULES.map((r) => `- ${r}`),
+    ...mandatoryRules(studio.name).map((r) => `- ${r}`),
     "",
     "## Studio dan jam kerja",
-    `- ${studio.name}: layanan desain grafis, hanya melayani secara online.${contact ? ` Kontak: ${contact}.` : ""}`,
+    `- ${studio.name}: layanan desain grafis, hanya melayani secara online (konsultasi lewat admin, order dan tracking lewat Web Portal sesuai arahan tim). Jangan memberikan link portal yang tidak ada di dokumen ini.${contact ? ` Kontak: ${contact}.` : ""}`,
     `- Jam kerja tim desain: ${formatWorkingHours(ops)}. Di luar jam itu pesan tetap diterima dan dibalas pada jam kerja berikutnya.`,
+    `- Order yang masuk sebelum ${formatSameDayCutoff(ops)} pada hari kerja dapat dipertimbangkan masuk jadwal hari itu; setelahnya dihitung hari kerja berikutnya. Jangan menjamin dikerjakan hari yang sama. Minggu dan tanggal merah libur dan tidak dihitung.`,
     ops.revisionQuota > 0
       ? `- Revisi gratis ${ops.revisionQuota}x per project, diajukan lewat link portal project. Sampaikan apa adanya: "${ops.revisionNotice}"`
       : "- Tidak ada revisi gratis; permintaan revisi diteruskan ke admin.",

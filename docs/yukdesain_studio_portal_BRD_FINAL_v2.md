@@ -381,6 +381,7 @@ Owner decisions for this flow (must not be changed without new approval):
 | DP validation | Admin via checklist. AI reading is assistance only, never a decision. |
 | Old flow (form link) | Remains available as an alternative |
 | Price negotiation | Bot never negotiates; objections are handed off to admin |
+| Bot base rules (2026-11-12) | Built in, not owner guide text: general price-list questions point to the WhatsApp profile catalog without numbers; online-only service; same-day cut-off from Studio Operations (default 13:00 WIB, Sundays and public holidays off); files/links acknowledged and forwarded to the owner; concept requests and status questions from legacy (pre-portal) clients go to the owner via ask_owner. See docs/WHATSAPP_AI_CHATBOT.md. |
 
 The AI never makes business decisions. It only fills drafts (brief draft, transfer-proof reading).
 

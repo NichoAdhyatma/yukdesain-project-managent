@@ -181,7 +181,7 @@ export const INTAKE_TOOLS: Anthropic.Tool[] = [
   {
     name: "ask_owner",
     description:
-      "Tanyakan ke owner studio apakah permintaan klien yang TIDAK ada di list_services bisa dikerjakan. Jawaban owner datang belakangan lewat STATE.",
+      "Tanyakan ke owner studio: permintaan klien yang TIDAK ada di list_services, harga/fasilitas yang belum tercantum, permintaan rekomendasi konsep, atau status order lama yang tidak ada di sistem. Jawaban owner datang belakangan lewat STATE.",
     input_schema: {
       type: "object",
       properties: {

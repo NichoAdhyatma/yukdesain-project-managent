@@ -22,6 +22,7 @@ export async function getStudioOperations(): Promise<StudioOperations> {
       opsWorkingDays: true,
       opsWorkingHoursStart: true,
       opsWorkingHoursEnd: true,
+      opsSameDayCutoff: true,
     },
   });
   cached = row
@@ -33,6 +34,7 @@ export async function getStudioOperations(): Promise<StudioOperations> {
         workingDays: row.opsWorkingDays.length ? row.opsWorkingDays : OPERATIONS_DEFAULTS.workingDays,
         workingHoursStart: row.opsWorkingHoursStart,
         workingHoursEnd: row.opsWorkingHoursEnd,
+        sameDayCutoff: row.opsSameDayCutoff,
       }
     : OPERATIONS_DEFAULTS;
   cachedAt = Date.now();

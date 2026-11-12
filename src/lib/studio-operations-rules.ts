@@ -14,6 +14,8 @@ export type StudioOperations = {
   /** Jam kerja desainer, "HH:mm" WIB */
   workingHoursStart: string;
   workingHoursEnd: string;
+  /** Order yang masuk sebelum jam ini (hari kerja) dapat masuk jadwal hari itu, "HH:mm" WIB */
+  sameDayCutoff: string;
 };
 
 export const OPERATIONS_DEFAULTS: StudioOperations = {
@@ -24,6 +26,7 @@ export const OPERATIONS_DEFAULTS: StudioOperations = {
   workingDays: [1, 2, 3, 4, 5, 6],
   workingHoursStart: "09:00",
   workingHoursEnd: "17:00",
+  sameDayCutoff: "13:00",
 };
 
 const time = (label: string) => z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, `${label}: format JJ:MM, mis. 09:00`);
@@ -43,11 +46,16 @@ export const studioOperationsSchema = z
       .transform((days) => [...days].sort((a, b) => a - b)),
     workingHoursStart: time("Jam mulai"),
     workingHoursEnd: time("Jam selesai"),
+    sameDayCutoff: time("Batas order"),
   })
   .refine((o) => toMinutes(o.workingHoursStart) < toMinutes(o.workingHoursEnd), {
     message: "Jam selesai harus setelah jam mulai (tidak melewati tengah malam)",
     path: ["workingHoursEnd"],
-  });
+  })
+  .refine(
+    (o) => toMinutes(o.sameDayCutoff) >= toMinutes(o.workingHoursStart) && toMinutes(o.sameDayCutoff) <= toMinutes(o.workingHoursEnd),
+    { message: "Batas order harus di dalam jam kerja", path: ["sameDayCutoff"] },
+  );
 
 const DAY_NAMES = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 const dot = (hhmm: string) => hhmm.replace(":", ".");
@@ -60,4 +68,9 @@ export function formatWorkingHours(ops: StudioOperations): string {
     ? `${DAY_NAMES[days[0] - 1]}–${DAY_NAMES[days[days.length - 1] - 1]}`
     : days.map((d) => DAY_NAMES[d - 1]).join(", ");
   return `${dayText}, ${dot(ops.workingHoursStart)}–${dot(ops.workingHoursEnd)} WIB`;
+}
+
+/** Mis. "13.00 WIB": batas order masuk jadwal hari yang sama. */
+export function formatSameDayCutoff(ops: StudioOperations): string {
+  return `${dot(ops.sameDayCutoff)} WIB`;
 }

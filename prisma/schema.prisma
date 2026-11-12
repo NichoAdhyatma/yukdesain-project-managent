@@ -607,6 +607,7 @@ model StudioSettings {
   opsWorkingDays       Int[]   @default([1, 2, 3, 4, 5, 6]) // 1 = Senin … 7 = Minggu
   opsWorkingHoursStart String  @default("09:00") // jam kerja desainer, WIB
   opsWorkingHoursEnd   String  @default("17:00") // jam kerja desainer, WIB
+  opsSameDayCutoff     String  @default("13:00") // order sebelum jam ini (hari kerja) bisa masuk jadwal hari itu, WIB
   updatedAt DateTime @updatedAt
 
   @@map("studio_settings")

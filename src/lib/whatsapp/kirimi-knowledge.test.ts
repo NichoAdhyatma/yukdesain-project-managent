@@ -120,3 +120,20 @@ describe("buildKirimiKnowledge", () => {
     expect(md).not.toContain("—");
   });
 });
+
+describe("aturan dasar dari Panduan produksi v27 ikut di knowledge Kirimi (2026-11-12)", () => {
+  const md = buildKirimiKnowledge(input({ ops: { ...OPERATIONS_DEFAULTS, workingDays: [1, 2, 3, 4, 5, 6], workingHoursStart: "08:00", workingHoursEnd: "15:30", sameDayCutoff: "13:00" } }));
+
+  it("batas order dari Operasional dan hari libur", () => {
+    expect(md).toContain("Order yang masuk sebelum 13.00 WIB pada hari kerja");
+    expect(md).toContain("Minggu dan tanggal merah libur");
+  });
+
+  it("pricelist umum, harga sebelum brief, rekomendasi konsep, klien lama", () => {
+    expect(md).toContain("katalog di profil WhatsApp YukDesain Studio");
+    expect(md).toContain("sebelum meminta brief");
+    expect(md).toContain("rekomendasi konsep");
+    expect(md).toContain("klien lama");
+    expect(md).toContain("Jangan memberikan link portal yang tidak ada");
+  });
+});

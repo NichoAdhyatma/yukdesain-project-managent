@@ -13,6 +13,7 @@ dan bot WhatsApp, sehingga aturan inti tidak lagi ditulis di file pengetahuan bo
 | Revisi gratis per project (0–10) | 3 | Project baru, API revisi admin dan portal klien, bot |
 | Peringatan saat mengajukan revisi (≤300) | teks `REVISION_NOTICE` | Portal klien, bot (dikutip apa adanya) |
 | Jam kerja desainer: hari, jam mulai dan selesai (WIB) | Senin–Sabtu, 09.00–17.00 | Bot, saat klien menanyakan progres, revisi, atau kapan dikerjakan |
+| Batas order masuk jadwal hari ini (WIB, di dalam jam kerja; 2026-11-12) | 13.00 | Bot dan knowledge Agen AI Kirimi: order sebelum jam ini dapat masuk jadwal hari itu, setelahnya hari kerja berikutnya; tidak dijanjikan dikerjakan hari yang sama (`opsSameDayCutoff`) |
 
 Jam kerja tidak membuat bot diam dan tidak mengubah pesan pengalihan ke admin.
 
