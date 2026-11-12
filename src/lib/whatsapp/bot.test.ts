@@ -43,6 +43,7 @@ vi.mock("./spam-guard", async (orig) => ({
 
 import { WhatsAppApiError } from "./client-api";
 import { BOT_REPLIES, handleInboundMessage } from "./bot";
+import { replyWithAi } from "./bot-reply";
 import { DP_PLACEHOLDER, PRICE_PLACEHOLDER } from "./ai/reply-guard";
 
 function givenMessage(type: string, body = "halo", mode = "BOT") {
@@ -509,6 +510,32 @@ describe("handleInboundMessage", () => {
     const data = db.waMessage.create.mock.calls[0][0].data;
     expect(data).toMatchObject({ direction: "OUTBOUND", deliveryStatus: "failed", errorCode: "131047" });
     expect(data.wamid).toBeUndefined();
+  });
+});
+
+describe("replyWithAi — meneruskan jawaban owner (notifyClient: false)", () => {
+  const conversation = { id: "conv_1", waId: "6281234567890" };
+  const anchor = { id: "msg_1", createdAt: new Date("2026-11-01T10:00:00Z") };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    db.waConversation.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("AI gagal → chat ke admin, klien tidak dikirimi pesan sibuk (owner yang menerima laporan)", async () => {
+    ai.runAiTurn.mockRejectedValue(new Error("boom"));
+    expect(await replyWithAi(conversation, anchor, { checkSuperseded: false, notifyClient: false })).toBe(false);
+    expect(humanModeSet()).toBe(true);
+    expect(api.sendText).not.toHaveBeenCalled();
+  });
+
+  it("balasan AI kosong dua kali → chat ke admin tanpa pesan sibuk ke klien", async () => {
+    aiReply(null);
+    expect(await replyWithAi(conversation, anchor, { checkSuperseded: false, notifyClient: false })).toBe(false);
+    expect(humanModeSet()).toBe(true);
+    expect(api.sendText).not.toHaveBeenCalled();
   });
 });
 

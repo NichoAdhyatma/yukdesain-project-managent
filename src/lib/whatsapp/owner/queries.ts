@@ -58,8 +58,8 @@ export async function relayOwnerAnswer(queryId: string, opts: { force?: boolean 
     orderBy: { createdAt: "desc" },
     select: { id: true, createdAt: true },
   });
-  if (anchor && (await replyWithAi(conversation, anchor, { checkSuperseded: false }))) return { outcome: "sent", clientLabel };
-  // replyWithAi sudah mengalihkan chat ke admin dan memberi tahu klien; owner yang memutuskan kirim ulang.
+  if (anchor && (await replyWithAi(conversation, anchor, { checkSuperseded: false, notifyClient: false }))) return { outcome: "sent", clientLabel };
+  // replyWithAi sudah mengalihkan chat ke admin (tanpa pesan sibuk ke klien); owner yang memutuskan kirim ulang.
   await prisma.waOwnerQuery.update({ where: { id: queryId }, data: { relayFailedAt: new Date() } });
   return { outcome: "failed", clientLabel };
 }

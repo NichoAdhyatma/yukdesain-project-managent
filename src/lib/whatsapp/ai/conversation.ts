@@ -91,6 +91,11 @@ async function buildMessages(rows: HistoryRow[]) {
   }
   // Pesan pertama wajib dari user.
   while (messages[0]?.role === "assistant") messages.shift();
+  // Giliran tanpa pesan baru klien (meneruskan jawaban owner): model sekarang menolak pesan yang berakhir
+  // di assistant (prefill) dengan 400, jadi ditutup catatan yang mengarahkan ke STATE.
+  if (messages.length === 0 || messages.at(-1)?.role === "assistant") {
+    messages.push({ role: "user", content: "[Belum ada pesan baru dari klien. Lanjutkan percakapan sesuai STATE.]" });
+  }
   return { messages, pendingImageIds: pending.map((r) => r.id) };
 }
 

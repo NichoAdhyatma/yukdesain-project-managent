@@ -104,6 +104,14 @@ describe("handleOwnerMessage", () => {
     expect(sent()).toEqual(["Jawaban untuk zidan (6288****5389) sudah terkirim ke klien."]);
   });
 
+  // Owner menyalin kata tebal dari laporan bot: "*kirim ulang*" (produksi 2026-11-12 10:20).
+  it.each(["*kirim ulang", "*kirim ulang*", "_kirim ulang_", "  *Kirim Ulang* ya"])("%j dikenali server seperti \"kirim ulang\"", async (body) => {
+    queries.findFailedRelays.mockResolvedValue([{ id: "q_1" }]);
+    await handleOwnerMessage(text(body), conv, owner);
+    expect(ai.runOwnerAiTurn).not.toHaveBeenCalled();
+    expect(queries.relayOwnerAnswer).toHaveBeenCalledWith("q_1", { force: true });
+  });
+
   it("\"kirim ulang\" dengan beberapa jawaban gagal → AI yang menanyakan yang mana", async () => {
     queries.findFailedRelays.mockResolvedValue([{ id: "q_1" }, { id: "q_2" }]);
     await handleOwnerMessage(text("kirim ulang"), conv, owner);

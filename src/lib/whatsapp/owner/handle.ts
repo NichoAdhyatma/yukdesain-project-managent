@@ -17,7 +17,8 @@ import {
 } from "./proposals";
 import { findFailedRelays, queryIdFromContext, relayOwnerAnswer, type RelayResult } from "./queries";
 
-const RESEND_KEYWORD = /^\s*kirim\s*ulang\b/i;
+// Tanda format WhatsApp (*tebal*, _miring_, ~coret~) ikut tersalin saat owner menyalin kata dari laporan bot.
+const RESEND_KEYWORD = /^[\s*_~]*kirim\s*ulang(?![a-z0-9])/i;
 
 /** Laporan hasil kirim yang sebenarnya, disusun server (bukan AI), supaya owner tahu klien sudah menerima atau belum. */
 export function relayReport({ outcome, clientLabel }: RelayResult, isResend: boolean): string | null {
