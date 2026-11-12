@@ -184,6 +184,9 @@ describe("start_intake", () => {
     db.waIntake.create.mockResolvedValue({ id: "in_new" });
     const r = await run("start_intake", { service_code: "SVC-01" });
     expect(r.data).toMatchObject({ started: true, intakeId: "in_new" });
+    // Gambar yang sudah dikirim sebelum order dibuat bisa langsung dimasukkan di giliran yang sama (kasus Yeni).
+    expect(r.data).toMatchObject({ imageTargets: ["reference_items_json"] });
+    expect(JSON.stringify(r.data)).toContain("attach_image_to_brief");
     expect(db.$queryRaw).toHaveBeenCalled();
     expect(db.waIntake.create).toHaveBeenCalledWith({
       data: { conversationId: "conv_1", serviceId: "svc_logo" },

@@ -310,6 +310,12 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
       select: { id: true, code: true, name: true },
     });
     if (!service || !getBriefConfig(service.code)) return fail("Kode layanan tidak dikenal");
+    // STATE giliran ini dibuat sebelum order ada: beri tahu target gambar supaya gambar klien yang sudah terkirim
+    // bisa langsung dimasukkan ke brief.
+    const imageTargets = imageTargetFields(service.code);
+    const images = imageTargets.length
+      ? { imageTargets, imageNote: "Gambar klien yang sudah dikirim di chat ini: masukkan dengan attach_image_to_brief (messageId dari riwayat)." }
+      : {};
 
     // Kunci baris percakapan: dua pesan bersamaan tidak boleh membuat dua intake aktif.
     return prisma.$transaction(async (tx) => {
@@ -321,7 +327,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
           data: { conversationId: ctx.conversationId, serviceId: service.id },
           select: { id: true },
         });
-        return ok({ started: true, intakeId: created.id, service: service.name });
+        return ok({ started: true, intakeId: created.id, service: service.name, ...images });
       }
 
       if (active.status !== "COLLECTING") {
@@ -341,7 +347,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
         data: { serviceId: service.id, briefDraft: {} },
       });
       if (count === 0) return fail("Status order sudah berubah");
-      return ok({ started: false, serviceChanged: true, service: service.name });
+      return ok({ started: false, serviceChanged: true, service: service.name, ...images });
     });
   },
 

@@ -99,7 +99,7 @@ Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, 
 - Tanyakan satu atau dua hal per pesan, mengikuti field wajib yang masih kosong di STATE.
 - Simpan jawaban klien dengan update_brief_draft memakai kunci field yang tercantum di STATE. Tulis sesuai yang klien katakan; jangan mengisi dengan tebakan. Jika klien belum menyebut sesuatu, tanyakan.
 - Tanyakan nama klien (dan email jika klien mau) lalu simpan dengan set_client_profile.
-- Gambar dari klien saat brief masih dikumpulkan biasanya referensi atau logo. Jika tujuannya jelas, panggil attach_image_to_brief dengan target yang tercantum di STATE dan caption singkat yang menjelaskan isi gambar. Jika tidak jelas, tanyakan dulu.
+- Setiap gambar dari klien selama brief dikumpulkan (selain bukti transfer) adalah referensi untuk tim desain: masukkan ke brief dengan attach_image_to_brief memakai target di STATE, termasuk gambar yang dikirim sebelum order dibuat (lihat "Gambar klien yang belum masuk brief" di STATE). Caption berisi isi gambar dan maksud klien, mis. "logo lama klien, ingin diganti nama dan desainnya" atau "contoh gaya karakter dari klien". Jangan menilai hak cipta, watermark, keaslian, atau kelayakan gambar, dan jangan menolak referensi klien: penilaian dilakukan owner dan desainer. Jika klien bertanya apakah bisa dibuat seperti contoh, sampaikan referensinya sudah dicatat dan akan dicek tim desain. Jika maksud gambar belum jelas, tetap masukkan lalu tanyakan maksudnya.
 - Setelah semua field wajib terisi, kirim ringkasan brief yang lengkap dan tanya "Sudah sesuai?". Panggil confirm_brief hanya jika klien menjawab setuju secara eksplisit (mis. "sudah", "benar", "ok sesuai"). Jika klien mengoreksi, perbarui brief dulu.
 - Jika klien ingin membatalkan order, konfirmasi dulu, lalu panggil cancel_intake.
 - Jika klien minta bicara dengan admin/manusia, atau kamu tidak bisa membantu, panggil request_human_handoff.
@@ -194,6 +194,8 @@ export type StateInput = {
   ownerQueries?: { question: string; status: "PENDING" | "ANSWERED"; approved: boolean | null; note: string | null }[];
   // Gambar dari klien yang belum ditanggapi bot (disertakan ke model sebagai gambar)
   pendingImageMessageIds: string[];
+  // Gambar klien di riwayat yang belum masuk brief order COLLECTING, termasuk yang dikirim sebelum order dibuat
+  unattachedImageMessageIds?: string[];
 };
 
 const rupiah = formatRupiah;
@@ -217,6 +219,11 @@ export function buildStateBlock(input: StateInput): string {
       lines.push(`- Field wajib yang masih kosong: ${intake.missingRequired.length ? describe(intake.missingRequired) : "tidak ada"}`);
       lines.push(`- Field yang bisa diisi lewat update_brief_draft: ${describe(intake.writableFields)}`);
       lines.push(`- Target gambar untuk attach_image_to_brief: ${intake.imageTargets.length ? intake.imageTargets.join(", ") : "tidak ada"}`);
+    }
+    if (input.unattachedImageMessageIds?.length) {
+      lines.push(
+        `- Gambar klien yang belum masuk brief (masukkan dengan attach_image_to_brief): ${input.unattachedImageMessageIds.map((id) => `messageId=${id}`).join(", ")}`,
+      );
     }
     if (intake.quote && (intake.status === "QUOTED" || intake.status === "DP_REVIEW")) {
       // Tanpa DP dan rekening: keduanya hanya ada di invoice yang dikirim tim (spec 2026-11-11 §5).

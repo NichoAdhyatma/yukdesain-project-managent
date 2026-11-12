@@ -99,7 +99,7 @@ async function buildMessages(rows: HistoryRow[]) {
   return { messages, pendingImageIds: pending.map((r) => r.id) };
 }
 
-async function buildState(conversationId: string, pendingImageMessageIds: string[], services: BotService[]) {
+async function buildState(conversationId: string, pendingImageMessageIds: string[], services: BotService[], rows: HistoryRow[]) {
   const intake = await prisma.waIntake.findFirst({
     where: { conversationId, status: { in: ACTIVE_INTAKE_STATUSES } },
     orderBy: { createdAt: "desc" },
@@ -125,6 +125,14 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
 
   const code = intake?.service?.code;
   const draft = (intake?.briefDraft as BriefDraft) ?? {};
+  // Gambar klien di riwayat yang belum masuk brief (termasuk yang dikirim sebelum start_intake): item brief dari
+  // attach_image_to_brief memuat id pesan di id/URL-nya. Hanya saat brief dikumpulkan; sesudahnya gambar bisa bukti transfer.
+  const imageTargets = code ? imageTargetFields(code) : [];
+  const draftJson = JSON.stringify(draft);
+  const unattachedImageMessageIds =
+    intake?.status === "COLLECTING" && imageTargets.length
+      ? rows.filter((r) => r.direction === "INBOUND" && r.type === "image" && r.mediaStorageKey && !draftJson.includes(r.id)).map((r) => r.id)
+      : [];
   return buildStateBlock({
     intake: intake && {
       status: intake.status,
@@ -135,7 +143,7 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       briefDraft: draft,
       missingRequired: code ? missingRequiredFields(code, draft) : [],
       writableFields: code ? aiWritableBriefFields(code) : [],
-      imageTargets: code ? imageTargetFields(code) : [],
+      imageTargets,
       quote:
         intake.agreedPrice !== null && intake.dpAmount !== null && intake.deadline
           ? {
@@ -152,6 +160,7 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       : [],
     ownerQueries: ownerQueries.map((q) => ({ ...q, status: q.status === "PENDING" ? ("PENDING" as const) : ("ANSWERED" as const) })),
     pendingImageMessageIds,
+    unattachedImageMessageIds,
   });
 }
 
@@ -205,7 +214,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
   // dan didukung semua model Claude.
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: buildSystemPrompt(studio.name, guide, ops, services), cache_control: { type: "ephemeral" } },
-    { type: "text", text: await buildState(params.conversationId, pendingImageIds, services) },
+    { type: "text", text: await buildState(params.conversationId, pendingImageIds, services, rows) },
   ];
 
   const toolsCalled: string[] = [];
