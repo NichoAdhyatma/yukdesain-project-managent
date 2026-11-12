@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DP_PLACEHOLDER, stripDpMentions, PRICE_PLACEHOLDER, WA_TEXT_LIMIT, clampReply, mentionsPriceOrDeadline, stripPriceMentions } from "./reply-guard";
+import { DP_PLACEHOLDER, dropRepeatedSentences, stripDpMentions, PRICE_PLACEHOLDER, WA_TEXT_LIMIT, clampReply, mentionsPriceOrDeadline, stripPriceMentions } from "./reply-guard";
 
 describe("mentionsPriceOrDeadline", () => {
   it.each([
@@ -258,5 +258,91 @@ describe("stripDpMentions: setelah invoice, bot tidak menyebut DP (spec 2026-11-
   it("tanpa angka atau tanpa kata DP tidak diubah", () => {
     expect(stripDpMentions("Silakan bayar DP sesuai invoice yang sudah kami kirim ya kak.").changed).toBe(false);
     expect(stripDpMentions("Harga order Rp150.000 sesuai invoice ya kak.").changed).toBe(false);
+  });
+});
+
+describe("sanitizeReply: label riwayat tidak ikut terkirim", () => {
+  it("label pesan tim yang ditiru model dibuang", () => {
+    expect(sanitizeReply("[Pesan dari tim studio] Halo kak, invoice sudah kami kirim ya.").text).toBe("Halo kak, invoice sudah kami kirim ya.");
+  });
+});
+
+// Produksi 12 Nov: kalimat yang sama dikirim berulang (Knn "kabari kalau jumlah menunya sudah pasti" 2x,
+// Mif "permintaan masih dalam pengecekan tim" di setiap balasan, Virgi "tim akan mengirim harga final" 2x).
+describe("dropRepeatedSentences: kalimat yang sudah terkirim tidak diulang", () => {
+  it("kalimat yang mirip pesan sebelumnya dibuang, sapaan pendek tetap", () => {
+    const recent = [
+      "Siap kak, ditunggu ya. Kalau jumlah item menunya sudah pasti, langsung kabari di chat ini.",
+      "Siap kak, silakan dicek dulu ya. Kalau sudah ada jumlah pastinya, kabari saja.",
+    ];
+    expect(dropRepeatedSentences("Siap kak, ditunggu ya. Kalau sudah pasti jumlah menunya, langsung kabari saja di sini.", recent)).toBe(
+      "Siap kak, ditunggu ya.",
+    );
+  });
+
+  it("kalimat persis sama di pesan lebih lama juga dibuang", () => {
+    const recent = ["Oke kak.", "Brief sudah kami terima dan tim kami akan mengirimkan harga final secepatnya."];
+    expect(dropRepeatedSentences("Siap kak, terima kasih ya. Brief sudah kami terima dan tim kami akan mengirimkan harga final secepatnya.", recent)).toBe(
+      "Siap kak, terima kasih ya.",
+    );
+  });
+
+  it("angka atau teks tebal yang baru tidak dianggap ulangan", () => {
+    expect(dropRepeatedSentences("Siap kak, ukuran 60x300 cm sudah kami catat.", ["Siap kak, ukuran 60x160 cm sudah kami catat."])).toBe(
+      "Siap kak, ukuran 60x300 cm sudah kami catat.",
+    );
+    const recent = ["Terima kasih kak, foto *Mango Sunshine* sudah kami terima dan kami catat sebagai referensi menu."];
+    const text = "Terima kasih kak, foto *Tropical Fresh* sudah kami terima dan kami catat sebagai referensi menu.";
+    expect(dropRepeatedSentences(text, recent)).toBe(text);
+  });
+
+  it("pertanyaan hanya dibuang bila persis sama dengan pertanyaan di pesan terakhir; menanyakan lagi hal lama boleh", () => {
+    const ask = "Kira-kira berapa jumlah menu yang mau ditampilkan di katalognya?";
+    expect(dropRepeatedSentences(`Foto sudah kami catat ya kak.\n\n${ask}`, [`Baik kak, sudah kami catat.\n\n${ask}`])).toBe("Foto sudah kami catat ya kak.");
+    expect(dropRepeatedSentences(`Oke kak.\n\n${ask}`, ["Gambarnya untuk apa ya kak?", `Siap.\n\n${ask}`])).toBe(`Oke kak.\n\n${ask}`);
+  });
+
+  // Simulasi chat 12 Nov (Nurul): klien membalas hal lain, bot menanyakan lagi pertanyaan yang belum dijawab.
+  it("pertanyaan yang belum dijawab boleh ditanyakan lagi dengan kalimat lain", () => {
+    const recent = ['Terima kasih kak Aldi. Tulisan "dari 9 negara" mau saya masukkan juga ke banner atau tidak?'];
+    const text = 'Sudah saya catat kak. Tulisan "dari 9 negara" mau dimasukkan ke banner atau tidak?';
+    expect(dropRepeatedSentences(text, recent)).toBe(text);
+  });
+
+  it("kalimat pembuka (titik dua) ikut dibuang bila semua pertanyaan di bawahnya terbuang", () => {
+    const list = "Untuk melanjutkan, boleh kakak infokan:\n- Kira-kira berapa jumlah menu yang mau ditampilkan?\n- Rencananya katalognya berapa halaman?";
+    const text = `Terima kasih kak, foto *Tropical Fresh* sudah kami terima.\n\n${list}`;
+    expect(dropRepeatedSentences(text, [`Terima kasih kak, foto *Mango* sudah kami terima.\n\n${list}`])).toBe(
+      "Terima kasih kak, foto *Tropical Fresh* sudah kami terima.",
+    );
+  });
+
+  it("ringkasan brief (daftar bernomor) dikirim utuh walau mengulang", () => {
+    const summary = "Siap kak, sudah diralat. Ringkasannya:\n\n1. Layanan: Banner UMKM\n2. Ukuran: 60x300 cm\n3. Gaya: Elegan\n\nSudah sesuai kak? Balas \"sudah sesuai\" kalau iya.";
+    expect(dropRepeatedSentences(summary, [summary])).toBe(summary);
+  });
+
+  it("daftar bernomor pendek tetap utuh bersama kalimat pembukanya", () => {
+    const text = "Siap kak. Biar bisa kami catat, boleh kirim dua hal ini:\n\n1. Nama Kakak\n2. Tulisan utama di banner";
+    expect(dropRepeatedSentences(text, ["Halo kak, ada yang bisa kami bantu hari ini?"])).toBe(text);
+  });
+
+  it("kalimat tempelan penjaga harga yang sudah terkirim tidak diulang", () => {
+    expect(dropRepeatedSentences(`Background putih ya kak.\n\n${PRICE_PLACEHOLDER}`, [`Logo sudah kami catat.\n\n${PRICE_PLACEHOLDER}`])).toBe(
+      "Background putih ya kak.",
+    );
+  });
+
+  it("semua kalimat ulangan → kosong; tanpa riwayat → apa adanya", () => {
+    const recent = ["Permintaan kakak masih dalam pengecekan tim, kami kabari begitu ada jawabannya."];
+    expect(dropRepeatedSentences("Permintaan kakak masih dalam pengecekan tim, kami kabari begitu ada jawabannya.", recent)).toBe("");
+    expect(dropRepeatedSentences("Halo kak, mau desain apa hari ini?", [])).toBe("Halo kak, mau desain apa hari ini?");
+  });
+});
+
+describe("kalimat tempelan penjaga terdengar seperti admin", () => {
+  it("tanpa kata baku 'mengirimkannya' dan 'cara pembayarannya'", () => {
+    expect(PRICE_PLACEHOLDER).toBe("Soal harga dan lama pengerjaannya nanti dikirim tim setelah brief-nya lengkap ya kak.");
+    expect(DP_PLACEHOLDER).toBe("Nominal DP-nya ada di invoice yang tadi kami kirim ya kak.");
   });
 });

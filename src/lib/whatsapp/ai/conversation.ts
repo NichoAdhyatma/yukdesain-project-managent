@@ -22,6 +22,7 @@ const HISTORY_LIMIT = 20;
 const MAX_TOOL_ROUNDS = 4;
 const MAX_PENDING_IMAGES = 3;
 const RELAYED_ANSWER_DAYS = 7;
+const RECENT_OUTBOUND_LIMIT = 5;
 
 export type AiTurnResult = {
   reply: string | null;
@@ -35,6 +36,8 @@ export type AiTurnResult = {
   // Nominal DP dan sisa pelunasan order ini: tidak boleh disebut bot setelah invoice (spec 2026-11-11 §5)
   dpGuardNumbers?: string[];
   toolsCalled: string[];
+  /** Pesan keluar terakhir (terbaru dulu, maks 5): penjaga kalimat berulang (reply-guard dropRepeatedSentences) */
+  recentOutbound?: string[];
   /** Alasan berhenti respons terakhir model (log saat balasan kosong, mis. max_tokens) */
   stopReason?: string | null;
 };
@@ -45,7 +48,14 @@ type HistoryRow = {
   type: string;
   body: string;
   mediaStorageKey: string | null;
+  sentByBot: boolean;
 };
+
+/**
+ * Penanda pesan keluar yang bukan tulisan AI (invoice/verifikasi DP dari portal, balasan admin dari portal atau HP).
+ * Tanpa penanda, AI menganggapnya tulisan sendiri dan meralatnya bila tidak tercantum di STATE (produksi 2026-11-12).
+ */
+export const TEAM_MESSAGE_LABEL = "[Pesan dari tim studio]";
 
 function describe(row: HistoryRow): string {
   if (row.type === "image") {
@@ -74,7 +84,7 @@ async function buildMessages(rows: HistoryRow[]) {
   const messages: Anthropic.MessageParam[] = [];
   for (const row of rows) {
     if (row.direction === "OUTBOUND") {
-      messages.push({ role: "assistant", content: row.body });
+      messages.push({ role: "assistant", content: row.sentByBot ? row.body : `${TEAM_MESSAGE_LABEL} ${row.body}` });
       continue;
     }
     if (pendingIds.has(row.id) && row.mediaStorageKey) {
@@ -143,6 +153,7 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       ? rows.filter((r) => r.direction === "INBOUND" && r.type === "image" && r.mediaStorageKey && !draftJson.includes(r.id)).map((r) => r.id)
       : [];
   return buildStateBlock({
+    now: new Date(),
     intake: intake && {
       status: intake.status,
       service: intake.service,
@@ -207,7 +218,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
       },
       orderBy: { createdAt: "desc" },
       take: HISTORY_LIMIT,
-      select: { id: true, direction: true, type: true, body: true, mediaStorageKey: true },
+      select: { id: true, direction: true, type: true, body: true, mediaStorageKey: true, sentByBot: true },
     })
   ).reverse();
 
@@ -266,6 +277,11 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
           calculatedTotals: [...new Set([...ctx.calculatedTotals.map(String), ...ctx.calculatedBreakdowns.flatMap(moneyAmounts)])],
         },
         toolsCalled,
+        recentOutbound: rows
+          .filter((r) => r.direction === "OUTBOUND")
+          .slice(-RECENT_OUTBOUND_LIMIT)
+          .reverse()
+          .map((r) => r.body),
         stopReason: response.stop_reason ?? null,
       };
     }

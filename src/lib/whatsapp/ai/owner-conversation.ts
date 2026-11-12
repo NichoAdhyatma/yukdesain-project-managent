@@ -37,9 +37,11 @@ export function buildOwnerSystemPrompt(studioName: string): string {
 
 # Pertanyaan klien
 - STATE berisi pertanyaan klien yang menunggu jawaban owner. Jika pesan owner menjawab salah satunya (ditandai di STATE jika owner membalas pesan pertanyaannya) atau jelas merujuk satu pertanyaan, panggil answer_client_query: approved=true untuk bisa, false untuk tidak; note = catatan owner untuk bot (harga khusus, syarat, layanan yang dipakai).
-- Cocokkan isi jawaban owner dengan permintaan di STATE (mis. jawaban menyebut banner → pertanyaan soal banner). Jika ada beberapa pertanyaan terbuka dan tetap tidak jelas yang mana, tanyakan.
+- Cocokkan isi jawaban owner dengan permintaan di STATE (mis. jawaban menyebut banner → pertanyaan soal banner).
+- Jika ada beberapa pertanyaan terbuka dan owner tidak me-reply pesan pertanyaannya, jawaban hanya bisa dicatat bila pesan owner menyebut nama klien atau 4 digit akhir nomornya. Jangan menebak: minta owner menyebut nama klien atau me-reply pesan pertanyaannya, sambil menyebut daftar klien yang menunggu.
 - Jangan mengingatkan pertanyaan klien lain yang masih menunggu di setiap balasan. Sebut hanya bila owner menanyakannya atau saat perlu memastikan jawaban ini untuk pertanyaan yang mana.
 - Setelah answer_client_query berhasil, cukup bilang jawabannya sudah dicatat. Jangan menyatakan jawaban sudah terkirim ke klien: sistem yang mengirimnya lalu melaporkan hasilnya ke owner.
+- Jangan bilang jawaban owner belum tersimpan atau belum terkirim bila jawaban itu tercantum di STATE sebagai sudah terkirim; hasil kirim selalu dilaporkan sistem ke owner.
 - STATE juga berisi jawaban owner yang belum terkirim ke klien (mis. gagal dikirim karena AI error). Jika owner minta mengirim ulang, panggil resend_client_answer dengan id-nya; jika ada beberapa dan tidak jelas yang mana, tanyakan.
 
 # Gaya
@@ -159,6 +161,23 @@ async function openQueries(owner: OwnerContext) {
   });
 }
 
+const RECENTLY_RELAYED_HOURS = 2;
+
+/** Jawaban owner yang baru terkirim ke klien, supaya AI tidak meragukan jawaban yang sudah dicatat. */
+async function recentlyRelayedAnswers(owner: OwnerContext) {
+  return prisma.waOwnerQuery.findMany({
+    where: {
+      status: "ANSWERED",
+      relayedAt: { not: null },
+      answeredAt: { gt: new Date(Date.now() - RECENTLY_RELAYED_HOURS * 3_600_000) },
+      conversation: owner.target === "DRAFT" ? { waId: sandboxWaId(owner.user.id) } : { isSandbox: false },
+    },
+    orderBy: { answeredAt: "desc" },
+    take: 5,
+    select: { id: true, question: true, approved: true, conversation: { select: { waId: true, profileName: true } } },
+  });
+}
+
 /** Jawaban owner yang sudah dicatat tapi belum sampai ke klien (24 jam terakhir). */
 async function unrelayedAnswers(owner: OwnerContext) {
   return prisma.waOwnerQuery.findMany({
@@ -180,6 +199,7 @@ export function buildOwnerState(p: {
   pendingProposalSummary: string | null;
   queries: Awaited<ReturnType<typeof openQueries>>;
   unrelayed: Awaited<ReturnType<typeof unrelayedAnswers>>;
+  recentlyRelayed: Awaited<ReturnType<typeof recentlyRelayedAnswers>>;
   repliedQueryId: string | null;
 }): string {
   const { guide } = p.current;
@@ -217,6 +237,13 @@ export function buildOwnerState(p: {
       lines.push(`  • id=${q.id}; klien: ${client}; permintaan: ${JSON.stringify(q.question)}; jawaban: ${q.approved ? "BISA" : "TIDAK"}; ${state}`);
     }
   }
+  if (p.recentlyRelayed.length) {
+    lines.push(`- Jawaban owner yang sudah terkirim ke klien (${RECENTLY_RELAYED_HOURS} jam terakhir):`);
+    for (const q of p.recentlyRelayed) {
+      const client = `${q.conversation.profileName ?? "Klien"} (${maskPhone(q.conversation.waId)})`;
+      lines.push(`  • klien: ${client}; permintaan: ${JSON.stringify(q.question)}; jawaban: ${q.approved ? "BISA" : "TIDAK"}`);
+    }
+  }
   if (p.repliedQueryId) lines.push(`- Pesan terbaru owner adalah balasan (reply) untuk pertanyaan id=${p.repliedQueryId}.`);
   return lines.join("\n");
 }
@@ -240,13 +267,14 @@ export async function runOwnerAiTurn(p: {
   conversationId: string;
   repliedQueryId: string | null;
 }): Promise<OwnerTurnResult> {
-  const [targets, studio, current, pending, queries, unrelayed, history] = await Promise.all([
+  const [targets, studio, current, pending, queries, unrelayed, recentlyRelayed, history] = await Promise.all([
     getAiTargets(),
     getStudioSettings(),
     guideFor(p.owner),
     findPendingProposal(p.conversationId),
     openQueries(p.owner),
     unrelayedAnswers(p.owner),
+    recentlyRelayedAnswers(p.owner),
     prisma.waMessage.findMany({
       where: { conversationId: p.conversationId, NOT: { direction: "OUTBOUND", deliveryStatus: "failed" } },
       orderBy: { createdAt: "desc" },
@@ -255,8 +283,11 @@ export async function runOwnerAiTurn(p: {
     }),
   ]);
   const chat = createChatSession(targets);
-  const openIds = new Set(queries.map((q) => q.id));
+  const openClients = new Map(queries.map((q) => [q.id, q.conversation]));
   const unrelayedIds = new Set(unrelayed.map((q) => q.id));
+  // history urut terbaru dulu: pesan owner terakhir dipakai untuk memastikan jawaban untuk klien yang mana.
+  const ownerText = history.find((m) => m.direction === "INBOUND")?.body ?? "";
+  const repliedQueryId = p.repliedQueryId && openClients.has(p.repliedQueryId) ? p.repliedQueryId : null;
 
   const messages: Anthropic.MessageParam[] = history
     .reverse()
@@ -273,7 +304,8 @@ export async function runOwnerAiTurn(p: {
         pendingProposalSummary: pending?.summary ?? null,
         queries,
         unrelayed,
-        repliedQueryId: p.repliedQueryId && openIds.has(p.repliedQueryId) ? p.repliedQueryId : null,
+        recentlyRelayed,
+        repliedQueryId,
       }),
     },
   ];
@@ -306,7 +338,7 @@ export async function runOwnerAiTurn(p: {
     messages.push({ role: "assistant", content: response.content });
     const results: Anthropic.ToolResultBlockParam[] = [];
     for (const use of toolUses) {
-      const outcome = await executeOwnerTool(use.name, use.input, { ...p, current, openIds, unrelayedIds, result });
+      const outcome = await executeOwnerTool(use.name, use.input, { ...p, current, openQueries: openClients, unrelayedIds, ownerText, repliedQueryId, result });
       results.push({ type: "tool_result", tool_use_id: use.id, content: outcome.content, is_error: outcome.isError });
     }
     messages.push({ role: "user", content: results });
@@ -319,10 +351,28 @@ type OwnerToolContext = {
   owner: OwnerContext;
   conversationId: string;
   current: GuideInEffect;
-  openIds: Set<string>;
+  /** Pertanyaan terbuka di STATE → klien penanya */
+  openQueries: Map<string, OpenQueryClient>;
   unrelayedIds: Set<string>;
+  /** Pesan owner terbaru (untuk memastikan jawaban saat beberapa pertanyaan terbuka) */
+  ownerText: string;
+  /** Pertanyaan yang di-reply owner, bila ada */
+  repliedQueryId: string | null;
   result: OwnerTurnResult;
 };
+
+type OpenQueryClient = { profileName: string | null; waId: string };
+
+const NOT_WORD = "[^\\p{L}\\p{N}]";
+
+/** Pesan owner menyebut klien ini: kata dari namanya (≥3 huruf), nama utuh, atau 4 digit akhir nomornya. */
+export function mentionsClient(text: string, client: OpenQueryClient): boolean {
+  const words = (client.profileName ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+  const whole = words.join(" ");
+  const candidates = [...words.filter((w) => w.length >= 3), ...(whole.length >= 2 ? [whole] : []), client.waId.slice(-4)];
+  const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return candidates.some((c) => new RegExp(`(^|${NOT_WORD})${escape(c)}($|${NOT_WORD})`, "iu").test(text));
+}
 
 const ok = (data: unknown) => ({ content: JSON.stringify(data), isError: false });
 const fail = (message: string, details?: unknown) => ({
@@ -364,7 +414,14 @@ export async function executeOwnerTool(name: string, rawInput: unknown, ctx: Own
   if (name === "answer_client_query") {
     const input = inputs.answer_client_query.safeParse(rawInput);
     if (!input.success) return fail("Input tidak valid");
-    if (!ctx.openIds.has(input.data.query_id)) return fail("Pertanyaan tidak ditemukan atau sudah dijawab");
+    const client = ctx.openQueries.get(input.data.query_id);
+    if (!client) return fail("Pertanyaan tidak ditemukan atau sudah dijawab");
+    // Beberapa pertanyaan terbuka tanpa reply: jawaban tidak boleh ditebak (produksi 12 Nov 18:57).
+    if (ctx.openQueries.size > 1 && ctx.repliedQueryId !== input.data.query_id && !mentionsClient(ctx.ownerText, client)) {
+      return fail(
+        "Ada beberapa pertanyaan terbuka dan pesan owner tidak menyebut klien ini. Jangan dicatat; tanyakan ke owner jawaban ini untuk klien yang mana (minta sebut nama klien atau reply pesan pertanyaannya).",
+      );
+    }
     const answered = await answerOwnerQuery(input.data.query_id, {
       approved: input.data.approved,
       note: input.data.note ?? null,

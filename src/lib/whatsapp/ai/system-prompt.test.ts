@@ -246,6 +246,7 @@ describe("gaya chat seperti admin, bukan robot (kasus Day 2026-11-12)", () => {
 
   it("tidak mengulang info yang sudah disebut, satu pertanyaan per pesan, nama ditanya sekali", () => {
     expect(prompt).toContain("Jangan mengulang harga, estimasi, atau nama layanan yang sudah kamu sebut");
+    expect(prompt).toContain("Jangan menulis ulang kalimat yang sudah kamu kirim sebelumnya");
     expect(prompt).toContain("Tanyakan satu hal per pesan");
     expect(prompt).not.toContain("Tanyakan satu atau dua hal per pesan");
     expect(prompt).toContain("menjelang ringkasan brief");
@@ -281,5 +282,49 @@ describe("tidak bertanya hal yang sama (2026-11-12, kasus Day dan Mif)", () => {
     expect(prompt).toContain("Jangan memanggil ask_owner untuk permintaan yang sudah menunggu atau sudah dijawab tim di STATE");
     expect(prompt).toContain("Jangan menanyakan ulang pertanyaan yang sama di pesan berturut-turut");
     expect(prompt).toContain("cukup disampaikan sekali");
+  });
+});
+
+describe("tidak meralat pesan tim (2026-11-12, kasus Nicho dan ayubbb)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("pesan berlabel tim adalah fakta, walau tidak ada di STATE", () => {
+    expect(prompt).toContain("[Pesan dari tim studio]");
+    expect(prompt).toContain("bisa dari order lain yang sudah selesai");
+  });
+
+  it("tidak meralat atau menyuruh klien mengabaikan pesan sebelumnya atas inisiatif sendiri", () => {
+    expect(prompt).toContain("Jangan pernah meralat, membantah, atau meminta klien mengabaikan pesan sebelumnya");
+    expect(prompt).toContain("kecuali klien sendiri menunjukkan ada yang keliru");
+  });
+});
+
+// Evaluasi chat 12 Nov sejak 15:45: 40% balasan dibuka "Siap kak", 39% melapor "sudah kami catat/simpan/terima",
+// Isel jam 16:39 dibalas "Pagi juga kak", kata kaku ("pencatatan", "mohon dikonfirmasi", "ditindaklanjuti").
+describe("lebih mirip admin manusia (humanize, 2026-11-12)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("tidak melapor 'sudah kami catat' untuk setiap jawaban dan tidak membeo jawaban klien", () => {
+    expect(prompt).toContain('Jangan melaporkan "sudah kami catat/simpan/terima" untuk setiap jawaban klien');
+    expect(prompt).toContain("Data klien diulang hanya di ringkasan brief");
+  });
+
+  it("sering tanpa pembuka; bahasa lisan, bukan bahasa surat; emoji seperlunya", () => {
+    expect(prompt).toContain("Sering kali tidak perlu pembuka");
+    expect(prompt).toContain("Pakai bahasa lisan admin, bukan bahasa surat");
+    expect(prompt).toContain('"pencatatan"');
+    expect(prompt).toContain("Emoji boleh sesekali");
+  });
+
+  it("sapaan waktu mengikuti waktu sekarang di STATE", () => {
+    expect(prompt).toContain("Sapaan waktu (pagi/siang/sore/malam) mengikuti waktu sekarang di STATE");
+  });
+
+  it("STATE memuat waktu sekarang dalam WIB dengan bagian hari", () => {
+    const state = buildStateBlock({ intake: null, pendingImageMessageIds: [], now: new Date("2026-11-12T09:39:00Z") });
+    expect(state).toContain("- Waktu sekarang: Kamis, 12 November 2026 pukul 16.39 WIB (sore)");
+    expect(buildStateBlock({ intake: null, pendingImageMessageIds: [], now: new Date("2026-11-12T13:05:00Z") })).toContain("(malam)");
+    expect(buildStateBlock({ intake: null, pendingImageMessageIds: [], now: new Date("2026-11-12T01:00:00Z") })).toContain("(pagi)");
+    expect(buildStateBlock({ intake: null, pendingImageMessageIds: [], now: new Date("2026-11-12T05:30:00Z") })).toContain("(siang)");
   });
 });

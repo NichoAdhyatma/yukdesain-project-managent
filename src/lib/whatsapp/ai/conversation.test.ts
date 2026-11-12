@@ -45,13 +45,15 @@ vi.mock("../media", () => media);
 vi.mock("./bot-guide", async (orig) => ({ ...(await orig<typeof import("./bot-guide")>()), ...guides }));
 vi.mock("./tools", async (orig) => ({ ...(await orig<typeof import("./tools")>()), ...tools }));
 
-import { runAiTurn } from "./conversation";
+import { TEAM_MESSAGE_LABEL, runAiTurn } from "./conversation";
 
-type Row = { id: string; direction: "INBOUND" | "OUTBOUND"; type: string; body: string; mediaStorageKey: string | null };
+type Row = { id: string; direction: "INBOUND" | "OUTBOUND"; type: string; body: string; mediaStorageKey: string | null; sentByBot: boolean };
 const inbound = (id: string, body: string, extra: Partial<Row> = {}): Row => ({
-  id, direction: "INBOUND", type: "text", body, mediaStorageKey: null, ...extra,
+  id, direction: "INBOUND", type: "text", body, mediaStorageKey: null, sentByBot: false, ...extra,
 });
-const outbound = (id: string, body: string): Row => ({ id, direction: "OUTBOUND", type: "text", body, mediaStorageKey: null });
+const outbound = (id: string, body: string): Row => ({ id, direction: "OUTBOUND", type: "text", body, mediaStorageKey: null, sentByBot: true });
+// Pesan keluar yang bukan tulisan AI: invoice/verifikasi DP dari portal, balasan admin dari portal atau HP.
+const teamOutbound = (id: string, body: string): Row => ({ ...outbound(id, body), sentByBot: false });
 
 function givenHistory(rows: Row[]) {
   // findMany dipanggil desc lalu di-reverse oleh kode
@@ -110,6 +112,35 @@ describe("runAiTurn", () => {
     const messages = sentMessages();
     expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
     expect(messages[2].content).toMatch(/Belum ada pesan baru dari klien/);
+  });
+
+  // Produksi 12 Nov (Nicho 15:55, ayubbb 14:03): pesan portal/admin terbaca sebagai tulisan AI, lalu AI meralatnya
+  // ("abaikan info kode project tadi") padahal benar.
+  it("pesan tim (portal/admin) diberi label di riwayat; balasan AI tidak", async () => {
+    givenHistory([
+      inbound("m1", "sudah transfer"),
+      outbound("o1", "Bukti sudah kami terima, sedang dicek tim kami ya kak"),
+      teamOutbound("o2", "Halo kak, pembayaran DP sudah kami verifikasi. Kode project PRJ-20261112-4XMQG1."),
+      inbound("m_last", "klo bikin spanduk brp ya"),
+    ]);
+    create.mockResolvedValue(textResponse("Banner UMKM Rp135.000 kak"));
+
+    await runAiTurn(params);
+
+    const messages = sentMessages();
+    expect(messages[1].content).toBe("Bukti sudah kami terima, sedang dicek tim kami ya kak");
+    expect(messages[2].content).toBe(`${TEAM_MESSAGE_LABEL} Halo kak, pembayaran DP sudah kami verifikasi. Kode project PRJ-20261112-4XMQG1.`);
+  });
+
+  it("mengembalikan pesan keluar terakhir (terbaru dulu, maks 5) untuk penjaga kalimat berulang", async () => {
+    givenHistory([
+      ...["a", "b", "c", "d", "e", "f"].map((x) => outbound(`o_${x}`, `bot ${x}`)),
+      teamOutbound("o_team", "invoice"),
+      inbound("m_last", "oke kak"),
+    ]);
+    create.mockResolvedValue(textResponse("Siap kak"));
+    const result = await runAiTurn(params);
+    expect(result.recentOutbound).toEqual(["invoice", "bot f", "bot e", "bot d", "bot c"]);
   });
 
   it("jendela riwayat hanya berisi pesan bot → tetap ada satu pesan user", async () => {

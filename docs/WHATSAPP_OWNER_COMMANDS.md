@@ -93,6 +93,12 @@ sedang mengirim menu satu per satu.
   cukup sekali.
 - Bot klien tidak menanyakan ulang pertanyaan yang sama di pesan berturut-turut; data yang dikirim bertahap cukup
   dikonfirmasi singkat.
+- Beberapa pertanyaan terbuka dan owner tidak me-reply pesan pertanyaannya: `answer_client_query` ditolak server
+  kecuali pesan owner menyebut klien itu (kata dari namanya, nama utuh, atau 4 digit akhir nomornya); asisten lalu
+  menanyakan jawaban itu untuk klien yang mana. Temuan 12 Nov 18:57: "BISA, ini masuk ke desain poster menu" tanpa
+  reply ditempel ke klien yang ditebak AI.
+- STATE asisten owner memuat jawaban yang sudah terkirim ke klien (2 jam terakhir); asisten tidak bilang jawaban
+  "belum tentu tersimpan" bila tercantum di sana.
 - Gangguan teknis AI (rate limit, 5xx, jaringan) dicoba sekali lagi setelah 4 detik sebelum chat dialihkan ke admin.
   Log mencatat status provider (`provider_429`, dst.) dan alasan berhenti AI saat balasan kosong (`stop=max_tokens`).
 - Balasan asisten yang meminta "balas YA" tanpa usulan tersimpan: ajakannya dibuang, pertanyaan klarifikasinya tetap

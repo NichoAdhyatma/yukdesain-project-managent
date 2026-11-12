@@ -13,7 +13,7 @@ const DURATION = /(selesai|jadi|estimasi|deadline|pengerjaan|dikerjakan|proses)[
 const STARTING = /\bmulai\b/i;
 const TOTAL = /\b(total|totalnya|jadi|semua|seluruh|sekalian|dikali)\b|\d\s?x\b|\bx\s?\d/i;
 
-export const PRICE_PLACEHOLDER = "Untuk harga dan estimasi waktu, tim kami akan mengirimkannya setelah brief lengkap ya kak.";
+export const PRICE_PLACEHOLDER = "Soal harga dan lama pengerjaannya nanti dikirim tim setelah brief-nya lengkap ya kak.";
 
 export function mentionsPriceOrDeadline(sentence: string): boolean {
   return PRICE.test(sentence) || PRICE_REVERSED.test(sentence) || RUPIAH.test(sentence) || DISCOUNT.test(sentence) || DURATION.test(sentence);
@@ -137,7 +137,7 @@ export function stripPriceMentions(
   return { text: body ? `${body}\n\n${PRICE_PLACEHOLDER}` : PRICE_PLACEHOLDER, changed: true };
 }
 
-export const DP_PLACEHOLDER = "Nominal DP dan cara pembayarannya ada di invoice yang sudah kami kirim ya kak.";
+export const DP_PLACEHOLDER = "Nominal DP-nya ada di invoice yang tadi kami kirim ya kak.";
 const DP_WORD = /\b(dp|uang\s?muka|panjar|tanda\s?jadi|down\s?payment)(-?nya)?\b/i;
 // Persen yang ditulis dengan kata ("50 persen").
 const PERCENT_WORD = /\d+\s?persen\b/i;
@@ -161,6 +161,75 @@ export function stripDpMentions(text: string, dpNumbers: string[] = []): { text:
   return { text: body ? `${body}\n\n${DP_PLACEHOLDER}` : DP_PLACEHOLDER, changed: true };
 }
 
+// Nomor daftar di awal baris ("1. Nama") bukan akhir kalimat.
+const SENTENCE_SPLIT = /(?<=[.!?])(?<!^[ \t]*\d+\.)(?=\s)|(?<=\n)/m;
+const LIST_MARKER = /^\s*(?:[-•*]|\d+[.)])\s+/;
+// Ringkasan brief yang diperbarui memang dikirim ulang utuh.
+const SUMMARY_MIN_LIST_LINES = 3;
+// Kalimat pendek ("Siap kak, ditunggu ya.") wajar terulang; yang dijaga kalimat berisi.
+const MIN_REPEAT_WORDS = 5;
+const SIMILAR_JACCARD = 0.6;
+const SIMILAR_CONTAINED = 0.8;
+
+const wordsOf = (sentence: string) =>
+  sentence.toLowerCase().replace(/[*_~]/g, "").split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+
+/** Angka, teks *tebal*, dan teks "berkutip": kalimat yang membawa nilai baru bukan ulangan. */
+function keyWordsOf(sentence: string): string[] {
+  const marked = [...sentence.matchAll(/\*([^*\n]+)\*|"([^"\n]+)"/g)].flatMap((m) => wordsOf(m[1] ?? m[2]));
+  return [...wordsOf(sentence).filter((w) => /\d/.test(w)), ...marked];
+}
+
+function isRepeatOf(sentence: string, previous: string): boolean {
+  const words = new Set(wordsOf(sentence));
+  const prev = new Set(wordsOf(previous));
+  if (words.size < MIN_REPEAT_WORDS || prev.size === 0) return false;
+  if (keyWordsOf(sentence).some((w) => !prev.has(w))) return false;
+  const shared = [...words].filter((w) => prev.has(w)).length;
+  const union = words.size + prev.size - shared;
+  return shared / union >= SIMILAR_JACCARD || shared / words.size >= SIMILAR_CONTAINED;
+}
+
+const sentencesOf = (text: string) =>
+  text
+    .split(SENTENCE_SPLIT)
+    .map((p) => p.replace(LIST_MARKER, "").trim())
+    .filter(Boolean);
+
+// Pertanyaan pendek yang sama persis ("Rencananya berapa halaman?") juga terhitung ulangan.
+const MIN_REPEAT_QUESTION_WORDS = 4;
+const sameWords = (a: string, b: string) => {
+  const wa = wordsOf(a);
+  return wa.length >= MIN_REPEAT_QUESTION_WORDS && wa.join(" ") === wordsOf(b).join(" ");
+};
+
+/**
+ * Buang kalimat yang sudah dikirim (sama atau mirip) di pesan keluar terakhir (`recent`, terbaru dulu), supaya bot
+ * tidak mengulang kalimat yang sama (produksi 2026-11-12). Pertanyaan hanya dibuang bila persis sama dengan pertanyaan
+ * di pesan terakhir: menanyakan lagi hal yang belum dijawab (dengan kalimat lain, atau setelah pesan lain) tetap boleh.
+ * Kalimat pembuka ("…infokan:") ikut dibuang bila daftar di bawahnya habis. Ringkasan bernomor dikirim utuh.
+ * Hasil kosong = seluruh balasan ulangan.
+ */
+export function dropRepeatedSentences(text: string, recent: string[]): string {
+  if (recent.length === 0) return text;
+  if (text.split("\n").filter((l) => LIST_MARKER.test(l)).length >= SUMMARY_MIN_LIST_LINES) return text;
+  const lastSentences = sentencesOf(recent[0]);
+  const allSentences = recent.flatMap(sentencesOf);
+  const kept = text.split(SENTENCE_SPLIT).filter((part) => {
+    const sentence = part.replace(LIST_MARKER, "").trim();
+    if (!sentence || sentence.endsWith(":")) return true;
+    if (sentence.endsWith("?")) return !lastSentences.some((prev) => sameWords(sentence, prev));
+    return !allSentences.some((prev) => isRepeatOf(sentence, prev));
+  });
+  // Pembuka yang tidak lagi diikuti butir daftar.
+  const result = kept.filter((part, i) => {
+    if (!part.trim().endsWith(":")) return true;
+    const next = kept.slice(i + 1).find((p) => p.trim());
+    return next !== undefined && LIST_MARKER.test(next);
+  });
+  return result.join("").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 // Batas teks WhatsApp 4096 karakter.
 export const WA_TEXT_LIMIT = 4000;
 
@@ -176,6 +245,8 @@ const TOOL_MARKUP = /<\/?(tool_call|tool_use|invoke|function_calls|parameter)\b|
 const DEGENERATE_RUN = /([\s\S]{1,4}?)\1{19,}/;
 // Huruf Han/Kana/Hangul: tidak pernah dipakai dalam balasan berbahasa Indonesia.
 const CJK = /[぀-ヿ㐀-鿿가-힯]+/g;
+// Label riwayat untuk pesan tim (conversation.ts TEAM_MESSAGE_LABEL) yang ditiru model.
+const TEAM_LABEL = /\[Pesan dari tim studio\]\s*/gi;
 // Kode layanan internal (SVC-01) tidak untuk klien; nama layanan sudah cukup.
 const SERVICE_CODE = /\s*\(?\bSVC-\d{2}\b\)?/g;
 
@@ -194,6 +265,7 @@ export function sanitizeReply(text: string): SanitizedReply {
   if (run?.index !== undefined) out = out.slice(0, run.index);
   out = out
     .replace(CJK, "")
+    .replace(TEAM_LABEL, "")
     .replace(SERVICE_CODE, "")
     .replace(/[ \t]+—[ \t]+/g, ", ")
     .replace(/,(\s*,)+/g, ",")
