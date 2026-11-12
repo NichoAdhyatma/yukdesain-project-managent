@@ -71,8 +71,27 @@ git --git-dir="$REPO" worktree add --detach "$NEW" main
 ln -s "$SHARED/.env" "$NEW/.env"
 
 cd "$NEW"
-log "npm ci"
-$LOW npm ci --no-audit --no-fund || $LOW npm install --no-audit --no-fund
+# Paket: rilis baru selalu folder baru, jadi tanpa ini npm ci memasang ulang 1,1 GB dari nol (±3,5 menit di VPS
+# 2 core). Bila package-lock.json sama dengan rilis aktif, node_modules disalin sebagai hardlink (beberapa detik).
+# Hasil generate Prisma ditulis ulang di rilis baru; foldernya diganti salinan penuh dulu supaya prisma generate
+# tidak menimpa file yang dipakai rilis aktif (hardlink = file yang sama).
+if [ -d "$PREV/node_modules" ] && cmp -s "$PREV/package-lock.json" "$NEW/package-lock.json" \
+  && cp -al "$PREV/node_modules" "$NEW/node_modules"; then
+  log "package-lock sama: node_modules disalin dari rilis aktif"
+  # node_modules/.cache: alat build menulis di sana; dibuang supaya tidak ikut mengubah file rilis aktif.
+  rm -rf "$NEW/node_modules/.prisma" "$NEW/node_modules/@prisma/client" "$NEW/node_modules/.cache"
+  cp -a "$PREV/node_modules/@prisma/client" "$NEW/node_modules/@prisma/client"
+else
+  rm -rf "$NEW/node_modules"
+  log "npm ci"
+  $LOW npm ci --no-audit --no-fund || $LOW npm install --no-audit --no-fund
+fi
+# Cache build webpack dari rilis aktif (salinan penuh, ±460 MB): next build tidak mulai dari nol (±4,5 menit).
+if [ -d "$PREV/.next/cache" ]; then
+  log "Salin cache build dari rilis aktif"
+  mkdir -p "$NEW/.next"
+  cp -a "$PREV/.next/cache" "$NEW/.next/cache" || rm -rf "$NEW/.next/cache"
+fi
 log "prisma generate + db push"
 $LOW npx prisma generate
 npx prisma db push
