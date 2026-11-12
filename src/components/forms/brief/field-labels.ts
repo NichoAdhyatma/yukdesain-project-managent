@@ -4,6 +4,7 @@ export const BRIEF_FIELD_LABELS: Record<string, string> = {
   tagline: "Tagline",
   business_desc: "Deskripsi Bisnis",
   colors: "Warna yang Diinginkan",
+  client_notes: "Catatan Tambahan Klien",
   main_text: "Teks Utama",
   size: "Ukuran",
   style: "Gaya / Style",
