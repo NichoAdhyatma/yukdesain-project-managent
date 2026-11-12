@@ -132,6 +132,17 @@ describe("runAiTurn", () => {
     expect(messages[2].content).toBe(`${TEAM_MESSAGE_LABEL} Halo kak, pembayaran DP sudah kami verifikasi. Kode project PRJ-20261112-4XMQG1.`);
   });
 
+  it("mengembalikan pesan keluar terakhir (terbaru dulu, maks 5) untuk penjaga kalimat berulang", async () => {
+    givenHistory([
+      ...["a", "b", "c", "d", "e", "f"].map((x) => outbound(`o_${x}`, `bot ${x}`)),
+      teamOutbound("o_team", "invoice"),
+      inbound("m_last", "oke kak"),
+    ]);
+    create.mockResolvedValue(textResponse("Siap kak"));
+    const result = await runAiTurn(params);
+    expect(result.recentOutbound).toEqual(["invoice", "bot f", "bot e", "bot d", "bot c"]);
+  });
+
   it("jendela riwayat hanya berisi pesan bot → tetap ada satu pesan user", async () => {
     givenHistory([outbound("o1", "Sudah kami teruskan"), outbound("m_last", "Maaf kak, sistem kami sedang sibuk")]);
     create.mockResolvedValue(textResponse("Kak, templatenya tersedia"));

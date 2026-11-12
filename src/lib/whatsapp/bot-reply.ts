@@ -5,7 +5,7 @@ import { maskPhone } from "./phone";
 import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
 import { setHumanMode } from "./handoff";
-import { clampReply, sanitizeReply, stripDpMentions, stripPriceMentions } from "./ai/reply-guard";
+import { clampReply, dropRepeatedSentences, sanitizeReply, stripDpMentions, stripPriceMentions } from "./ai/reply-guard";
 import { AiProviderError, isTechnicalFailure } from "@/lib/ai/client";
 
 // Bagian bersama bot: kirim/simpan balasan dan satu giliran AI → balasan ke klien.
@@ -143,7 +143,10 @@ export async function replyWithAi(
     : INVOICE_STATUSES.has(turn.intakeStatus)
       ? stripDpMentions(sanitized.text, turn.dpGuardNumbers ?? []).text
       : sanitized.text;
-  const sent = await sendBotText(conversation, clampReply(safe));
+  // Kalimat yang sudah dikirim di pesan sebelumnya tidak diulang; balasan yang seluruhnya ulangan tidak dikirim.
+  const fresh = dropRepeatedSentences(safe, turn.recentOutbound ?? []);
+  if (!fresh) console.warn(`[whatsapp] balasan AI seluruhnya ulangan untuk ${maskPhone(conversation.waId)}, tidak dikirim`);
+  const sent = fresh ? await sendBotText(conversation, clampReply(fresh)) : true;
   if (sent) {
     // Jawaban owner yang ada di STATE giliran ini sudah disampaikan ke klien (owner/queries.ts).
     await prisma.waOwnerQuery.updateMany({

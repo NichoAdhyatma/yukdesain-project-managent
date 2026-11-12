@@ -246,6 +246,7 @@ describe("gaya chat seperti admin, bukan robot (kasus Day 2026-11-12)", () => {
 
   it("tidak mengulang info yang sudah disebut, satu pertanyaan per pesan, nama ditanya sekali", () => {
     expect(prompt).toContain("Jangan mengulang harga, estimasi, atau nama layanan yang sudah kamu sebut");
+    expect(prompt).toContain("Jangan menulis ulang kalimat yang sudah kamu kirim sebelumnya");
     expect(prompt).toContain("Tanyakan satu hal per pesan");
     expect(prompt).not.toContain("Tanyakan satu atau dua hal per pesan");
     expect(prompt).toContain("menjelang ringkasan brief");

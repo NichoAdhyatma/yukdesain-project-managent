@@ -286,6 +286,26 @@ describe("handleInboundMessage", () => {
     expect(sentBodies()).toEqual([PRICE_PLACEHOLDER]);
   });
 
+  it("kalimat yang sudah dikirim di pesan sebelumnya tidak diulang", async () => {
+    givenMessage("text");
+    ai.runAiTurn.mockResolvedValue({
+      reply: "Siap kak, ditunggu ya. Kalau sudah pasti jumlah menunya, langsung kabari saja di sini.",
+      intakeStatus: null, briefText: "{}", allowedPriceNumbers: [], toolsCalled: [],
+      recentOutbound: ["Siap kak, ditunggu ya. Kalau jumlah item menunya sudah pasti, langsung kabari di chat ini."],
+    });
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()).toEqual(["Siap kak, ditunggu ya."]);
+  });
+
+  it("balasan yang seluruhnya ulangan tidak dikirim, chat tetap di bot", async () => {
+    givenMessage("text");
+    const repeated = "Permintaan kakak masih dalam pengecekan tim, kami kabari begitu ada jawabannya.";
+    ai.runAiTurn.mockResolvedValue({ reply: repeated, intakeStatus: null, briefText: "{}", allowedPriceNumbers: [], toolsCalled: [], recentOutbound: [repeated] });
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()).toEqual([]);
+    expect(humanModeSet()).toBe(false);
+  });
+
   it("setelah QUOTED: harga dari STATE boleh disebut", async () => {
     givenMessage("text");
     const reply = "Harga order Rp2.500.000 sesuai invoice ya kak.";
