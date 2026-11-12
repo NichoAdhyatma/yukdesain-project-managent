@@ -28,6 +28,7 @@ import { WA_OWNER } from "@/lib/constants";
 import { getDraftGuide, getPublishedGuide } from "./bot-guide";
 import { listOwnerNumbers } from "../owner/identity";
 import { createOwnerQuery, findPendingQuery, notifyOwners } from "../owner/query-store";
+import { addClientBriefNote } from "../brief-notes";
 
 // Tools AI untuk intake (docs/WHATSAPP_AI_CHATBOT.md §10.5). Model hanya menulis
 // ke draft intake milik percakapan ini; konteks (conversationId) datang dari server,
@@ -81,6 +82,17 @@ export const INTAKE_TOOLS: Anthropic.Tool[] = [
         fields: { type: "object", description: "Objek {kunci_field: nilai}" },
       },
       required: ["fields"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "add_brief_note",
+    description:
+      "Catat tambahan atau perubahan kecil brief dari klien setelah brief dikunci (invoice sudah dikirim, bukti DP sedang dicek, atau order sudah dikerjakan dan hasil akhir belum dikirim). Tulis catatan singkat dengan kata-kata klien. Selama brief masih dikumpulkan, pakai update_brief_draft.",
+    input_schema: {
+      type: "object",
+      properties: { note: { type: "string", description: "Tambahan dari klien, mis. tulis 12k di sebelah tiap rasa" } },
+      required: ["note"],
       additionalProperties: false,
     },
   },
@@ -226,6 +238,7 @@ const inputs = {
   list_services: z.object({}),
   start_intake: z.object({ service_code: z.string().trim().min(1), confirm_reset: z.boolean().optional() }),
   update_brief_draft: z.object({ fields: z.record(z.string(), z.unknown()) }),
+  add_brief_note: z.object({ note: z.string().trim().min(1).max(1000) }),
   attach_image_to_brief: z.object({
     message_id: z.string().min(1),
     target: z.string().min(1),
@@ -355,6 +368,11 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     const intake = await requireActiveIntake(ctx);
     const result = await updateBriefDraft(prisma, { intakeId: intake.id, fields: input.fields, source: "AI" });
     return ok(result);
+  },
+
+  async add_brief_note(ctx, input) {
+    const result = await addClientBriefNote(ctx.conversationId, input.note);
+    return result.ok ? ok({ ...result, message: "Tambahan sudah masuk brief; sampaikan singkat ke klien." }) : fail(result.error);
   },
 
   async attach_image_to_brief(ctx, input) {

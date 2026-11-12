@@ -338,3 +338,23 @@ describe("pelunasan project yang sudah berjalan (2026-11-12)", () => {
     expect(prompt).toContain("request_human_handoff supaya admin mencatat pelunasannya");
   });
 });
+
+describe("tambahan brief setelah brief dikunci (kasus Alfa Indah 2026-11-12)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("dicatat dengan add_brief_note, tidak dialihkan ke admin; yang memengaruhi harga ditanyakan ke owner", () => {
+    expect(prompt).toContain("Tambahan atau perubahan kecil brief setelah invoice dikirim, saat bukti DP dicek, atau saat project dikerjakan");
+    expect(prompt).toContain("add_brief_note");
+    expect(prompt).toContain("jangan mengalihkan ke admin");
+    expect(prompt).toContain("memengaruhi harga");
+  });
+
+  it("STATE DP_REVIEW tidak lagi menyuruh mengarahkan perubahan brief ke admin", () => {
+    const state = buildStateBlock({
+      intake: { status: "DP_REVIEW", service: null, clientName: null, clientEmail: null, briefDraft: {}, missingRequired: [], writableFields: [], imageTargets: [], quote: null },
+      pendingImageMessageIds: [],
+    });
+    expect(state).not.toContain("arahkan ke admin");
+    expect(state).toContain("add_brief_note");
+  });
+});

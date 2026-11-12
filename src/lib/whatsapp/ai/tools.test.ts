@@ -25,6 +25,8 @@ const db = vi.hoisted(() => {
 });
 const storage = vi.hoisted(() => ({ copyToPublicBucket: vi.fn() }));
 
+const briefNotes = vi.hoisted(() => ({ addClientBriefNote: vi.fn() }));
+vi.mock("../brief-notes", () => briefNotes);
 vi.mock("@/lib/notifications/owner-events", () => ({ notifyNeedsQuote: vi.fn(), notifyDpProof: vi.fn(), notifyNeedsAdmin: vi.fn() }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/storage", () => storage);
@@ -87,6 +89,8 @@ describe("definisi tool", () => {
       "list_services",
       "start_intake",
       "update_brief_draft",
+      // Tambahan brief setelah brief dikunci: hanya menambah catatan teks, tidak mengubah harga/status.
+      "add_brief_note",
       "attach_image_to_brief",
       "set_client_profile",
       "confirm_brief",
@@ -607,5 +611,20 @@ describe("ask_owner: cakupan dari Panduan produksi v27 (2026-11-12)", () => {
     const tool = INTAKE_TOOLS.find((t) => t.name === "ask_owner")!;
     expect(tool.description).toContain("rekomendasi konsep");
     expect(tool.description).toContain("order lama");
+  });
+});
+
+describe("add_brief_note (kasus Alfa Indah 2026-11-12)", () => {
+  it("mencatat tambahan brief tanpa mengalihkan chat ke admin", async () => {
+    briefNotes.addClientBriefNote.mockResolvedValue({ ok: true, target: "ORDER" });
+    const out = await executeTool("add_brief_note", { note: "Di sebelah rasa ada harga 12k" }, { conversationId: "conv_1" });
+    expect(out.isError).toBe(false);
+    expect(briefNotes.addClientBriefNote).toHaveBeenCalledWith("conv_1", "Di sebelah rasa ada harga 12k");
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("tidak ada order/project yang bisa diberi catatan → error ke model", async () => {
+    briefNotes.addClientBriefNote.mockResolvedValue({ ok: false, error: "Tidak ada order" });
+    expect((await executeTool("add_brief_note", { note: "x" }, { conversationId: "conv_1" })).isError).toBe(true);
   });
 });

@@ -126,6 +126,7 @@ Jika klien mengirim gambar yang terlihat seperti bukti transfer, panggil submit_
 - Jangan pernah membagikan data project lain selain yang ditanyakan klien.
 - File final project baru bisa diunduh di portal setelah pelunasan dicatat admin; sampaikan itu bila klien menanyakan filenya.
 - Bukti transfer pelunasan project yang sudah berjalan (tidak ada order berstatus QUOTED di STATE): jangan memanggil submit_payment_proof. Sampaikan bukti sudah diterima dan akan dicek admin, lalu panggil request_human_handoff supaya admin mencatat pelunasannya.
+- Tambahan atau perubahan kecil brief setelah invoice dikirim, saat bukti DP dicek, atau saat project dikerjakan (teks, harga menu di desain, warna, catatan tampilan): catat dengan add_brief_note lalu konfirmasi singkat ke klien; jangan mengalihkan ke admin. Jika tambahan itu memengaruhi harga (item, halaman, varian, ukuran, atau layanan bertambah), tanyakan ke owner dengan ask_owner. Setelah hasil akhir dikirim, perubahan lewat revisi di portal.
 
 # Gaya
 Tulis seperti admin studio yang membalas chat dari HP: bahasa Indonesia ramah dan santai, sapa dengan "kak".
@@ -152,6 +153,7 @@ export const BRIEF_FIELD_DESCRIPTIONS: Record<BriefKey, string> = {
   tagline: "tagline/slogan (opsional)",
   business_desc: "deskripsi singkat usaha dan target pasar",
   colors: "preferensi warna",
+  client_notes: "catatan tambahan klien setelah brief dikunci (diisi lewat add_brief_note)",
   main_text: "teks utama yang harus tampil di desain",
   size: "ukuran desain (mis. A3, 60x160 cm)",
   style: "gaya visual yang diinginkan",
@@ -187,7 +189,7 @@ const STATUS_NOTES: Record<WaIntakeStatus, string> = {
     "Brief sudah dikonfirmasi klien dan menunggu harga dari tim. Jangan sebut harga/deadline. Jika klien mengubah brief, simpan perubahannya (status kembali ke pengumpulan brief) lalu minta konfirmasi ulang.",
   QUOTED: "Invoice sudah dikirim tim. Arahkan klien ke invoice untuk nominal DP dan metode bayar, lalu minta bukti transfer.",
   DP_REVIEW:
-    'Bukti transfer sudah diterima dan sedang dicek tim. Jawab: "Bukti sudah kami terima, sedang dicek tim kami." Brief tidak bisa diubah lewat chat lagi; arahkan ke admin.',
+    'Bukti transfer sudah diterima dan sedang dicek tim. Jawab: "Bukti sudah kami terima, sedang dicek tim kami." Tambahan atau perubahan kecil brief dicatat dengan add_brief_note.',
   APPROVED: "Order sudah menjadi project.",
   CANCELLED: "Order dibatalkan.",
 };

@@ -56,6 +56,10 @@ export const CAPABILITY_LABELS: Record<string, { label: string; detail: string }
   list_services: { label: "Melihat daftar layanan", detail: "Membaca layanan aktif dari menu Services." },
   start_intake: { label: "Memulai order", detail: "Membuat order baru untuk layanan yang dipilih klien." },
   update_brief_draft: { label: "Mengisi brief", detail: "Menyimpan jawaban klien ke field brief layanan." },
+  add_brief_note: {
+    label: "Mencatat tambahan brief",
+    detail: "Tambahan klien setelah invoice, saat bukti DP dicek, atau saat project dikerjakan, masuk catatan brief tanpa mengalihkan ke admin.",
+  },
   attach_image_to_brief: { label: "Melampirkan gambar ke brief", detail: "Logo atau referensi dari klien disimpan ke brief." },
   set_client_profile: { label: "Mencatat nama dan email klien", detail: "Dipakai saat order menjadi project." },
   confirm_brief: { label: "Mengonfirmasi brief", detail: "Hanya setelah klien setuju; order lalu menunggu harga dari admin." },
