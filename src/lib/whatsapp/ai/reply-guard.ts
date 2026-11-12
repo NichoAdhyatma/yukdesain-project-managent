@@ -176,6 +176,8 @@ const TOOL_MARKUP = /<\/?(tool_call|tool_use|invoke|function_calls|parameter)\b|
 const DEGENERATE_RUN = /([\s\S]{1,4}?)\1{19,}/;
 // Huruf Han/Kana/Hangul: tidak pernah dipakai dalam balasan berbahasa Indonesia.
 const CJK = /[぀-ヿ㐀-鿿가-힯]+/g;
+// Label riwayat untuk pesan tim (conversation.ts TEAM_MESSAGE_LABEL) yang ditiru model.
+const TEAM_LABEL = /\[Pesan dari tim studio\]\s*/gi;
 // Kode layanan internal (SVC-01) tidak untuk klien; nama layanan sudah cukup.
 const SERVICE_CODE = /\s*\(?\bSVC-\d{2}\b\)?/g;
 
@@ -194,6 +196,7 @@ export function sanitizeReply(text: string): SanitizedReply {
   if (run?.index !== undefined) out = out.slice(0, run.index);
   out = out
     .replace(CJK, "")
+    .replace(TEAM_LABEL, "")
     .replace(SERVICE_CODE, "")
     .replace(/[ \t]+—[ \t]+/g, ", ")
     .replace(/,(\s*,)+/g, ",")

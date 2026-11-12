@@ -45,7 +45,14 @@ type HistoryRow = {
   type: string;
   body: string;
   mediaStorageKey: string | null;
+  sentByBot: boolean;
 };
+
+/**
+ * Penanda pesan keluar yang bukan tulisan AI (invoice/verifikasi DP dari portal, balasan admin dari portal atau HP).
+ * Tanpa penanda, AI menganggapnya tulisan sendiri dan meralatnya bila tidak tercantum di STATE (produksi 2026-11-12).
+ */
+export const TEAM_MESSAGE_LABEL = "[Pesan dari tim studio]";
 
 function describe(row: HistoryRow): string {
   if (row.type === "image") {
@@ -74,7 +81,7 @@ async function buildMessages(rows: HistoryRow[]) {
   const messages: Anthropic.MessageParam[] = [];
   for (const row of rows) {
     if (row.direction === "OUTBOUND") {
-      messages.push({ role: "assistant", content: row.body });
+      messages.push({ role: "assistant", content: row.sentByBot ? row.body : `${TEAM_MESSAGE_LABEL} ${row.body}` });
       continue;
     }
     if (pendingIds.has(row.id) && row.mediaStorageKey) {
@@ -207,7 +214,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
       },
       orderBy: { createdAt: "desc" },
       take: HISTORY_LIMIT,
-      select: { id: true, direction: true, type: true, body: true, mediaStorageKey: true },
+      select: { id: true, direction: true, type: true, body: true, mediaStorageKey: true, sentByBot: true },
     })
   ).reverse();
 

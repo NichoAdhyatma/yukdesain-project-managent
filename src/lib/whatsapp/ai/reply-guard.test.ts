@@ -260,3 +260,9 @@ describe("stripDpMentions: setelah invoice, bot tidak menyebut DP (spec 2026-11-
     expect(stripDpMentions("Harga order Rp150.000 sesuai invoice ya kak.").changed).toBe(false);
   });
 });
+
+describe("sanitizeReply: label riwayat tidak ikut terkirim", () => {
+  it("label pesan tim yang ditiru model dibuang", () => {
+    expect(sanitizeReply("[Pesan dari tim studio] Halo kak, invoice sudah kami kirim ya.").text).toBe("Halo kak, invoice sudah kami kirim ya.");
+  });
+});

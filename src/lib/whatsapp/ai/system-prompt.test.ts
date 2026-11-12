@@ -283,3 +283,17 @@ describe("tidak bertanya hal yang sama (2026-11-12, kasus Day dan Mif)", () => {
     expect(prompt).toContain("cukup disampaikan sekali");
   });
 });
+
+describe("tidak meralat pesan tim (2026-11-12, kasus Nicho dan ayubbb)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("pesan berlabel tim adalah fakta, walau tidak ada di STATE", () => {
+    expect(prompt).toContain("[Pesan dari tim studio]");
+    expect(prompt).toContain("bisa dari order lain yang sudah selesai");
+  });
+
+  it("tidak meralat atau menyuruh klien mengabaikan pesan sebelumnya atas inisiatif sendiri", () => {
+    expect(prompt).toContain("Jangan pernah meralat, membantah, atau meminta klien mengabaikan pesan sebelumnya");
+    expect(prompt).toContain("kecuali klien sendiri menunjukkan ada yang keliru");
+  });
+});
