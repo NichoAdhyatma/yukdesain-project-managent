@@ -55,7 +55,7 @@ function SenderLabel({ m }: { m: Message }) {
 function ModeButton({ intake }: { intake: WaIntakeDetail }) {
   const human = intake.conversation.mode === "HUMAN";
   const action = useIntakeAction<{ mode: "BOT" | "HUMAN" }>(intake.id, "/mode", "POST", {
-    successMessage: human ? "Chat dikembalikan ke bot" : "Chat diambil alih admin",
+    successMessage: human ? "Chat dikembalikan ke bot. Pesan klien yang belum terbalas dijawab bot, bila ada." : "Chat diambil alih admin",
   });
   return (
     <Button

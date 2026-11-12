@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
@@ -10,14 +10,15 @@ import {
   parseBody,
   toDetail,
 } from "@/lib/whatsapp/intake-api";
+import { replyPendingAfterReturn } from "@/lib/whatsapp/resume-after-return";
 
 type Params = { params: Promise<{ id: string }> };
 
 const modeSchema = z.object({ mode: z.enum(["BOT", "HUMAN"]) });
 
 // POST: admin mengambil alih chat (HUMAN) atau mengembalikannya ke bot (BOT).
-// Mode berlaku per nomor (WaConversation). Tidak ada pesan otomatis ke klien:
-// setelah kembali ke BOT, bot baru membalas pesan klien berikutnya.
+// Mode berlaku per nomor (WaConversation). Setelah kembali ke BOT, pesan klien yang belum terbalas (24 jam terakhir)
+// langsung dijawab bot (2026-11-12, kasus hastalinuwih); kalau tidak ada, bot menunggu pesan klien berikutnya.
 export async function POST(request: Request, { params }: Params) {
   const auth = await requireOwner();
   if (auth.error) return auth.error;
@@ -48,6 +49,7 @@ export async function POST(request: Request, { params }: Params) {
     return errorResponse("CONFLICT", mode === "HUMAN" ? "Chat sudah ditangani admin." : "Chat sudah dilayani bot.");
   }
 
+  if (mode === "BOT") after(() => replyPendingAfterReturn(intake.conversationId).then(() => undefined));
   const row = await findIntakeForDetail(id);
   return NextResponse.json({ intake: row ? await toDetail(row) : null });
 }

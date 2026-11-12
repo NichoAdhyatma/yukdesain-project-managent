@@ -95,7 +95,9 @@ Mulai go-live, perangkat Kirimi memakai **nomor admin studio** (bukan nomor uji)
 1. **Bot membalas semua chat**, termasuk pelanggan lama.
 2. **Admin membalas dari HP → bot otomatis diam** untuk chat itu (mode HUMAN, tanpa notifikasi; admin sendiri yang
    sedang membalas).
-3. **Kembali ke bot hanya lewat Inbox** (tombol "Kembalikan ke bot"); tidak ada batas waktu otomatis.
+3. **Kembali ke bot hanya lewat Inbox** (tombol "Kembalikan ke bot"); tidak ada batas waktu otomatis. Sejak
+   2026-11-12, saat chat dikembalikan ke bot dan pesan terakhir adalah pesan klien yang belum terbalas (24 jam
+   terakhir), bot langsung menjawabnya (`src/lib/whatsapp/resume-after-return.ts`).
 
 Cara kerja (`src/lib/whatsapp/phone-takeover.ts`):
 
@@ -110,6 +112,14 @@ Cara kerja (`src/lib/whatsapp/phone-takeover.ts`):
 - Tidak cocok → diketik admin di HP. Sistem mencari **chat aktif**: ada pesan klien dalam 15 menit terakhir
   (`ACTIVE_CHAT_WINDOW_MS`), bukan Uji bot, bukan nomor diblokir, bukan chat instruksi owner (owner yang tes #klien
   dihitung).
+  - **Sapaan otomatis WA Business** (2026-11-12; Virgi, Santi, gg, hastalinuwih pindah ke admin karena pesan salam
+    "Hai Kak, selamat datang di Yukdesainn!"): bila teksnya minimal 100 karakter (`GREETING_MIN_LENGTH`), pesan
+    klien pertama di chat itu datang dalam 30 detik terakhir (`GREETING_WINDOW_MS`), dan sebelumnya chat sepi minimal
+    24 jam (`GREETING_QUIET_MS`, termasuk chat baru), pantulan dicatat sebagai pesan tim tetapi chat **tetap di BOT**
+    (`auto_greeting`). Diuji pada pantulan produksi 8–12 Nov: 25/25 sapaan cocok, tidak ada balasan admin yang ikut
+    (balasan cepat admin seperti "selamat pagi ka" pendek, jadi tetap mengambil alih). Admin yang langsung menempel
+    teks panjang dalam 30 detik pertama chat baru tidak mengambil alih; tekan **Ambil alih** di Inbox. Paling aman:
+    matikan pesan salam di aplikasi WA Business.
   - **Tepat satu chat aktif** → chat itu pindah ke HUMAN dan pesannya dicatat sebagai OUTBOUND
     (`wamid kirimi:phone:<msgId>`, `sentByBot: false`, label **Admin** di Inbox / Order WA, ikut dibaca AI setelah
     chat dikembalikan ke bot). Foto/stiker dari HP dicatat sebagai "[Media dikirim dari HP admin]".
