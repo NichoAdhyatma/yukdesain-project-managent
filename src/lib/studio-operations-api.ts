@@ -17,6 +17,7 @@ export async function saveStudioOperations(input: StudioOperations, actorId: str
     opsWorkingDays: input.workingDays,
     opsWorkingHoursStart: input.workingHoursStart,
     opsWorkingHoursEnd: input.workingHoursEnd,
+    opsSameDayCutoff: input.sameDayCutoff,
   };
   await prisma.$transaction(async (tx) => {
     await tx.studioSettings.upsert({ where: { id: "default" }, update: data, create: { id: "default", ...data } });

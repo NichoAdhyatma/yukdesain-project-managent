@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/toast";
-import { formatWorkingHours, studioOperationsSchema, type StudioOperations } from "@/lib/studio-operations-rules";
+import { formatSameDayCutoff, formatWorkingHours, studioOperationsSchema, type StudioOperations } from "@/lib/studio-operations-rules";
 import {
   OPERATIONS_QUERY_KEY,
   OperationsSaveError,
@@ -280,6 +280,23 @@ function OperationsEditor({ saved }: { saved: StudioOperations }) {
             </Field>
           </div>
 
+          <Field
+            id="ops-sameDayCutoff"
+            label="Batas order masuk jadwal hari ini"
+            help="Order yang masuk sebelum jam ini pada hari kerja bisa masuk jadwal hari itu; setelahnya dihitung hari kerja berikutnya. Bot tidak menjanjikan dikerjakan hari yang sama."
+            errors={errors.sameDayCutoff}
+          >
+            {(props) => (
+              <Input
+                {...props}
+                type="time"
+                className="w-32 tabular-nums max-md:h-11"
+                value={draft.sameDayCutoff}
+                onChange={(e) => set("sameDayCutoff", e.target.value)}
+              />
+            )}
+          </Field>
+
         </CardContent>
       </Card>
 
@@ -291,15 +308,17 @@ function OperationsEditor({ saved }: { saved: StudioOperations }) {
         <CardContent>
           {preview.success ? (
             <ul className="flex list-disc flex-col gap-1.5 pl-5 text-sm leading-relaxed text-foreground">
-              <li>
-                Pengerjaan dimulai setelah DP {preview.data.dpPercent}%. {preview.data.settlementNote}
-              </li>
+              <li>Pengerjaan dimulai setelah DP dibayar sesuai invoice dari tim. {preview.data.settlementNote}</li>
               <li>
                 {preview.data.revisionQuota > 0
                   ? `Revisi gratis ${preview.data.revisionQuota}x per project lewat link portal; di atasnya dialihkan ke admin.`
                   : "Tidak ada revisi gratis; permintaan revisi dialihkan ke admin."}
               </li>
               <li>Jam kerja tim desain: {formatWorkingHours(preview.data)}.</li>
+              <li>
+                Order yang masuk sebelum {formatSameDayCutoff(preview.data)} pada hari kerja dapat masuk jadwal hari itu; setelahnya dihitung hari
+                kerja berikutnya. Minggu dan tanggal merah libur.
+              </li>
             </ul>
           ) : (
             <p className="text-sm text-muted-foreground">Lengkapi isian di atas untuk melihat ringkasannya.</p>

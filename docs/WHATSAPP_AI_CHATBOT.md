@@ -893,3 +893,23 @@ merevisi harga di Order WA:
   mendapat peringatan di panel harga.
 - Penjaga `stripDpMentions` (QUOTED/DP_REVIEW): kalimat berkata DP / uang muka / panjar / tanda jadi yang memuat angka,
   dan kalimat apa pun yang memuat nominal DP atau sisa pelunasan order itu, dibuang dan diganti rujukan ke invoice.
+
+## Aturan dasar dari Panduan produksi v27 (2026-11-12)
+
+Sebelas aturan tambahan yang owner tulis di Panduan v27 dijadikan aturan dasar bot (`src/lib/whatsapp/ai/system-prompt.ts`)
+dan knowledge Agen AI Kirimi (`src/lib/whatsapp/kirimi-knowledge.ts`), supaya tidak bergantung pada teks Panduan:
+
+- Harga: jawab harga layanan langsung dan singkat sebelum meminta brief; jangan menanyakan ulang detail yang sudah
+  disebut; jangan mengarang harga custom, diskon, gabungan, atau biaya tambahan (tanya owner).
+- **Pricelist umum** (daftar harga semua layanan): arahkan ke katalog di profil WhatsApp studio dan tanyakan kebutuhan,
+  tanpa menyebut angka.
+- Hanya melayani online; jangan mengarang link portal. Batas order masuk jadwal hari ini dari **Operasional**
+  (`sameDayCutoff`, default 13.00); Minggu dan tanggal merah libur.
+- Link/file dari klien: konfirmasi diterima dan diteruskan ke owner, tanpa mengaku membaca atau menghitung isinya.
+- Jangan menyatakan order terdaftar, masuk antrean, atau mulai dikerjakan sebelum dikonfirmasi tim.
+- Rekomendasi konsep/referensi: tanya info dasar, lalu `ask_owner`.
+- **Klien lama**: bila `get_my_projects` tidak menemukan project dan klien tidak menyebut kode project, bot tidak
+  menjawab status sendiri, menyampaikan sedang dicek tim, lalu `ask_owner`. Jawaban owner diteruskan seperti biasa
+  (`docs/WHATSAPP_OWNER_COMMANDS.md` §5.1).
+
+Aturan tambahan di Panduan yang sama isinya boleh dikosongkan; owner menerbitkan draft bersihnya sendiri.

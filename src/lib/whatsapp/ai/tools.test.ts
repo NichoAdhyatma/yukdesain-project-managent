@@ -598,3 +598,11 @@ describe("apply_pricing_rule (docs/WHATSAPP_OWNER_COMMANDS.md §6)", () => {
     expect(guides.getPublishedGuide).not.toHaveBeenCalled();
   });
 });
+
+describe("ask_owner: cakupan dari Panduan produksi v27 (2026-11-12)", () => {
+  it("dipakai juga untuk rekomendasi konsep dan status order lama di luar sistem", () => {
+    const tool = INTAKE_TOOLS.find((t) => t.name === "ask_owner")!;
+    expect(tool.description).toContain("rekomendasi konsep");
+    expect(tool.description).toContain("order lama");
+  });
+});

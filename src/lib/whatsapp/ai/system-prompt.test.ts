@@ -154,3 +154,41 @@ describe("Katalog Layanan untuk bot (docs/SERVICES_CATALOG.md)", () => {
     expect(state).toContain("tanyakan logo dipakai di mana");
   });
 });
+
+describe("aturan dasar dari Panduan produksi v27 (2026-11-12)", () => {
+  const ops = { ...OPERATIONS_DEFAULTS, sameDayCutoff: "12:30" };
+  const prompt = buildSystemPrompt("YukDesain", null, ops, []);
+
+  it("kebijakan: hanya online, batas order dari Operasional, Minggu dan tanggal merah libur", () => {
+    expect(prompt).toContain("hanya melayani secara online");
+    expect(prompt).toContain("Jangan memberikan link portal yang tidak ada di data");
+    expect(prompt).toContain("Order yang masuk sebelum 12.30 WIB pada hari kerja");
+    expect(prompt).toContain("Jangan menjamin dikerjakan hari yang sama");
+    expect(prompt).toContain("Minggu dan tanggal merah libur");
+  });
+
+  it("harga: jawab langsung sebelum brief, jangan tanya ulang, jangan mengarang", () => {
+    expect(prompt).toContain("Jawab harga layanan yang ada di daftar Layanan secara langsung dan singkat, sebelum meminta brief");
+    expect(prompt).toContain("Jangan menanyakan ulang");
+    expect(prompt).toContain("Jangan mengarang harga custom, diskon, harga gabungan, atau biaya tambahan");
+  });
+
+  it("pricelist umum: arahkan ke katalog profil WhatsApp tanpa angka", () => {
+    expect(prompt).toContain("pricelist secara umum");
+    expect(prompt).toContain("katalog di profil WhatsApp YukDesain");
+    expect(prompt).toContain("tanpa menyebut angka harga");
+  });
+
+  it("link/file, klaim order, rekomendasi konsep", () => {
+    expect(prompt).toContain("Jika klien mengirim link atau file");
+    expect(prompt).toContain("Jangan mengaku sudah membuka atau membaca isinya");
+    expect(prompt).toContain("Jangan menyatakan order sudah terdaftar, masuk antrean, atau mulai dikerjakan");
+    expect(prompt).toMatch(/rekomendasi konsep[^\n]*ask_owner/);
+  });
+
+  it("klien lama tanya progres: tidak menebak status, tanya owner bila project tidak ada di sistem", () => {
+    expect(prompt).toContain("klien lama");
+    expect(prompt).toMatch(/get_my_projects tidak menemukan project[^\n]*ask_owner/);
+    expect(prompt).not.toContain("Jika nomornya belum terhubung, minta kode project dari klien.");
+  });
+});
