@@ -416,6 +416,14 @@ Unduh: `GET /{version}/{media-id}` → dapat `url` (berlaku singkat) → `GET ur
 
 Di tahap unduh, gambar belum diketahui jenisnya: brief atau bukti. Simpan dulu di bucket privat (`wa-media/...`). Setelah AI memanggil `attach_image_to_brief`, server menyalinnya ke bucket publik. Bukti transfer tetap di bucket privat.
 
+**Gambar referensi klien (2026-11-12, kasus Yeni):** setiap gambar dari klien selama brief dikumpulkan (selain bukti
+transfer) dimasukkan ke brief sebagai referensi, dengan caption berisi isi gambar dan maksud klien. Bot **tidak**
+menilai hak cipta, watermark, keaslian, atau kelayakan gambar dan tidak menolak referensi klien: penilaian dilakukan
+owner dan desainer. Supaya gambar yang dikirim sebelum order dibuat tidak tertinggal:
+- hasil `start_intake` memuat `imageTargets` layanan beserta catatan untuk memasukkan gambar yang sudah terkirim;
+- STATE order `COLLECTING` memuat "Gambar klien yang belum masuk brief": gambar tersimpan di riwayat (20 pesan
+  terakhir) yang id pesannya belum ada di brief.
+
 ### 10.3 Orkestrasi `handleInboundMessage`
 
 ```text

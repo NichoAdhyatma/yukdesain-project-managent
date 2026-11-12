@@ -273,6 +273,54 @@ describe("runAiTurn", () => {
     expect(db.paymentAccount.findMany).not.toHaveBeenCalled();
   });
 
+  describe("gambar klien yang belum masuk brief (kasus Yeni 2026-11-12)", () => {
+    const collecting = (briefDraft: Record<string, unknown>, status = "COLLECTING") => ({
+      status,
+      clientName: null,
+      clientEmail: null,
+      briefDraft,
+      agreedPrice: null,
+      dpAmount: null,
+      deadline: null,
+      service: { code: "SVC-02", name: "Logo Ilustrasi" },
+    });
+    const history = [
+      inbound("img_logo", "ini design logo lama", { type: "image", mediaStorageKey: "wa/img_logo.jpg" }),
+      outbound("o1", "Siap kak, pakai Logo Ilustrasi ya"),
+      inbound("img_rusak", "", { type: "image", mediaStorageKey: null }),
+      inbound("m_last", "warnanya merah"),
+    ];
+
+    it("gambar yang dikirim sebelum order dibuat tetap didaftar untuk dimasukkan", async () => {
+      givenHistory(history);
+      db.waIntake.findFirst.mockResolvedValue(collecting({}));
+      create.mockResolvedValue(textResponse("ok"));
+      await runAiTurn(params);
+      expect(stateOf()).toContain("Gambar klien yang belum masuk brief (masukkan dengan attach_image_to_brief): messageId=img_logo");
+      // Gambar yang gagal disimpan tidak bisa dimasukkan.
+      expect(stateOf()).not.toContain("messageId=img_rusak,");
+      expect(stateOf()).not.toMatch(/belum masuk brief[^\n]*img_rusak/);
+    });
+
+    it("gambar yang sudah masuk brief tidak didaftar lagi", async () => {
+      givenHistory(history);
+      db.waIntake.findFirst.mockResolvedValue(
+        collecting({ reference_items_json: [{ id: "wa-img_logo", type: "image", url: "https://cdn/wa-intake/i1/img_logo.jpg", caption: "logo lama" }] }),
+      );
+      create.mockResolvedValue(textResponse("ok"));
+      await runAiTurn(params);
+      expect(stateOf()).not.toContain("Gambar klien yang belum masuk brief");
+    });
+
+    it("setelah brief dikonfirmasi tidak didaftar (bisa saja bukti transfer)", async () => {
+      givenHistory(history);
+      db.waIntake.findFirst.mockResolvedValue(collecting({}, "BRIEF_CONFIRMED"));
+      create.mockResolvedValue(textResponse("ok"));
+      await runAiTurn(params);
+      expect(stateOf()).not.toContain("Gambar klien yang belum masuk brief");
+    });
+  });
+
   it("katalog Layanan: daftar di system prompt, detail layanan order di STATE, angka untuk penjaga", async () => {
     givenHistory([inbound("m_last", "mau logo")]);
     db.service.findMany.mockResolvedValue([

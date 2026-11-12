@@ -196,3 +196,40 @@ describe("aturan dasar dari Panduan produksi v27 (2026-11-12)", () => {
     expect(prompt).not.toContain("Jika nomornya belum terhubung, minta kode project dari klien.");
   });
 });
+
+describe("gambar klien selama brief: referensi untuk owner dan desainer (2026-11-12, kasus Yeni)", () => {
+  const collecting = (unattached: string[]): StateInput => ({
+    intake: {
+      status: "COLLECTING",
+      service: { code: "SVC-02", name: "Logo Ilustrasi" },
+      clientName: null,
+      clientEmail: null,
+      briefDraft: {},
+      missingRequired: [],
+      writableFields: [],
+      imageTargets: ["reference_items_json"],
+      quote: null,
+    },
+    pendingImageMessageIds: [],
+    unattachedImageMessageIds: unattached,
+  });
+
+  it("STATE mendaftar gambar klien yang belum masuk brief", () => {
+    const state = buildStateBlock(collecting(["msg_logo", "msg_foto"]));
+    expect(state).toContain("Gambar klien yang belum masuk brief");
+    expect(state).toContain("messageId=msg_logo");
+    expect(state).toContain("messageId=msg_foto");
+  });
+
+  it("tanpa gambar tertinggal → baris itu tidak muncul", () => {
+    expect(buildStateBlock(collecting([]))).not.toContain("Gambar klien yang belum masuk brief");
+  });
+
+  it("aturan: semua gambar dimasukkan, bot tidak menilai hak cipta/watermark dan tidak menolak", () => {
+    const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+    expect(prompt).toContain("Setiap gambar dari klien selama brief dikumpulkan");
+    expect(prompt).toContain("Jangan menilai hak cipta, watermark, keaslian, atau kelayakan gambar");
+    expect(prompt).toContain("penilaian dilakukan owner dan desainer");
+    expect(prompt).not.toContain("Jika tidak jelas, tanyakan dulu.");
+  });
+});
