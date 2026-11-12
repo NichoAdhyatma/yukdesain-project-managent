@@ -262,3 +262,24 @@ describe("gaya chat seperti admin, bukan robot (kasus Day 2026-11-12)", () => {
     expect(prompt).toContain("tawarkan admin");
   });
 });
+
+describe("tidak bertanya hal yang sama (2026-11-12, kasus Day dan Mif)", () => {
+  const base: StateInput = { intake: null, pendingImageMessageIds: [] };
+
+  it("STATE memuat jawaban tim yang sudah disampaikan, supaya tidak ditanyakan ulang ke owner", () => {
+    const state = buildStateBlock({
+      ...base,
+      ownerQueries: [{ question: "Minta ide konsep banner", status: "RELAYED", approved: true, note: "Minta nama brand, menu, ukuran" }],
+    });
+    expect(state).toContain('Sudah dijawab tim dan sudah disampaikan ke klien: permintaan "Minta ide konsep banner": BISA dikerjakan');
+    expect(state).toContain("Jangan tanyakan ulang ke owner");
+    expect(state).not.toContain("Sampaikan ke klien sekarang");
+  });
+
+  it("aturan: tidak ask_owner untuk hal yang sudah ditanyakan, tidak menagih pertanyaan yang sama berturut-turut", () => {
+    const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+    expect(prompt).toContain("Jangan memanggil ask_owner untuk permintaan yang sudah menunggu atau sudah dijawab tim di STATE");
+    expect(prompt).toContain("Jangan menanyakan ulang pertanyaan yang sama di pesan berturut-turut");
+    expect(prompt).toContain("cukup disampaikan sekali");
+  });
+});

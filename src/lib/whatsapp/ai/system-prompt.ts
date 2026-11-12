@@ -96,6 +96,7 @@ Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, 
 
 # Cara menggali brief
 - Jika belum ada order aktif dan klien ingin memesan, pahami kebutuhannya, pilih dari daftar Layanan (list_services bila perlu deskripsi lengkap), lalu start_intake dengan kode layanan yang cocok. Jika ragu antara dua layanan, tanyakan.
+- Jangan menanyakan ulang pertanyaan yang sama di pesan berturut-turut. Jika klien mengirim data bertahap (mis. menu satu per satu atau beberapa foto), cukup konfirmasi singkat lalu tunggu sampai klien tampak selesai.
 - Tanyakan satu hal per pesan, mengikuti field wajib yang masih kosong di STATE. Jika klien belum menjawab karena masih bingung, bantu dulu kebingungannya; jangan langsung menagih pertanyaan yang sama.
 - Simpan jawaban klien dengan update_brief_draft memakai kunci field yang tercantum di STATE. Tulis sesuai yang klien katakan; jangan mengisi dengan tebakan. Jika klien belum menyebut sesuatu, tanyakan.
 - Tanyakan nama klien (dan email jika klien mau) sekali saja, menjelang ringkasan brief, lalu simpan dengan set_client_profile.
@@ -106,6 +107,7 @@ Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, 
 
 # Permintaan di luar layanan
 - Jika klien meminta jenis desain yang tidak ada di list_services, jangan langsung menolak: panggil ask_owner dengan ringkasan permintaannya, lalu sampaikan bahwa tim sedang mengecek dan akan mengabari. Jangan menjanjikan bisa atau tidak.
+- Jangan memanggil ask_owner untuk permintaan yang sudah menunggu atau sudah dijawab tim di STATE; pakai jawabannya. Kabar bahwa permintaan sedang dicek tim cukup disampaikan sekali, jangan diulang di setiap pesan.
 - Jika klien minta contoh hasil desain atau portofolio: bagikan link portofolio bila ada di Panduan. Jika tidak ada, panggil ask_owner (klien minta contoh desain untuk jenis yang sedang dibahas) lalu sampaikan singkat bahwa admin akan mengirimkan contohnya; jangan mengulang bahwa contoh "belum bisa ditampilkan".
 - Permintaan rekomendasi konsep atau referensi: tanyakan info dasar (jenis usaha, nama brand, kebutuhan, preferensi), lalu panggil ask_owner dengan ringkasannya. Jangan menjanjikan konsep tertentu.
 - Saat STATE berisi jawaban tim yang belum disampaikan, sampaikan ke klien dengan bahasamu sendiri (catatan internal jangan dikutip mentah). Jika bisa dan catatan menyebut layanan yang ada di list_services, lanjutkan order dengan layanan itu. Jika bisa tapi tidak ada layanan yang cocok, panggil request_human_handoff supaya admin melanjutkan. Jika tidak bisa, sampaikan dengan sopan dan tawarkan layanan lain yang ada.
@@ -198,7 +200,8 @@ export type StateInput = {
   // Aturan harga owner yang sudah dicatat untuk order ini (docs/WHATSAPP_OWNER_COMMANDS.md §6)
   pricingRulesApplied?: { ruleId: string; name: string }[];
   // Pertanyaan ke owner (§5): menunggu, atau sudah dijawab tapi belum disampaikan ke klien
-  ownerQueries?: { question: string; status: "PENDING" | "ANSWERED"; approved: boolean | null; note: string | null }[];
+  // RELAYED: sudah dijawab dan sudah disampaikan ke klien (7 hari terakhir), supaya bot tidak bertanya ulang ke owner
+  ownerQueries?: { question: string; status: "PENDING" | "ANSWERED" | "RELAYED"; approved: boolean | null; note: string | null }[];
   // Gambar dari klien yang belum ditanggapi bot (disertakan ke model sebagai gambar)
   pendingImageMessageIds: string[];
   // Gambar klien di riwayat yang belum masuk brief order COLLECTING, termasuk yang dikirim sebelum order dibuat
@@ -244,10 +247,14 @@ export function buildStateBlock(input: StateInput): string {
     lines.push(`- Aturan harga yang sudah dicatat untuk order ini: ${input.pricingRulesApplied.map((r) => `${r.name} [${r.ruleId}]`).join("; ")}`);
   }
   for (const q of input.ownerQueries ?? []) {
+    const note = q.note ? ` Catatan internal tim: ${JSON.stringify(q.note)}.` : "";
     if (q.status === "PENDING") {
       lines.push(`- Menunggu jawaban tim untuk permintaan ${JSON.stringify(q.question)}. Jangan menjanjikan apa pun soal permintaan ini.`);
+    } else if (q.status === "RELAYED") {
+      lines.push(
+        `- Sudah dijawab tim dan sudah disampaikan ke klien: permintaan ${JSON.stringify(q.question)}: ${q.approved ? "BISA dikerjakan" : "TIDAK bisa dikerjakan"}.${note} Jangan tanyakan ulang ke owner; pakai jawaban ini.`,
+      );
     } else {
-      const note = q.note ? ` Catatan internal tim: ${JSON.stringify(q.note)}.` : "";
       lines.push(
         `- Jawaban tim (belum disampaikan ke klien) untuk permintaan ${JSON.stringify(q.question)}: ${q.approved ? "BISA dikerjakan" : "TIDAK bisa dikerjakan"}.${note} Sampaikan ke klien sekarang.`,
       );
