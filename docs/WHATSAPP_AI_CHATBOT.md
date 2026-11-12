@@ -885,9 +885,13 @@ merevisi harga di Order WA:
 - Nomor invoice `INV-WA-YYYYMMDD-XXXX` (tanggal WIB) dibuat sekali per order (`WaIntake.invoiceNumber`). Revisi harga
   memakai nomor yang sama; saat DP diverifikasi, `Invoice.invoiceNumber` project memakai nomor ini bila belum dipakai.
 - Isi (`invoiceMessage`, `src/lib/whatsapp/outbound.ts`): rincian kalkulator (bila totalnya sama dengan harga yang
-  disimpan), total, tagihan DP n% dari snapshot order, sisa pelunasan, deadline, semua `PaymentAccount` aktif urut
-  `order` (bank dan e-wallet), lalu ajakan mengirim bukti transfer. Tanpa metode aktif: "Metode pembayaran akan dikirim
-  tim kami" dan panel harga memberi peringatan.
+  disimpan), total, tagihan DP n% dari snapshot order, sisa pelunasan, estimasi pengerjaan, semua `PaymentAccount` aktif
+  urut `order` (bank dan e-wallet), lalu ajakan mengirim bukti transfer. Tanpa metode aktif: "Metode pembayaran akan
+  dikirim tim kami" dan panel harga memberi peringatan.
+- Format (2026-11-12, permintaan owner): **hanya nominal DP yang ditebalkan** (klien sempat mentransfer total yang ikut
+  ditebalkan). Tanggal deadline dari admin disebut ke klien sebagai "Estimasi pengerjaan: sampai {tanggal}", bukan
+  "Deadline"; bot juga memakai istilah itu (STATE dan aturan status `QUOTED`). Template Meta `yd_penawaran_order` tidak
+  berubah (teksnya terdaftar di Meta).
 - QRIS (`sendInvoiceToClient`): setiap akun dengan `qrisImageUrl` https dikirim sebagai gambar (`sendImageOnChannel`:
   Kirimi `send-message` + `media_url`, Fonnte `url`, Meta pesan image), caption `QRIS {nama}`. Gagal → URL dikirim
   sebagai teks. Meta di luar 24 jam: klien hanya menerima template pembuka; order ditandai `invoiceResendPending` dan

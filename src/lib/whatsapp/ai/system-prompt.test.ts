@@ -18,10 +18,11 @@ const quoted = (dpPercent: number): StateInput => ({
 });
 
 describe("buildStateBlock QUOTED: invoice, tanpa DP dan rekening (spec 2026-11-11 §5)", () => {
-  it("memuat harga, deadline, dan nomor invoice; tidak memuat DP maupun rekening", () => {
+  it("memuat harga, estimasi pengerjaan, dan nomor invoice; tidak memuat DP maupun rekening", () => {
     const state = buildStateBlock(quoted(50));
     expect(state).toContain("Rp150.000");
-    expect(state).toContain("20 November 2026");
+    expect(state).toContain("estimasi pengerjaan: sampai 20 November 2026");
+    expect(state).not.toMatch(/deadline/i);
     expect(state).toContain("INV-WA-20261111-AB12");
     expect(state).not.toContain("Rp75.000");
     expect(state).not.toMatch(/\bDP\s*\d|DP \d+%|Rekening/i);
@@ -34,6 +35,9 @@ describe("prompt setelah ada harga: bot merujuk invoice", () => {
     expect(prompt).toContain("Invoice dan metode pembayaran sudah dikirim tim kami");
     expect(prompt).toContain("Jangan menyebut nominal atau persen DP, jangan mengirim rekening");
     expect(prompt).not.toContain("DP (persen dan nominal)");
+    // Ke klien disebut estimasi pengerjaan, bukan deadline (sama dengan invoice).
+    expect(prompt).toContain("Harga dan estimasi pengerjaan boleh disebut persis seperti di STATE");
+    expect(prompt).toContain('jangan pakai kata "deadline" ke klien');
   });
 });
 

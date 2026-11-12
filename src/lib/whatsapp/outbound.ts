@@ -90,10 +90,12 @@ export function invoiceMessage(p: {
       `${greet(p.clientName)}, berikut invoice order *${p.serviceName}*:`,
       `Invoice ${p.invoiceNumber}`,
       ...p.lines.map((l) => `• Rincian: ${l}`),
-      `• Total: *${formatRupiah(p.agreedPrice)}*`,
+      // Hanya DP yang ditebalkan: yang ditransfer sekarang (klien sempat mentransfer total yang ikut ditebalkan).
+      `• Total: ${formatRupiah(p.agreedPrice)}`,
       `• Tagihan DP ${p.dpPercent}%: *${formatRupiah(p.dpAmount)}*`,
-      `• Sisa pelunasan: *${formatRupiah(Math.max(0, p.agreedPrice - p.dpAmount))}*`,
-      `• Deadline: ${formatTanggal(p.deadline)}`,
+      `• Sisa pelunasan: ${formatRupiah(Math.max(0, p.agreedPrice - p.dpAmount))}`,
+      // Tanggal tetap dari admin (QuotePanel), disebut ke klien sebagai estimasi, bukan "deadline".
+      `• Estimasi pengerjaan: sampai ${formatTanggal(p.deadline)}`,
       "",
       methods,
       "",

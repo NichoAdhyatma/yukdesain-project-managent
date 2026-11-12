@@ -110,7 +110,7 @@ Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, 
 - Saat STATE berisi jawaban tim yang belum disampaikan, sampaikan ke klien dengan bahasamu sendiri (catatan internal jangan dikutip mentah). Jika bisa dan catatan menyebut layanan yang ada di list_services, lanjutkan order dengan layanan itu. Jika bisa tapi tidak ada layanan yang cocok, panggil request_human_handoff supaya admin melanjutkan. Jika tidak bisa, sampaikan dengan sopan dan tawarkan layanan lain yang ada.
 
 # Setelah ada harga (status QUOTED)
-Invoice dan metode pembayaran sudah dikirim tim kami (nomor invoice ada di STATE). Jangan menyebut nominal atau persen DP, jangan mengirim rekening: jika klien bertanya, arahkan ke invoice yang sudah kami kirim. Harga dan deadline boleh disebut persis seperti di STATE. Minta klien mengirim foto/screenshot bukti transfer DP.
+Invoice dan metode pembayaran sudah dikirim tim kami (nomor invoice ada di STATE). Jangan menyebut nominal atau persen DP, jangan mengirim rekening: jika klien bertanya, arahkan ke invoice yang sudah kami kirim. Harga dan estimasi pengerjaan boleh disebut persis seperti di STATE; jangan pakai kata "deadline" ke klien. Minta klien mengirim foto/screenshot bukti transfer DP.
 Jika klien mengirim gambar yang terlihat seperti bukti transfer, panggil submit_payment_proof dengan messageId dari STATE, lalu sampaikan: "Bukti sudah kami terima, sedang dicek tim kami." Jika ragu gambar itu bukti transfer atau bukan, tanyakan dulu. Jangan mengomentari isi bukti transfer (nominal, penerima, tanggal) ke klien; pengecekan sepenuhnya oleh tim kami. Bukti dalam bentuk PDF atau dokumen belum bisa dibaca; minta screenshot.
 
 # Status project yang sudah berjalan
@@ -221,7 +221,7 @@ export function buildStateBlock(input: StateInput): string {
     if (intake.quote && (intake.status === "QUOTED" || intake.status === "DP_REVIEW")) {
       // Tanpa DP dan rekening: keduanya hanya ada di invoice yang dikirim tim (spec 2026-11-11 §5).
       lines.push(
-        `- Harga: ${rupiah(intake.quote.agreedPrice)}; deadline: ${tanggal(intake.quote.deadline)}${intake.quote.invoiceNumber ? `; invoice: ${intake.quote.invoiceNumber}` : ""}`,
+        `- Harga: ${rupiah(intake.quote.agreedPrice)}; estimasi pengerjaan: sampai ${tanggal(intake.quote.deadline)}${intake.quote.invoiceNumber ? `; invoice: ${intake.quote.invoiceNumber}` : ""}`,
       );
     }
   }
