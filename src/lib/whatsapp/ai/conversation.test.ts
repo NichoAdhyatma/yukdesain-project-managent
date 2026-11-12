@@ -100,6 +100,27 @@ describe("runAiTurn", () => {
     expect(stateOf()).toContain("Belum ada order aktif");
   });
 
+  it("pesan terakhir dari bot (meneruskan jawaban owner) → ditutup catatan user, bukan prefill assistant", async () => {
+    // Produksi 2026-11-11/12: semua penerusan jawaban owner ditolak provider (400) karena pesan berakhir di assistant.
+    givenHistory([inbound("m1", "mau template rekap"), outbound("m_last", "Sudah kami teruskan ke tim ya kak")]);
+    create.mockResolvedValue(textResponse("Kak, templatenya tersedia"));
+
+    await runAiTurn(params);
+
+    const messages = sentMessages();
+    expect(messages.map((m) => m.role)).toEqual(["user", "assistant", "user"]);
+    expect(messages[2].content).toMatch(/Belum ada pesan baru dari klien/);
+  });
+
+  it("jendela riwayat hanya berisi pesan bot → tetap ada satu pesan user", async () => {
+    givenHistory([outbound("o1", "Sudah kami teruskan"), outbound("m_last", "Maaf kak, sistem kami sedang sibuk")]);
+    create.mockResolvedValue(textResponse("Kak, templatenya tersedia"));
+
+    await runAiTurn(params);
+
+    expect(sentMessages().map((m) => m.role)).toEqual(["user"]);
+  });
+
   it("system prompt di-cache, model & batas dari config, effort sesuai model, tools tersedia", async () => {
     givenHistory([inbound("m_last", "halo")]);
     create.mockResolvedValue(textResponse("ok"));

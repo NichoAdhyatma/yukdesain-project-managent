@@ -87,7 +87,9 @@ const AI_RETRY_DELAY_MS = 4000;
 export async function replyWithAi(
   conversation: { id: string; waId: string; isSandbox?: boolean },
   anchor: { id: string; createdAt: Date },
-  opts: { checkSuperseded: boolean },
+  // notifyClient false: giliran tanpa pesan baru klien (meneruskan jawaban owner). Kalau gagal, owner yang menerima
+  // laporan; klien tidak dikirimi "sistem sibuk" karena tidak sedang menunggu balasan.
+  opts: { checkSuperseded: boolean; notifyClient?: boolean },
 ): Promise<boolean> {
   const turnStartedAt = new Date();
   let turn: Awaited<ReturnType<typeof runAiTurn>> | null = null;
@@ -113,7 +115,7 @@ export async function replyWithAi(
       }
       console.error(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)}: ${reason}`);
       await setHumanMode(conversation.id, "ai_failed");
-      await sendBotText(conversation, BOT_REPLIES.busy);
+      if (opts.notifyClient !== false) await sendBotText(conversation, BOT_REPLIES.busy);
       return false;
     }
 
@@ -132,7 +134,7 @@ export async function replyWithAi(
   if (!turn || !sanitized || sanitized.rejected) {
     console.error(`[whatsapp] balasan AI rusak untuk ${maskPhone(conversation.waId)}, dialihkan ke admin`);
     await setHumanMode(conversation.id, "ai_failed");
-    await sendBotText(conversation, BOT_REPLIES.busy);
+    if (opts.notifyClient !== false) await sendBotText(conversation, BOT_REPLIES.busy);
     return false;
   }
 

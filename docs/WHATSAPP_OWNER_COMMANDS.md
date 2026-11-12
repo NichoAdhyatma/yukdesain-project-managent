@@ -71,6 +71,13 @@ terlanjur bilang "sudah diteruskan", chat klien pindah ke admin, dan owner tidak
   beberapa → asisten menanyakan yang mana (tool `resend_client_answer`, STATE memuat jawaban yang belum terkirim 24
   jam terakhir). Chat yang pindah ke admin karena kiriman gagal dikembalikan ke bot hanya bila admin belum membalas
   sejak itu.
+- **Penyebab gagal 11–12 Nov (diperbaiki 2026-11-12):** saat meneruskan, pesan terakhir di chat adalah balasan bot
+  sendiri, jadi permintaan ke AI berakhir di giliran assistant (prefill) dan ditolak provider (`provider_400`). Semua
+  penerusan sejak 8 Nov gagal karena ini. Sekarang riwayat yang berakhir di pesan bot ditutup catatan "[Belum ada pesan
+  baru dari klien. Lanjutkan percakapan sesuai STATE.]".
+- Penerusan yang gagal **tidak** mengirim "sistem sedang sibuk" ke klien (klien tidak sedang menunggu balasan; owner
+  yang menerima laporan). Chat tetap dialihkan ke admin.
+- *kirim ulang* tetap dikenali walau tersalin dengan tanda format WhatsApp (`*kirim ulang*`, `_kirim ulang_`).
 - Gangguan teknis AI (rate limit, 5xx, jaringan) dicoba sekali lagi setelah 4 detik sebelum chat dialihkan ke admin.
   Log mencatat status provider (`provider_429`, dst.) dan alasan berhenti AI saat balasan kosong (`stop=max_tokens`).
 - Balasan asisten yang meminta "balas YA" tanpa usulan tersimpan: ajakannya dibuang, pertanyaan klarifikasinya tetap

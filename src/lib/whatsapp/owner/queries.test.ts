@@ -39,6 +39,12 @@ describe("relayOwnerAnswer: hasil nyata untuk dilaporkan ke owner", () => {
     expect(await relayOwnerAnswer("q_1")).toEqual({ outcome: "sent", clientLabel: "zidan (6288****5389)" });
   });
 
+  it("diteruskan tanpa pesan sibuk ke klien bila gagal (owner yang menerima laporan)", async () => {
+    db.waOwnerQuery.findUnique.mockResolvedValue(query());
+    await relayOwnerAnswer("q_1");
+    expect(botReply.replyWithAi).toHaveBeenCalledWith(expect.anything(), expect.anything(), { checkSuperseded: false, notifyClient: false });
+  });
+
   it("AI gagal saat meneruskan → failed, waktu gagal dicatat supaya bisa dikirim ulang", async () => {
     db.waOwnerQuery.findUnique.mockResolvedValue(query());
     botReply.replyWithAi.mockResolvedValue(false);

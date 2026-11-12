@@ -438,7 +438,9 @@ Di tahap unduh, gambar belum diketahui jenisnya: brief atau bukti. Simpan dulu d
 
 Kegagalan Claude API → balasan fallback "sistem sedang sibuk" + mode HUMAN. Balasan yang kosong atau ditolak
 `sanitizeReply` (mis. model lewat gateway menulis tool call sebagai teks) dicoba ulang sekali dulu; fallback baru dipakai
-jika percobaan kedua juga gagal (2026-11-06).
+jika percobaan kedua juga gagal (2026-11-06). Saat meneruskan jawaban owner (tanpa pesan baru klien) kegagalan hanya dilaporkan ke
+owner, klien tidak dikirimi pesan sibuk; riwayat yang berakhir di pesan bot ditutup catatan user karena model menolak
+prefill assistant (docs/WHATSAPP_OWNER_COMMANDS.md §5.1, 2026-11-12).
 
 ### 10.4 System prompt (bahasa Indonesia, nada ramah-santai)
 
