@@ -41,7 +41,8 @@ export type EchoOutcome =
   | "duplicate"
   | "ambiguous"
   | "ambiguous_all_human"
-  | "no_active_chat";
+  | "no_active_chat"
+  | "auto_greeting";
 
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
@@ -75,6 +76,40 @@ function echoWamid(echo: KirimiEcho, now: Date): string {
     .update(`${echo.to.waId}|${echo.to.lid}|${echo.body}|${minute}`)
     .digest("hex")
     .slice(0, 32)}`;
+}
+
+/**
+ * Sapaan otomatis dikirim aplikasi WA Business segera setelah pesan pertama klien (kontak baru / lama tidak chat).
+ * Produksi 8–12 Nov: 24 dari 25 sapaan tercatat −1 s/d +20 detik dari pesan klien; balasan cepat admin dari HP
+ * (8–12 detik) selalu pendek, jadi sapaan juga harus panjang (GREETING_MIN_LENGTH).
+ */
+export const GREETING_WINDOW_MS = 30_000;
+/** Sapaan WA Business studio 345 karakter; balasan cepat admin ("selamat pagi ka", "boleh kak") jauh lebih pendek. */
+export const GREETING_MIN_LENGTH = 100;
+/** Jeda sepi sebelum pesan klien itu: pesan baru setelah sepi selama ini memicu sapaan WA Business. */
+export const GREETING_QUIET_MS = 24 * 3_600_000;
+
+/**
+ * Pantulan ini sapaan otomatis WA Business? Produksi 2026-11-12 (Virgi, Santi, gg, hastalinuwih): sapaan "Hai Kak,
+ * selamat datang di Yukdesainn!" keluar dari HP studio saat kontak baru menulis, lalu dianggap ketikan admin.
+ * Ciri: teks minimal GREETING_MIN_LENGTH, pesan klien pertama dalam GREETING_WINDOW_MS terakhir, dan sebelum itu chat
+ * sepi minimal GREETING_QUIET_MS. Diuji pada pantulan produksi 8–12 Nov: 25/25 sapaan cocok, 0 balasan admin.
+ */
+async function looksLikeAutoGreeting(conversationId: string, body: string, now: Date): Promise<boolean> {
+  if (normalize(body).length < GREETING_MIN_LENGTH) return false;
+  const [first] = await prisma.waMessage.findMany({
+    where: { conversationId, direction: "INBOUND", createdAt: { gte: new Date(now.getTime() - GREETING_WINDOW_MS) } },
+    orderBy: { createdAt: "asc" },
+    take: 1,
+    select: { createdAt: true },
+  });
+  if (!first) return false;
+  const prior = await prisma.waMessage.findFirst({
+    where: { conversationId, createdAt: { lt: first.createdAt } },
+    orderBy: { createdAt: "desc" },
+    select: { createdAt: true },
+  });
+  return !prior || first.createdAt.getTime() - prior.createdAt.getTime() >= GREETING_QUIET_MS;
 }
 
 /** Chat klien yang aktif: ada pesan klien dalam ACTIVE_CHAT_WINDOW_MS. Chat instruksi owner tidak dihitung. */
@@ -142,8 +177,12 @@ export async function handleKirimiEcho(echo: KirimiEcho, now = new Date()): Prom
   }
 
   const [chat] = chats;
+  // Sapaan otomatis WA Business: dicatat di chat (pesan tim), tetapi bot tetap melayani.
+  const greeting = await looksLikeAutoGreeting(chat.id, echo.body, now);
   // Tanpa notifikasi: admin sendiri yang sedang membalas.
-  const { count } = await prisma.waConversation.updateMany({ where: { id: chat.id, mode: "BOT" }, data: { mode: "HUMAN" } });
+  const { count } = greeting
+    ? { count: 0 }
+    : await prisma.waConversation.updateMany({ where: { id: chat.id, mode: "BOT" }, data: { mode: "HUMAN" } });
   try {
     await prisma.waMessage.create({
       data: {
@@ -162,6 +201,7 @@ export async function handleKirimiEcho(echo: KirimiEcho, now = new Date()): Prom
     if ((error as { code?: string }).code === "P2002") return "duplicate";
     throw error;
   }
+  if (greeting) return "auto_greeting";
   return count === 1 ? "takeover" : "already_human";
 }
 

@@ -652,7 +652,7 @@ Nomor bot hanya terdaftar di Cloud API, jadi nomor itu tidak bisa dipakai di apl
 | Topik | Keputusan owner |
 |---|---|
 | Kapan admin bisa membalas | Hanya saat mode **HUMAN**. Saat mode BOT, portal menampilkan tombol **Ambil alih** (→ HUMAN), supaya bot dan admin tidak membalas bersamaan. |
-| Kembali ke bot | Tombol **Kembalikan ke bot** (→ BOT). **Tanpa pesan** ke klien; bot baru membalas pesan klien berikutnya. |
+| Kembali ke bot | Tombol **Kembalikan ke bot** (→ BOT). Bila pesan terakhir adalah pesan klien yang belum terbalas (24 jam terakhir), bot langsung menjawabnya (2026-11-12); bila tidak, bot menunggu pesan klien berikutnya. |
 | Pengirim | Disimpan di `WaMessage.sentById` (aditif). Chat menampilkan label "Admin", berbeda dari "Bot" dan "Pesan sistem". |
 
 Aturan (dicek di server):

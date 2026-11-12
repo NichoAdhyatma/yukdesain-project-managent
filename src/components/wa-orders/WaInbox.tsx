@@ -258,7 +258,7 @@ function ConversationPanel({ id, onBack }: { id: string; onBack: () => void }) {
     mutationFn: (next: "BOT" | "HUMAN") => api<{ conversation: InboxConversation }>(`/api/wa-conversations/${id}/mode`, { method: "POST", body: JSON.stringify({ mode: next }) }),
     onSuccess: (next, value) => {
       onUpdated(next);
-      toast(value === "HUMAN" ? "Chat diambil alih admin" : "Chat dikembalikan ke bot", "success");
+      toast(value === "HUMAN" ? "Chat diambil alih admin" : "Chat dikembalikan ke bot. Pesan klien yang belum terbalas dijawab bot, bila ada.", "success");
     },
     onError: (e) => toast(e.message, "error"),
   });

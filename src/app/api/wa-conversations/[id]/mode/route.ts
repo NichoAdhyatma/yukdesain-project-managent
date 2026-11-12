@@ -1,9 +1,10 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireOwner } from "@/lib/auth/require-owner";
 import { errorResponse, parseBody } from "@/lib/whatsapp/intake-api";
 import { getInboxConversation, logConversationActivity } from "@/lib/whatsapp/inbox";
+import { replyPendingAfterReturn } from "@/lib/whatsapp/resume-after-return";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -37,5 +38,7 @@ export async function POST(request: Request, { params }: Params) {
     if (!exists) return errorResponse("NOT_FOUND", "Percakapan tidak ditemukan");
     return errorResponse("CONFLICT", mode === "HUMAN" ? "Chat sudah ditangani admin." : "Chat sudah dilayani bot.");
   }
+  // Kembali ke bot: pesan klien yang tertinggal selama mode admin langsung dijawab (2026-11-12).
+  if (mode === "BOT") after(() => replyPendingAfterReturn(id).then(() => undefined));
   return NextResponse.json({ conversation: await getInboxConversation(id) });
 }

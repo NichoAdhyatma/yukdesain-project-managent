@@ -13,6 +13,13 @@ const db = vi.hoisted(() => {
 });
 const session = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
 const outbound = vi.hoisted(() => ({ sendManualReply: vi.fn() }));
+const resume = vi.hoisted(() => ({ replyPendingAfterReturn: vi.fn(async () => "replied") }));
+const afterFns = vi.hoisted(() => [] as (() => Promise<unknown>)[]);
+vi.mock("@/lib/whatsapp/resume-after-return", () => resume);
+vi.mock("next/server", async (orig) => ({
+  ...(await orig<typeof import("next/server")>()),
+  after: (fn: () => Promise<unknown>) => afterFns.push(fn),
+}));
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/auth/session", () => session);
@@ -142,6 +149,9 @@ describe("POST mode", () => {
       previousValue: { mode: "HUMAN" },
       newValue: { mode: "BOT" },
     });
+    // Pesan klien yang tertinggal selama mode admin dijawab bot (2026-11-12, kasus hastalinuwih).
+    await Promise.all(afterFns.splice(0).map((f) => f()));
+    expect(resume.replyPendingAfterReturn).toHaveBeenCalledWith("conv_1");
   });
 
   it("ambil alih: BOT → HUMAN", async () => {

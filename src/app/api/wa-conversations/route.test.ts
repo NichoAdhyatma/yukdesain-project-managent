@@ -7,6 +7,13 @@ const db = vi.hoisted(() => ({
 }));
 const session = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
 const owners = vi.hoisted(() => ({ listOwnerNumbers: vi.fn() }));
+const resume = vi.hoisted(() => ({ replyPendingAfterReturn: vi.fn(async () => "replied") }));
+const afterFns = vi.hoisted(() => [] as (() => Promise<unknown>)[]);
+vi.mock("@/lib/whatsapp/resume-after-return", () => resume);
+vi.mock("next/server", async (orig) => ({
+  ...(await orig<typeof import("next/server")>()),
+  after: (fn: () => Promise<unknown>) => afterFns.push(fn),
+}));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/auth/session", () => session);
 vi.mock("@/lib/storage", () => ({ getClient: () => ({}) }));
@@ -78,5 +85,16 @@ describe("Inbox", () => {
     db.waConversation.updateMany.mockResolvedValue({ count: 0 });
     db.waConversation.count.mockResolvedValue(0);
     expect((await setMode(req({ mode: "HUMAN" }), ctx)).status).toBe(404);
+  });
+
+  // Produksi 12 Nov (hastalinuwih): chat dikembalikan ke bot, pertanyaan klien yang tertinggal tidak pernah dijawab.
+  it("kembalikan ke bot: pesan klien yang tertinggal dijawab bot; ambil alih tidak memicu balasan", async () => {
+    afterFns.length = 0;
+    db.waConversation.updateMany.mockResolvedValue({ count: 1 });
+    expect((await setMode(req({ mode: "HUMAN" }), ctx)).status).toBe(200);
+    expect(afterFns).toHaveLength(0);
+    expect((await setMode(req({ mode: "BOT" }), ctx)).status).toBe(200);
+    await Promise.all(afterFns.splice(0).map((f) => f()));
+    expect(resume.replyPendingAfterReturn).toHaveBeenCalledWith("c1");
   });
 });
