@@ -31,15 +31,21 @@ Sumber script: `deploy/deploy-yukdesain.sh` di repo ini. Salinan di server yang 
 
 1. Kunci `flock` (`/var/lock/yukdesain-deploy.lock`) supaya tidak ada dua deploy sekaligus.
 2. `git fetch` ke `repo.git`, lalu `git worktree add` rilis baru dari `main`, lalu symlink `.env` dari `shared/`.
-3. Di folder rilis baru: `npm ci`, `prisma generate`, `prisma db push` (aditif saja), `next build --webpack`
+3. **Cache dari rilis aktif (2026-11-13):** bila `package-lock.json` sama dengan rilis aktif, `node_modules` disalin
+   sebagai hardlink (`cp -al`, ±6 detik) dan `npm ci` dilewati. `node_modules/.prisma`, `@prisma/client` (salinan
+   penuh), dan `node_modules/.cache` dibuat terpisah supaya `prisma generate` dan alat build tidak menulis ke file
+   yang dipakai rilis aktif. `.next/cache` (cache webpack, ±460 MB) disalin penuh supaya `next build` tidak mulai dari
+   nol. Lockfile berubah atau salinan gagal → `npm ci` seperti biasa. Diukur di VPS 2026-11-13: salinan
+   `node_modules` 5,9 d (sebelumnya `npm ci` 3 m 25 d), `.next/cache` 0,7 d.
+4. Di folder rilis baru: `npm ci` (bila perlu), `prisma generate`, `prisma db push` (aditif saja), `next build --webpack`
    (`--max-old-space-size=2048`; RAM 1,7 GB + swap 4 GB). `npm ci`, `prisma generate`, dan build jalan dengan
    `nice -n 15` supaya server yang sedang melayani tetap kebagian CPU (VPS 2 core). `ionice` tidak dipakai karena
    scheduler disk (`mq-deadline`) mengabaikannya. Kalau satu langkah gagal, folder rilis dihapus dan server lama tetap
    jalan tanpa perubahan apa pun.
-4. Symlink ditukar secara atomik (`ln -sfn` + `mv -T`), lalu `systemctl restart yukdesain`.
-5. Script menunggu `GET /login` sehat hingga 30 detik. Kalau tidak sehat, symlink dikembalikan ke rilis sebelumnya dan
+5. Symlink ditukar secara atomik (`ln -sfn` + `mv -T`), lalu `systemctl restart yukdesain`.
+6. Script menunggu `GET /login` sehat hingga 30 detik. Kalau tidak sehat, symlink dikembalikan ke rilis sebelumnya dan
    service di-restart lagi (exit 1).
-6. Hanya 3 rilis terbaru yang disimpan (±2 GB per rilis). Rilis aktif dan rilis sebelumnya tidak pernah dihapus.
+7. Hanya 3 rilis terbaru yang disimpan (±2 GB per rilis). Rilis aktif dan rilis sebelumnya tidak pernah dihapus.
 
 Jalankan terlepas dari SSH (koneksi bisa putus selama build):
 
