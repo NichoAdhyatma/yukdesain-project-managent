@@ -264,7 +264,8 @@ export async function sendInvoiceToClient(
   let qrisSent = 0;
   let qrisFailed = 0;
   for (const q of images) {
-    const caption = `QRIS ${q.name}`;
+    // Akun yang namanya sudah diawali "QRIS" tidak diberi awalan lagi ("QRIS QRIS").
+    const caption = /^qris\b/i.test(q.name.trim()) ? q.name.trim() : `QRIS ${q.name}`;
     const url = q.url.trim();
     try {
       const wamid = await sendImageOnChannel(conversation.waId, url, caption, channel, { withinServiceWindow });

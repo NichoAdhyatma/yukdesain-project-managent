@@ -36,6 +36,17 @@ beforeEach(() => {
   owners.listOwnerNumbers.mockResolvedValue([{ id: "o1", name: "Rizal", waNumber: "6289700006937" }]);
 });
 
+describe("isOwnEcho: gambar QRIS dari sistem (produksi 2026-11-12 09:07)", () => {
+  const sent = ["[Gambar QRIS] https://assets.yukdesain.com/payment-logo/qris/1794145290112.jpeg"];
+  it("pantulan berisi caption gambar yang dikirim sistem → pantulan sendiri", () => {
+    expect(isOwnEcho("QRIS", sent)).toBe(true);
+    expect(isOwnEcho("QRIS BCA", ["[Gambar QRIS BCA] https://cdn.example.com/q.png"])).toBe(true);
+  });
+  it("caption lain tetap dianggap ketikan admin", () => {
+    expect(isOwnEcho("QRIS Mandiri", sent)).toBe(false);
+  });
+});
+
 describe("isOwnEcho (docs/WHATSAPP_CHANNEL_KIRIMI.md §10)", () => {
   it("sama dengan pesan bot/portal (spasi diabaikan) → pantulan sendiri", () => {
     expect(isOwnEcho("Halo kak,\n\nmau  desain apa?", ["Halo kak, mau desain apa?"])).toBe(true);

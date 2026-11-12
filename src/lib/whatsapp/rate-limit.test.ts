@@ -10,9 +10,11 @@ beforeEach(() => vi.clearAllMocks());
 describe("checkInboundRate", () => {
   it.each([
     [1, "ok"],
-    [10, "ok"],
-    [11, "warn"],
-    [12, "ignore"],
+    // Wawancara brief: satu jawaban klien per pertanyaan bot; 11 pesan dalam 5 menit itu wajar (produksi 2026-11-12).
+    [11, "ok"],
+    [20, "ok"],
+    [21, "warn"],
+    [22, "ignore"],
     [40, "ignore"],
   ])("%i pesan dalam 5 menit → %s", async (count, expected) => {
     db.waMessage.count.mockResolvedValue(count);
