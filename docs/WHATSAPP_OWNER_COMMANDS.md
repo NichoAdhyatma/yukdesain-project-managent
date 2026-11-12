@@ -78,6 +78,21 @@ terlanjur bilang "sudah diteruskan", chat klien pindah ke admin, dan owner tidak
 - Penerusan yang gagal **tidak** mengirim "sistem sedang sibuk" ke klien (klien tidak sedang menunggu balasan; owner
   yang menerima laporan). Chat tetap dialihkan ke admin.
 - *kirim ulang* tetap dikenali walau tersalin dengan tanda format WhatsApp (`*kirim ulang*`, `_kirim ulang_`).
+
+### 5.2 Tidak bertanya hal yang sama (2026-11-12)
+
+Temuan produksi 12 Nov: asisten owner menempelkan "Untuk CV WIETAS ..., pertanyaannya masih menunggu" di 6 balasan
+berturut-turut; bot klien bertanya dua kali ke owner soal ide konsep Day (jawaban pertama sudah disampaikan, tetapi
+hilang dari STATE sehingga bot mengira belum dicek); bot klien menagih "berapa jumlah menu/halaman" 5 kali ke Mif yang
+sedang mengirim menu satu per satu.
+
+- Asisten owner tidak mengingatkan pertanyaan lain yang menunggu di setiap balasan; hanya bila owner menanyakannya atau
+  untuk memastikan jawaban ini untuk pertanyaan yang mana. Jawaban owner dicocokkan dengan isi permintaan.
+- STATE bot klien memuat jawaban tim yang **sudah disampaikan** (7 hari terakhir) dengan catatan "jangan tanyakan ulang
+  ke owner". Bot tidak memanggil `ask_owner` untuk permintaan yang menunggu atau sudah dijawab; kabar "sedang dicek tim"
+  cukup sekali.
+- Bot klien tidak menanyakan ulang pertanyaan yang sama di pesan berturut-turut; data yang dikirim bertahap cukup
+  dikonfirmasi singkat.
 - Gangguan teknis AI (rate limit, 5xx, jaringan) dicoba sekali lagi setelah 4 detik sebelum chat dialihkan ke admin.
   Log mencatat status provider (`provider_429`, dst.) dan alasan berhenti AI saat balasan kosong (`stop=max_tokens`).
 - Balasan asisten yang meminta "balas YA" tanpa usulan tersimpan: ajakannya dibuang, pertanyaan klarifikasinya tetap

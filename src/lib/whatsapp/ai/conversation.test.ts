@@ -273,6 +273,18 @@ describe("runAiTurn", () => {
     expect(db.paymentAccount.findMany).not.toHaveBeenCalled();
   });
 
+  it("jawaban tim yang sudah disampaikan (7 hari) ikut di STATE sebagai sudah dijawab (kasus Day)", async () => {
+    givenHistory([inbound("m_last", "gmna klo mau order?")]);
+    db.waOwnerQuery.findMany.mockResolvedValue([
+      { question: "Minta ide konsep banner", status: "ANSWERED", approved: true, note: "Minta nama brand", relayedAt: new Date() },
+    ] as never);
+    create.mockResolvedValue(textResponse("ok"));
+    await runAiTurn(params);
+    const where = (db.waOwnerQuery.findMany.mock.calls[0] as unknown as [{ where: { OR: unknown[] } }])[0].where;
+    expect(where.OR).toContainEqual({ status: "ANSWERED", relayedAt: { not: null }, answeredAt: { gt: expect.any(Date) } });
+    expect(stateOf()).toContain("Sudah dijawab tim dan sudah disampaikan ke klien");
+  });
+
   describe("gambar klien yang belum masuk brief (kasus Yeni 2026-11-12)", () => {
     const collecting = (briefDraft: Record<string, unknown>, status = "COLLECTING") => ({
       status,

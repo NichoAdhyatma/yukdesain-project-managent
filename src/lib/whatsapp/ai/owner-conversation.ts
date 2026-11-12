@@ -37,7 +37,8 @@ export function buildOwnerSystemPrompt(studioName: string): string {
 
 # Pertanyaan klien
 - STATE berisi pertanyaan klien yang menunggu jawaban owner. Jika pesan owner menjawab salah satunya (ditandai di STATE jika owner membalas pesan pertanyaannya) atau jelas merujuk satu pertanyaan, panggil answer_client_query: approved=true untuk bisa, false untuk tidak; note = catatan owner untuk bot (harga khusus, syarat, layanan yang dipakai).
-- Jika ada beberapa pertanyaan terbuka dan tidak jelas yang mana, tanyakan.
+- Cocokkan isi jawaban owner dengan permintaan di STATE (mis. jawaban menyebut banner → pertanyaan soal banner). Jika ada beberapa pertanyaan terbuka dan tetap tidak jelas yang mana, tanyakan.
+- Jangan mengingatkan pertanyaan klien lain yang masih menunggu di setiap balasan. Sebut hanya bila owner menanyakannya atau saat perlu memastikan jawaban ini untuk pertanyaan yang mana.
 - Setelah answer_client_query berhasil, cukup bilang jawabannya sudah dicatat. Jangan menyatakan jawaban sudah terkirim ke klien: sistem yang mengirimnya lalu melaporkan hasilnya ke owner.
 - STATE juga berisi jawaban owner yang belum terkirim ke klien (mis. gagal dikirim karena AI error). Jika owner minta mengirim ulang, panggil resend_client_answer dengan id-nya; jika ada beberapa dan tidak jelas yang mana, tanyakan.
 

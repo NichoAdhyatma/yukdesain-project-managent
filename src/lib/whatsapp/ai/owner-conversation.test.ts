@@ -156,4 +156,11 @@ describe("jawaban owner yang belum terkirim (review produksi 2026-11-11)", () =>
     expect(prompt).toContain("Harga khusus untuk satu klien");
     expect(prompt).not.toContain("bot tidak menyebut harga layanan");
   });
+
+  // Produksi 12 Nov: "Untuk CV WIETAS ..., pertanyaannya masih menunggu" ditempel di 6 balasan berturut-turut.
+  it("prompt: tidak mengingatkan pertanyaan lain yang menunggu di setiap balasan; jawaban dicocokkan dengan isinya", () => {
+    const prompt = buildOwnerSystemPrompt("YukDesain");
+    expect(prompt).toContain("Jangan mengingatkan pertanyaan klien lain yang masih menunggu di setiap balasan");
+    expect(prompt).toContain("Cocokkan isi jawaban owner dengan permintaan");
+  });
 });

@@ -21,6 +21,7 @@ import { INTAKE_TOOLS, executeTool, findActiveIntake } from "./tools";
 const HISTORY_LIMIT = 20;
 const MAX_TOOL_ROUNDS = 4;
 const MAX_PENDING_IMAGES = 3;
+const RELAYED_ANSWER_DAYS = 7;
 
 export type AiTurnResult = {
   reply: string | null;
@@ -118,9 +119,17 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
     },
   });
   const ownerQueries = await prisma.waOwnerQuery.findMany({
-    where: { conversationId, OR: [{ status: "PENDING" }, { status: "ANSWERED", relayedAt: null }] },
+    where: {
+      conversationId,
+      OR: [
+        { status: "PENDING" },
+        { status: "ANSWERED", relayedAt: null },
+        // Sudah disampaikan: tetap ditampilkan supaya bot tidak bertanya ulang ke owner (kasus Day 2026-11-12).
+        { status: "ANSWERED", relayedAt: { not: null }, answeredAt: { gt: new Date(Date.now() - RELAYED_ANSWER_DAYS * 86_400_000) } },
+      ],
+    },
     orderBy: { createdAt: "asc" },
-    select: { question: true, status: true, approved: true, note: true },
+    select: { question: true, status: true, approved: true, note: true, relayedAt: true },
   });
 
   const code = intake?.service?.code;
@@ -158,7 +167,10 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
     pricingRulesApplied: Array.isArray(intake?.pricingRulesApplied)
       ? (intake.pricingRulesApplied as { ruleId: string; name: string }[])
       : [],
-    ownerQueries: ownerQueries.map((q) => ({ ...q, status: q.status === "PENDING" ? ("PENDING" as const) : ("ANSWERED" as const) })),
+    ownerQueries: ownerQueries.map(({ relayedAt, ...q }) => ({
+      ...q,
+      status: q.status === "PENDING" ? ("PENDING" as const) : relayedAt ? ("RELAYED" as const) : ("ANSWERED" as const),
+    })),
     pendingImageMessageIds,
     unattachedImageMessageIds,
   });
