@@ -38,49 +38,48 @@ export async function POST(
 
     if (project.finalSubmittedAt) {
       return NextResponse.json(
-        { error: "Final work already submitted" },
+        { error: "Hasil akhir sudah dikirim" },
         { status: 400 }
       );
     }
 
-    const body = await request.json();
-    const { description, attachmentIds } = body;
+    const body = await request.json().catch(() => ({}));
+    const description = typeof body?.description === "string" ? body.description.trim() : "";
+    const attachmentIds: string[] = Array.isArray(body?.attachmentIds)
+      ? body.attachmentIds.filter((x: unknown): x is string => typeof x === "string")
+      : [];
 
-    if (!description?.trim()) {
-      return NextResponse.json(
-        { error: "Description is required" },
-        { status: 400 }
-      );
+    if (!description) {
+      return NextResponse.json({ error: "Catatan hasil akhir wajib diisi" }, { status: 400 });
+    }
+    // Hasil akhir = file yang dibuka klien setelah lunas (2026-11-12); tanpa file tidak ada yang dikirim.
+    if (attachmentIds.length === 0) {
+      return NextResponse.json({ error: "Lampirkan minimal satu file hasil akhir" }, { status: 400 });
+    }
+    // Hanya file yang diunggah ke project ini dan belum tertaut ke update lain.
+    const ownFiles = { id: { in: attachmentIds }, projectId: id, updateId: null };
+    if ((await prisma.attachment.count({ where: ownFiles })) !== attachmentIds.length) {
+      return NextResponse.json({ error: "File hasil akhir tidak ditemukan untuk project ini. Unggah ulang filenya." }, { status: 400 });
     }
 
-    // Mark project as final submitted
+    // Project baru SELESAI setelah klien menyetujui, bukan di sini.
     const updated = await prisma.project.update({
       where: { id },
-      data: {
-        finalSubmittedAt: new Date(),
-        // Move to SELESAI only after client approves — not here
-      },
+      data: { finalSubmittedAt: new Date() },
     });
 
-    // Create a final update record
+    // Tampil di riwayat portal sebagai update 100%; klien dikabari lewat FINAL_SUBMITTED, bukan kabar progres.
     await prisma.projectUpdate.create({
       data: {
         projectId: id,
-        description: `📌 Final Deliverables Submitted: ${description.trim()}`,
+        description: `Hasil akhir: ${description}`,
         authorId: user.id,
         progress: 100,
-        // Klien dikabari lewat kejadian FINAL_SUBMITTED, bukan sebagai update progres.
         notifyClient: false,
       },
     });
 
-    // Attach final files if provided
-    if (attachmentIds?.length > 0) {
-      await prisma.attachment.updateMany({
-        where: { id: { in: attachmentIds } },
-        data: { category: "FINAL" },
-      });
-    }
+    await prisma.attachment.updateMany({ where: ownFiles, data: { category: "FINAL" } });
 
     after(() => notifyClientProjectEvent(id, { kind: "FINAL_SUBMITTED" }).then(() => undefined));
 

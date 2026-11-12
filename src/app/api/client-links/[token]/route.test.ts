@@ -152,6 +152,18 @@ function rawLink(status: string, expiresAt: Date | null = null) {
           ],
         },
       ],
+      attachments: [
+        {
+          id: "att_f",
+          filename: "logo-final.ai",
+          mimeType: "application/postscript",
+          size: 5555,
+          storageKey: "final/proj_1/logo-final.ai",
+          category: "FINAL",
+          uploaderId: SECRETS.uploaderId,
+          projectId: "proj_1",
+        },
+      ],
       payments: [
         {
           id: "pay_1",
@@ -280,6 +292,7 @@ describe("GET /api/client-links/[token]", () => {
               attachments: [{ id: "att_2", filename: "ref.jpg", storageKey: "revision/proj_1/ref.jpg" }],
             },
           ],
+          finalFiles: { locked: true, files: [{ id: "att_f", filename: "logo-final.ai", storageKey: null }] },
         },
       },
       revisionNotice: "Isi revisi selengkap mungkin ya kak.",
@@ -295,6 +308,32 @@ describe("GET /api/client-links/[token]", () => {
         },
       ],
     });
+  });
+
+  // Project Nicho 12 Nov: file final dikirim desainer tidak tampil di portal sama sekali; aturan baru: tampil, tapi
+  // terkunci (tanpa storageKey) sampai lunas.
+  it("final files: locked without storageKey until PAID, downloadable once PAID", async () => {
+    mocks.db.clientLink.findUnique.mockResolvedValue(rawLink("LOCKED"));
+    const locked = await (await call()).json();
+    expect(locked.link.project.finalFiles).toEqual({ locked: true, files: [{ id: "att_f", filename: "logo-final.ai", storageKey: null }] });
+    expect(JSON.stringify(locked)).not.toContain("final/proj_1/logo-final.ai");
+
+    const paid = rawLink("LOCKED");
+    paid.project.paymentStatus = "PAID";
+    paid.project.paidAmount = 1500000;
+    mocks.db.clientLink.findUnique.mockResolvedValue(paid);
+    const open = await (await call()).json();
+    expect(open.link.project.finalFiles).toEqual({
+      locked: false,
+      files: [{ id: "att_f", filename: "logo-final.ai", storageKey: "final/proj_1/logo-final.ai" }],
+    });
+  });
+
+  it("loads only FINAL project attachments", async () => {
+    mocks.db.clientLink.findUnique.mockResolvedValue(rawLink("ACTIVE"));
+    await call();
+    const attachments = mocks.db.clientLink.findUnique.mock.calls[0][0].select.project.select.attachments;
+    expect(attachments.where).toEqual({ category: "FINAL" });
   });
 
   it("does not load internal columns from the database", async () => {

@@ -455,6 +455,11 @@ Deal
 
 Pelunasan is recorded when the project is completed/finalized according to the operational process.
 
+**Change 2026-11-12 (approved by owner):** final deliverable files (category FINAL) are visible in the client portal by
+name but cannot be downloaded until `paymentStatus` is `PAID`; progress previews stay visible. When the payment that
+completes the project is recorded after final submission, the client is notified that the files are unlocked. Details:
+`docs/CLIENT_NOTIFICATIONS.md` §1a.
+
 ## 7.3 Payment Status
 
 Canonical statuses:
@@ -1233,7 +1238,7 @@ Implementation details:
 - `Project.finalSubmittedAt` — set when designer submits final work
 - `Project.finalApprovedAt` — set when client approves
 - `Project.status` changes to `SELESAI` on final approval
-- Designer submits via "Submit Final Work" in Workspace (Progress tab)
+- Designer submits by setting progress to 100% in the Workspace progress form, which switches to "Kirim hasil akhir" (at least one file required); designers can no longer mark a project SELESAI themselves (change 2026-11-12)
 - Client approves via "Approve Final Work" in tokenized portal
 - Designer can attach final deliverable files (category: FINAL)
 - Revision quota (per project, default 3x; set in Operasional studio, snapshot when the project is created; change 2026-11-08) remains available after final submission

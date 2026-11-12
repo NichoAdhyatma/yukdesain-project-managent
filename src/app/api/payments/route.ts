@@ -1,7 +1,8 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/db";
 import { getCurrentUser } from "@/lib/auth/session";
 import { recordPayment } from "@/lib/payments/record-payment";
+import { notifyClientProjectEvent } from "@/lib/notifications/client-project-events";
 
 export async function GET(request: Request) {
   try {
@@ -65,6 +66,11 @@ export async function POST(request: Request) {
       notes,
       recordedBy: user.id,
     });
+
+    // Pelunasan setelah hasil final dikirim: file final di portal terbuka, klien dikabari (2026-11-12).
+    if (summary.paymentStatus === "PAID" && project.paymentStatus !== "PAID" && project.finalSubmittedAt) {
+      after(() => notifyClientProjectEvent(project.id, { kind: "FILES_UNLOCKED" }).then(() => undefined));
+    }
 
     return NextResponse.json({ payment, summary }, { status: 201 });
   } catch (error) {

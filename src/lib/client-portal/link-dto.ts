@@ -55,6 +55,12 @@ export const clientLinkSelect = {
           attachment: { select: attachmentSelect },
         },
       },
+      // File hasil akhir (kategori FINAL, dikirim desainer lewat hasil akhir); key hanya keluar setelah lunas.
+      attachments: {
+        where: { category: "FINAL" },
+        orderBy: { createdAt: "asc" },
+        select: attachmentSelect,
+      },
       revisions: {
         orderBy: { requestedAt: "desc" },
         select: {
@@ -85,6 +91,12 @@ type ClientLinkRow = Prisma.ClientLinkGetPayload<{ select: typeof clientLinkSele
 type PaymentAccountRow = Prisma.PaymentAccountGetPayload<{ select: typeof clientPaymentAccountSelect }>;
 
 export type ClientAttachmentDto = { id: string; filename: string; storageKey: string };
+
+/** File final: nama selalu terlihat; storageKey null selama belum lunas (2026-11-12). */
+export type ClientFinalFilesDto = {
+  locked: boolean;
+  files: Array<{ id: string; filename: string; storageKey: string | null }>;
+};
 
 export type ClientInvoiceItemDto = { description: string; quantity: number; unitPrice: number; total: number };
 
@@ -131,6 +143,7 @@ export type ClientProjectDto = {
     completedAt: string | null;
     attachments: ClientAttachmentDto[];
   }>;
+  finalFiles: ClientFinalFilesDto;
 };
 
 export type ClientLinkDto = { status: string; project: ClientProjectDto };
@@ -150,6 +163,15 @@ const isoOrNull = (d: Date | null) => (d ? d.toISOString() : null);
 
 function toAttachment(a: ClientAttachmentDto): ClientAttachmentDto {
   return { id: a.id, filename: a.filename, storageKey: a.storageKey };
+}
+
+/** File final terkunci sampai lunas: tanpa storageKey, supaya URL file tidak pernah sampai ke klien sebelum lunas. */
+function toFinalFiles(files: ClientAttachmentDto[], paymentStatus: string): ClientFinalFilesDto {
+  const locked = paymentStatus !== "PAID";
+  return {
+    locked,
+    files: files.map((f) => ({ id: f.id, filename: f.filename, storageKey: locked ? null : f.storageKey })),
+  };
 }
 
 function toInvoiceItems(items: Prisma.JsonValue): ClientInvoiceItemDto[] {
@@ -214,6 +236,7 @@ export function toClientLinkDto(link: ClientLinkRow): ClientLinkDto {
         completedAt: isoOrNull(r.completedAt),
         attachments: r.attachments.map(toAttachment),
       })),
+      finalFiles: toFinalFiles(p.attachments, p.paymentStatus),
     },
   };
 }

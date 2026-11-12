@@ -2,7 +2,7 @@
 
 import { useId, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, AlertCircle, Loader2, Send, Eye } from "lucide-react";
+import { CheckCircle2, AlertCircle, Loader2, Send, Eye, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,7 +19,16 @@ import {
 } from "@/lib/projects/progress-update";
 import type { DesignerProject } from "./types";
 
-type Payload = { description: string; progress: number | null; attachmentIds: string[]; notifyClient: boolean };
+/** Batas file hasil akhir (sama dengan dialog hasil akhir sebelumnya). */
+const MAX_FINAL_FILES = 10;
+
+type Payload = { description: string; progress: number | null; attachmentIds: string[]; notifyClient: boolean; final: boolean };
+
+/** Progres 100% sebelum hasil akhir dikirim = kirim hasil akhir (satu kabar ke klien, file final terkunci sampai lunas). */
+const isFinalStep = (progress: string, finalSubmitted: boolean) => {
+  const p = parseProgress(progress);
+  return !finalSubmitted && p.ok && p.value === 100;
+};
 
 export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
   const queryClient = useQueryClient();
@@ -32,21 +41,30 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
   const [files, setFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [triedSubmit, setTriedSubmit] = useState(false);
-  const [sent, setSent] = useState<{ progress: number | null; notified: boolean } | null>(null);
+  const [sent, setSent] = useState<{ progress: number | null; notified: boolean; final: boolean } | null>(null);
   // Kabari klien lewat WhatsApp (docs/CLIENT_NOTIFICATIONS.md); default menyala, desainer bisa mematikan per update.
   const [notifyClient, setNotifyClient] = useState(true);
 
   const parsed = parseProgress(progress);
   const progressValue = parsed.ok ? parsed.value : null;
   const descMissing = description.trim() === "";
+  const finalSubmitted = !!project.finalSubmittedAt;
+  const finalMode = isFinalStep(progress, finalSubmitted);
+  const filesMissing = finalMode && files.length === 0;
 
   const mutation = useMutation({
     mutationFn: async (payload: Payload) => {
-      const res = await fetch(`/api/designer/projects/${project.id}/updates`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      const res = payload.final
+        ? await fetch(`/api/designer/projects/${project.id}/submit-final`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ description: payload.description, attachmentIds: payload.attachmentIds }),
+          })
+        : await fetch(`/api/designer/projects/${project.id}/updates`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error || "Gagal menyimpan update. Coba lagi.");
@@ -55,11 +73,11 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
     },
     onSuccess: (_data, payload) => {
       queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
-      setSent({ progress: payload.progress, notified: payload.notifyClient });
+      setSent({ progress: payload.progress, notified: payload.notifyClient, final: payload.final });
       setDescription("");
       setFiles([]);
       setTriedSubmit(false);
-      toast("Update progres terkirim", "success");
+      toast(payload.final ? "Hasil akhir terkirim ke klien" : "Update progres terkirim", "success");
     },
     onError: (err: Error) => {
       toast(err.message, "error");
@@ -74,6 +92,12 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
     };
   }
 
+  // Pindah antara update progres dan hasil akhir: file yang sudah diunggah beda kategori, jadi dikosongkan.
+  function changeProgress(value: string) {
+    if (isFinalStep(value, finalSubmitted) !== finalMode) setFiles([]);
+    setProgress(value);
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setTriedSubmit(true);
@@ -82,11 +106,13 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
       descRef.current?.focus();
       return;
     }
+    if (filesMissing) return;
     mutation.mutate({
       description: description.trim(),
       progress: parsed.value,
       attachmentIds: files.map((f) => f.id),
-      notifyClient,
+      notifyClient: finalMode ? true : notifyClient,
+      final: finalMode,
     });
   }
 
@@ -98,7 +124,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
     <form onSubmit={handleSubmit} noValidate className="space-y-5" aria-labelledby={`${formId}-title`}>
       <div className="space-y-1">
         <h3 id={`${formId}-title`} className="text-base font-semibold">
-          Kirim update progres
+          {finalMode ? "Kirim hasil akhir" : "Kirim update progres"}
         </h3>
         <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
           <Eye className="mt-0.5 size-3.5 shrink-0" aria-hidden />
@@ -123,7 +149,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
           max={100}
           step={5}
           value={sliderValue}
-          onChange={(e) => edit(setProgress)(e.target.value)}
+          onChange={(e) => edit(changeProgress)(e.target.value)}
           aria-label="Geser untuk mengatur progres"
           aria-valuetext={progressValue === null ? "Belum diisi" : `${progressValue} persen`}
           className={cn(
@@ -140,7 +166,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
               type="button"
               variant={progressValue === p ? "default" : "outline"}
               aria-pressed={progressValue === p}
-              onClick={() => edit(setProgress)(String(p))}
+              onClick={() => edit(changeProgress)(String(p))}
               disabled={mutation.isPending}
               className="h-11 min-w-14 tabular-nums md:h-9"
             >
@@ -158,7 +184,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
               min={0}
               max={100}
               value={progress}
-              onChange={(e) => edit(setProgress)(e.target.value)}
+              onChange={(e) => edit(changeProgress)(e.target.value)}
               placeholder="0–100"
               aria-invalid={!parsed.ok}
               aria-describedby={`${formId}-pct-help`}
@@ -173,7 +199,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
             <Button
               type="button"
               variant="ghost"
-              onClick={() => edit(setProgress)("")}
+              onClick={() => edit(changeProgress)("")}
               disabled={mutation.isPending}
               className="h-11 text-muted-foreground md:h-9"
             >
@@ -197,10 +223,23 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
         </p>
       </fieldset>
 
+      {finalMode && (
+        <div role="note" className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          <Flag className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <div className="space-y-1">
+            <p className="font-medium">Progres 100% dikirim sebagai hasil akhir</p>
+            <p className="text-xs">
+              Klien dikabari sekali lewat WhatsApp, lalu bisa approve atau minta revisi. File hasil akhir baru bisa diunduh
+              klien setelah pelunasan dicatat admin. Hasil akhir hanya dikirim sekali, pastikan sudah final.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 2. Catatan */}
       <div className="space-y-2">
         <Label htmlFor={`${formId}-desc`}>
-          Catatan <span className="text-destructive" aria-hidden>*</span>
+          {finalMode ? "Catatan hasil akhir" : "Catatan"} <span className="text-destructive" aria-hidden>*</span>
           <span className="sr-only">(wajib)</span>
         </Label>
         <Textarea
@@ -208,7 +247,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
           id={`${formId}-desc`}
           value={description}
           onChange={(e) => edit(setDescription)(e.target.value)}
-          placeholder="Contoh: Sketsa logo selesai, lanjut pilih warna."
+          placeholder={finalMode ? "Contoh: Logo final format AI, PNG, dan PDF." : "Contoh: Sketsa logo selesai, lanjut pilih warna."}
           rows={4}
           required
           aria-invalid={triedSubmit && descMissing}
@@ -223,24 +262,39 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
         >
           {triedSubmit && descMissing
             ? "Tulis catatan singkat tentang apa yang sudah dikerjakan."
-            : "Tulis apa yang sudah dikerjakan dan langkah berikutnya."}
+            : finalMode
+              ? "Jelaskan file yang dikirim, misalnya format dan ukurannya."
+              : "Tulis apa yang sudah dikerjakan dan langkah berikutnya."}
         </p>
       </div>
 
       {/* 3. Lampiran */}
-      <ProgressUploader
-        files={files}
-        onChange={edit(setFiles)}
-        onUploadingChange={setUploading}
-        maxFiles={MAX_UPDATE_ATTACHMENTS}
-        label="Lampiran (opsional)"
-        hint="Satu file per update, misalnya pratinjau desain."
-        disabled={mutation.isPending}
-        uploadCategory="progress"
-        projectId={project.id}
-      />
+      <div className="space-y-2">
+        <ProgressUploader
+          key={finalMode ? "final" : "progress"}
+          files={files}
+          onChange={edit(setFiles)}
+          onUploadingChange={setUploading}
+          maxFiles={finalMode ? MAX_FINAL_FILES : MAX_UPDATE_ATTACHMENTS}
+          label={finalMode ? "File hasil akhir (wajib)" : "Lampiran (opsional)"}
+          hint={
+            finalMode
+              ? `Maksimal ${MAX_FINAL_FILES} file, misalnya AI, PDF, dan PNG resolusi penuh.`
+              : "Satu file per update, misalnya pratinjau desain."
+          }
+          disabled={mutation.isPending}
+          uploadCategory={finalMode ? "final" : "progress"}
+          projectId={project.id}
+        />
+        {triedSubmit && filesMissing && (
+          <p role="alert" className="text-xs text-destructive">
+            Lampirkan minimal satu file hasil akhir.
+          </p>
+        )}
+      </div>
 
-      {/* 4. Kabari klien */}
+      {/* 4. Kabari klien (hasil akhir selalu dikabarkan) */}
+      {!finalMode && (
       <div className="flex items-start justify-between gap-4 rounded-lg border p-3">
         <div className="space-y-0.5">
           <Label htmlFor={`${formId}-notify`} className="text-sm font-medium">
@@ -259,6 +313,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
           className="mt-1"
         />
       </div>
+      )}
 
       {/* 5. Kirim */}
       <div className="space-y-3 border-t pt-4">
@@ -281,8 +336,11 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
           >
             <CheckCircle2 className="mt-0.5 size-4 shrink-0" aria-hidden />
             <p>
-              Update terkirim{sent.progress !== null ? ` dengan progres ${sent.progress}%` : ""}. Sudah masuk ke riwayat di bawah
-              {sent.notified ? ". Kabar ke klien lewat WhatsApp diproses." : "."}
+              {sent.final
+                ? "Hasil akhir terkirim dan tampil di halaman tracking klien. Kabar ke klien lewat WhatsApp diproses."
+                : `Update terkirim${sent.progress !== null ? ` dengan progres ${sent.progress}%` : ""}. Sudah masuk ke riwayat di bawah${
+                    sent.notified ? ". Kabar ke klien lewat WhatsApp diproses." : "."
+                  }`}
             </p>
           </div>
         )}
@@ -294,6 +352,10 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
           ) : uploading ? (
             <>
               <Loader2 className="animate-spin" aria-hidden /> Menunggu file selesai diunggah…
+            </>
+          ) : finalMode ? (
+            <>
+              <CheckCircle2 aria-hidden /> Kirim hasil akhir
             </>
           ) : (
             <>

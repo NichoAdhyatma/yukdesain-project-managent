@@ -329,6 +329,16 @@ describe("lebih mirip admin manusia (humanize, 2026-11-12)", () => {
   });
 });
 
+describe("pelunasan project yang sudah berjalan (2026-11-12)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("file final terbuka setelah pelunasan; bukti pelunasan diteruskan ke admin", () => {
+    expect(prompt).toContain("File final project baru bisa diunduh di portal setelah pelunasan dicatat admin");
+    expect(prompt).toContain("Bukti transfer pelunasan project yang sudah berjalan");
+    expect(prompt).toContain("request_human_handoff supaya admin mencatat pelunasannya");
+  });
+});
+
 describe("tambahan brief setelah brief dikunci (kasus Alfa Indah 2026-11-12)", () => {
   const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
 
