@@ -46,12 +46,16 @@ export type EchoOutcome =
 const normalize = (text: string) => text.replace(/\s+/g, " ").trim();
 
 /** Pantulan pesan yang dikirim bot / portal sendiri? Dicocokkan dari isi (Kirimi tidak mengembalikan id pesan). */
+// Gambar yang dikirim sistem (QRIS di invoice, outbound.ts) disimpan sebagai "[Gambar <caption>] <url>"; pantulannya
+// dari Kirimi hanya membawa caption.
+const SENT_IMAGE = /^\[Gambar ([\s\S]+?)\] \S+$/;
+
 export function isOwnEcho(echoBody: string, recentOutbound: string[]): boolean {
   const echo = normalize(echoBody);
-  // Bot tidak pernah mengirim media; pantulan tanpa teks = admin mengirim foto/stiker dari HP.
+  // Pantulan tanpa teks = admin mengirim foto/stiker dari HP (gambar dari sistem selalu punya caption).
   if (!echo) return false;
   return recentOutbound.some((body) => {
-    const sent = normalize(body);
+    const sent = normalize(body.match(SENT_IMAGE)?.[1] ?? body);
     if (sent === echo) return true;
     // Toleransi kecil (emoji/tanda baca di ujung), bukan sekadar awalan: "Halo kak" ≠ balasan bot yang diawali "Halo kak".
     const [short, long] = sent.length <= echo.length ? [sent, echo] : [echo, sent];

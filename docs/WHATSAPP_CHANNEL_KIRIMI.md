@@ -174,3 +174,12 @@ diganti tombol **Ganti penjawab** (`src/components/settings/whatsapp/ResponderSw
 - API Kirimi tidak menyediakan endpoint untuk menyalakan/mematikan Agen AI (dokumentasi Kirimi, dicek 2026-11-11);
   langkah itu tetap di dashboard Kirimi.
 - `PUT /api/settings/whatsapp` dengan `botEnabled` tetap ada untuk kompatibilitas, tetapi portal tidak lagi memakainya.
+
+## Pantulan gambar QRIS (2026-11-12)
+
+Gambar QRIS di invoice disimpan sebagai `[Gambar <caption>] <url>`, tetapi pantulannya dari Kirimi hanya membawa caption.
+Sebelum perbaikan, pantulan itu tidak cocok dengan pesan sistem sehingga terbaca sebagai balasan admin dari HP dan chat
+pindah ke mode admin; bukti transfer klien sesudahnya tidak dijawab bot (produksi 12 Nov 09:07). `isOwnEcho` kini
+mencocokkan caption gambar yang dikirim sistem, dan akun yang namanya sudah diawali "QRIS" tidak diberi awalan dobel.
+ID pesan tidak bisa dipakai untuk mencocokkan: `send-message` tidak mengembalikan ID WhatsApp, dan `msgId` pantulan
+berbeda dengan `clientMsgId` kita.

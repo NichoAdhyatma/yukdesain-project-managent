@@ -195,7 +195,7 @@ export const WA_MAX_FAILED_LOOKUPS_PER_HOUR = 5;
 
 // Batas bot WhatsApp (docs/WHATSAPP_AI_CHATBOT.md §17)
 export const WA_RATE_LIMITS = {
-  inboundPerWindow: 10, // pesan masuk per nomor…
+  inboundPerWindow: 20, // pesan masuk per nomor… (10 terlalu ketat untuk wawancara brief, 2026-11-12)
   inboundWindowMinutes: 5, // …per 5 menit → peringatan sekali, sisanya diabaikan
   imagesPerIntake: 20, // gambar per order → tolak, arahkan ke admin
   botRepliesPerDay: 80, // balasan bot per nomor per hari → mode HUMAN

@@ -294,6 +294,14 @@ describe("invoice (spec 2026-11-11 §5, Plan B Task 2)", () => {
       expect(api.sendImage).toHaveBeenCalledWith("6281234567890", "https://cdn.example.com/qris-bca.png", "QRIS BCA");
     });
 
+    it("akun yang namanya sudah \"QRIS\" tidak jadi caption dobel", async () => {
+      conversation(2);
+      api.sendImage.mockResolvedValue("wamid.IMG");
+      await sendInvoiceToClient("conv_1", invoiceMessage(base), [{ name: "QRIS", url: "https://cdn.example.com/q.png" }]);
+      expect(api.sendImage).toHaveBeenCalledWith("6281234567890", "https://cdn.example.com/q.png", "QRIS");
+      expect(db.waMessage.create.mock.calls.at(-1)![0].data.body).toBe("[Gambar QRIS] https://cdn.example.com/q.png");
+    });
+
     it("gambar gagal → URL dikirim sebagai teks, dicatat tanpa nomor lengkap", async () => {
       conversation(2);
       api.sendImage.mockRejectedValue(new WhatsAppApiError(400, "131053"));
