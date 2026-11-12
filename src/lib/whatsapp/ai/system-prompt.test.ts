@@ -233,3 +233,32 @@ describe("gambar klien selama brief: referensi untuk owner dan desainer (2026-11
     expect(prompt).not.toContain("Jika tidak jelas, tanyakan dulu.");
   });
 });
+
+describe("gaya chat seperti admin, bukan robot (kasus Day 2026-11-12)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("pesan pendek, daftar bernomor dan tebal hanya di ringkasan/harga, ikuti gaya klien", () => {
+    expect(prompt).toContain("Maksimal 2-3 kalimat pendek per pesan");
+    expect(prompt).toContain("Daftar bernomor hanya untuk ringkasan brief");
+    expect(prompt).toContain("Ikuti gaya bahasa klien");
+    expect(prompt).toContain('Variasikan pembuka; jangan selalu "Siap kak"');
+  });
+
+  it("tidak mengulang info yang sudah disebut, satu pertanyaan per pesan, nama ditanya sekali", () => {
+    expect(prompt).toContain("Jangan mengulang harga, estimasi, atau nama layanan yang sudah kamu sebut");
+    expect(prompt).toContain("Tanyakan satu hal per pesan");
+    expect(prompt).not.toContain("Tanyakan satu atau dua hal per pesan");
+    expect(prompt).toContain("menjelang ringkasan brief");
+  });
+
+  it("minta contoh desain: bagikan link dari Panduan atau ask_owner, tidak mengulang penolakan", () => {
+    expect(prompt).toContain("Jika klien minta contoh hasil desain");
+    expect(prompt).toContain("admin akan mengirimkan contohnya");
+    expect(prompt).toContain('jangan mengulang bahwa contoh "belum bisa ditampilkan"');
+  });
+
+  it("ditanya bot atau bukan: tetap jujur, singkat dan hangat, tawarkan admin", () => {
+    expect(prompt).toContain("Jika klien bertanya apakah ini bot, jawab jujur");
+    expect(prompt).toContain("tawarkan admin");
+  });
+});
