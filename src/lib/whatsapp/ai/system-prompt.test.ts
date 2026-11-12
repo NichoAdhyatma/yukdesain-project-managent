@@ -328,3 +328,13 @@ describe("lebih mirip admin manusia (humanize, 2026-11-12)", () => {
     expect(buildStateBlock({ intake: null, pendingImageMessageIds: [], now: new Date("2026-11-12T05:30:00Z") })).toContain("(siang)");
   });
 });
+
+describe("pelunasan project yang sudah berjalan (2026-11-12)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("file final terbuka setelah pelunasan; bukti pelunasan diteruskan ke admin", () => {
+    expect(prompt).toContain("File final project baru bisa diunduh di portal setelah pelunasan dicatat admin");
+    expect(prompt).toContain("Bukti transfer pelunasan project yang sudah berjalan");
+    expect(prompt).toContain("request_human_handoff supaya admin mencatat pelunasannya");
+  });
+});

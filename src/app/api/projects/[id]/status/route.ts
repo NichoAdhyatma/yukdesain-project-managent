@@ -42,6 +42,14 @@ export async function PUT(
       if (!assignment) {
         return NextResponse.json({ error: "Not authorized" }, { status: 403 });
       }
+      // Project selesai saat klien menyetujui hasil akhir (atau ditandai owner), bukan dari tombol desainer
+      // (project Nicho 12 Nov: klien menerima "Project sudah selesai" sebelum hasil final dikirim).
+      if (status === "SELESAI") {
+        return NextResponse.json(
+          { error: "Project selesai otomatis setelah klien menyetujui hasil akhir. Kirim hasil akhir dari form progres." },
+          { status: 403 }
+        );
+      }
     }
 
     // Update status

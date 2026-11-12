@@ -13,7 +13,9 @@ export type ClientProjectEvent =
   | { kind: "PROGRESS"; updateId: string }
   | { kind: "FINAL_SUBMITTED" }
   | { kind: "REVISION_DONE"; revisionId: string }
-  | { kind: "COMPLETED" };
+  | { kind: "COMPLETED" }
+  /** Pelunasan tercatat setelah hasil final dikirim: file final terbuka (2026-11-12) */
+  | { kind: "FILES_UNLOCKED" };
 
 export type NoticeOutcome = "SENT" | "SKIPPED" | "PENDING" | "FAILED" | "DUPLICATE";
 
@@ -31,6 +33,8 @@ type ProjectForNotice = {
   clientId: string;
   status: string;
   finalSubmittedAt: Date | null;
+  agreedPrice: number;
+  paidAmount: number;
   clientName: string;
   service: { name: string };
   clientLinks: { token: string }[];
@@ -44,6 +48,8 @@ async function loadProject(projectId: string): Promise<ProjectForNotice | null> 
       clientId: true,
       status: true,
       finalSubmittedAt: true,
+      agreedPrice: true,
+      paidAmount: true,
       clientName: true,
       service: { select: { name: true } },
       clientLinks: { where: { status: "ACTIVE" }, orderBy: { createdAt: "desc" }, take: 1, select: { token: true } },
@@ -58,7 +64,7 @@ function portalUrl(project: ProjectForNotice): string | null {
 }
 
 /** Data tambahan per kejadian; null = kejadian tidak perlu dikabarkan (mis. desainer tidak mencentang). */
-async function eventData(event: ClientProjectEvent): Promise<Partial<ClientNoticeData> | null> {
+async function eventData(event: ClientProjectEvent, project: ProjectForNotice): Promise<Partial<ClientNoticeData> | null> {
   if (event.kind === "PROGRESS") {
     const update = await prisma.projectUpdate.findUnique({
       where: { id: event.updateId },
@@ -70,6 +76,17 @@ async function eventData(event: ClientProjectEvent): Promise<Partial<ClientNotic
   if (event.kind === "REVISION_DONE") {
     const revision = await prisma.revision.findUnique({ where: { id: event.revisionId }, select: { number: true } });
     return revision ? { revisionNumber: revision.number } : null;
+  }
+  // Hasil final / selesai belum lunas: file final terkunci, klien diberi sisa pelunasan dan rekening aktif.
+  if (event.kind === "FINAL_SUBMITTED" || event.kind === "COMPLETED") {
+    const balance = Math.max(0, (project.agreedPrice ?? 0) - (project.paidAmount ?? 0));
+    if (balance === 0) return {};
+    const accounts = await prisma.paymentAccount.findMany({
+      where: { isActive: true },
+      orderBy: { order: "asc" },
+      select: { name: true, accountNumber: true, accountHolder: true },
+    });
+    return { balance, accounts };
   }
   return {};
 }
@@ -109,7 +126,7 @@ export async function notifyClientProjectEvent(projectId: string, event: ClientP
   try {
     const project = await loadProject(projectId);
     if (!project) return "SKIPPED";
-    const extra = await eventData(event);
+    const extra = await eventData(event, project);
     if (!extra) return "SKIPPED";
     const refId = refIdOf(event);
 
@@ -171,7 +188,7 @@ export async function sendNoticeNow(noticeId: string): Promise<NoticeOutcome> {
         : notice.event === "REVISION_DONE"
           ? { kind: "REVISION_DONE", revisionId: notice.refId }
           : ({ kind: notice.event } as ClientProjectEvent);
-    const extra = await eventData(event);
+    const extra = await eventData(event, project);
     if (!extra) return finish(notice.id, "SKIPPED", "NOT_REQUESTED");
     return await deliver(notice.id, project, event.kind, extra);
   } catch (error) {

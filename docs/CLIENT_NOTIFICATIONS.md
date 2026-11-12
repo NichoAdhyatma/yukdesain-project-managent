@@ -9,11 +9,30 @@ Bot mengirim kabar WhatsApp ke klien saat order mereka berubah. Disetujui owner 
 |---|---|---|
 | `STARTED` | status project menjadi Sedang Dikerjakan (kanban) | Project mulai dikerjakan + link portal |
 | `PROGRESS` | desainer mengirim update progres dengan **Kabari klien** menyala | Persen (bila diisi) + catatan (≤300 karakter) + link portal |
-| `FINAL_SUBMITTED` | desainer mengirim hasil final | Hasil final siap, cek dan setujui lewat link portal |
+| `FINAL_SUBMITTED` | desainer mengirim hasil akhir (form progres di 100%) | Hasil final siap, cek dan setujui lewat link portal. Belum lunas: sisa pelunasan + rekening aktif + "kirim bukti transfernya di chat ini"; sudah lunas: "cek, setujui, dan unduh" |
 | `REVISION_DONE` | desainer menekan **Tandai revisi selesai** | Revisi #n sudah dikerjakan + link portal |
-| `COMPLETED` | project Selesai (kanban) atau klien menyetujui final | Project selesai, terima kasih |
+| `COMPLETED` | owner menandai Selesai (kanban) atau klien menyetujui final | Project selesai, terima kasih; belum lunas: + sisa pelunasan dan rekening |
+| `FILES_UNLOCKED` | owner mencatat pembayaran yang membuat project lunas, setelah hasil akhir dikirim | Pelunasan diterima, file final sudah bisa diunduh + link portal |
 
-Teks ada di `src/lib/notifications/client-notice-text.ts`. Tidak pernah memuat nama desainer, nominal, atau catatan internal.
+Teks ada di `src/lib/notifications/client-notice-text.ts`. Tidak pernah memuat nama desainer atau catatan internal.
+Nominal hanya sisa pelunasan project itu sendiri, di `FINAL_SUBMITTED`/`COMPLETED` yang belum lunas (disetujui owner
+2026-11-12).
+
+## 1a. File final terkunci sampai lunas (disetujui owner 2026-11-12)
+
+Temuan project Nicho (12 Nov): desainer menekan "Selesai", "Kirim hasil akhir", lalu update 100%, sehingga klien
+menerima tiga pesan dalam 40 detik dengan urutan terbalik; file final yang dikirim desainer tidak tampil di portal; dan
+project baru dibayar Rp50.000 dari Rp250.000.
+
+- Desainer: satu form progres. Progres 100% sebelum hasil akhir dikirim = mode **Kirim hasil akhir** (file wajib,
+  kategori FINAL, satu kabar `FINAL_SUBMITTED`). Desainer tidak lagi bisa menandai Selesai (API 403); project Selesai
+  saat klien menyetujui hasil akhir, atau ditandai owner.
+- Portal klien: kartu **File final** menampilkan nama file. Selama `paymentStatus` belum `PAID`, `storageKey` tidak
+  dikirim ke browser (file terkunci) dan kartu menampilkan sisa pelunasan + tombol ke tab Pembayaran. Gambar progres
+  tetap terlihat supaya klien bisa review dan approve.
+- Pelunasan dicatat owner di portal (`POST /api/payments`); begitu lunas dan hasil akhir sudah dikirim, klien menerima
+  `FILES_UNLOCKED`. Bukti transfer pelunasan yang dikirim klien lewat chat: bot tidak memprosesnya, menyampaikan akan
+  dicek admin, lalu mengalihkan chat ke admin.
 Kalimat `FINAL_SUBMITTED` akan berubah ke "balas setuju di chat" setelah Bagian B (revisi dan final lewat chat) aktif.
 
 ## 2. Pengiriman

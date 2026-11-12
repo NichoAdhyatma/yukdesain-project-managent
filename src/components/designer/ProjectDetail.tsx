@@ -1,15 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarClock, CheckCircle2, FileText, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ProgressUploader, type UploadedFile } from "@/components/ui/progress-uploader";
 import { BriefReader } from "@/components/forms/brief/BriefReader";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -25,6 +20,8 @@ import {
   statusLabel,
   type DesignerProject,
 } from "./types";
+
+const DESIGNER_STATUSES = WORK_STATUSES.filter((s) => s !== "SELESAI");
 
 function StatusControl({ project }: { project: DesignerProject }) {
   const queryClient = useQueryClient();
@@ -48,13 +45,15 @@ function StatusControl({ project }: { project: DesignerProject }) {
     onError: (err: Error) => toast(err.message, "error"),
   });
 
+  // Selesai bukan pilihan desainer: project selesai saat klien menyetujui hasil akhir.
+  if (project.status === "SELESAI") return null;
   return (
     <div className="space-y-2">
       <p id={`status-${project.id}`} className="text-sm font-medium">
         Status pengerjaan
       </p>
-      <div role="group" aria-labelledby={`status-${project.id}`} className="grid grid-cols-3 gap-2">
-        {WORK_STATUSES.map((s) => {
+      <div role="group" aria-labelledby={`status-${project.id}`} className="grid grid-cols-2 gap-2">
+        {DESIGNER_STATUSES.map((s) => {
           const active = project.status === s;
           const pending = mutation.isPending && mutation.variables === s;
           return (
@@ -77,36 +76,8 @@ function StatusControl({ project }: { project: DesignerProject }) {
   );
 }
 
-function FinalSection({ project }: { project: DesignerProject }) {
-  const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
-  const [desc, setDesc] = useState("");
-  const [files, setFiles] = useState<UploadedFile[]>([]);
-  const [uploading, setUploading] = useState(false);
-
-  const mutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch(`/api/designer/projects/${project.id}/submit-final`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ description: desc.trim(), attachmentIds: files.map((f) => f.id) }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error || "Gagal mengirim hasil akhir. Coba lagi.");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["designer-projects"] });
-      setOpen(false);
-      setDesc("");
-      setFiles([]);
-      toast("Hasil akhir terkirim ke klien", "success");
-    },
-    onError: (err: Error) => toast(err.message, "error"),
-  });
-
+/** Status hasil akhir. Hasil akhir dikirim dari form progres (100%), bukan tombol terpisah. */
+function FinalStatus({ project }: { project: DesignerProject }) {
   if (project.finalApprovedAt) {
     return (
       <div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-950/40">
@@ -117,101 +88,19 @@ function FinalSection({ project }: { project: DesignerProject }) {
       </div>
     );
   }
-
   if (project.finalSubmittedAt) {
     return (
       <div role="status" className="rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-900 dark:bg-green-950/40">
         <p className="flex items-center gap-1.5 text-sm font-medium text-green-800 dark:text-green-200">
           <CheckCircle2 className="size-4" aria-hidden /> Hasil akhir sudah dikirim
         </p>
-        <p className="mt-1 text-xs text-green-700 dark:text-green-300">Menunggu persetujuan klien.</p>
+        <p className="mt-1 text-xs text-green-700 dark:text-green-300">
+          Menunggu persetujuan klien. Revisi dari klien tetap masuk ke tab Revisi.
+        </p>
       </div>
     );
   }
-
-  return (
-    <div className="flex flex-col gap-3 rounded-lg border border-dashed p-3 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <p className="text-sm font-medium">Hasil akhir</p>
-        <p className="text-xs text-muted-foreground">Kirim kalau desain sudah final, untuk direview dan di-approve klien.</p>
-      </div>
-      <Button type="button" variant="outline" className="h-11 shrink-0 md:h-9" onClick={() => setOpen(true)}>
-        <CheckCircle2 aria-hidden /> Kirim hasil akhir
-      </Button>
-
-      <Dialog
-        open={open}
-        onOpenChange={(next) => {
-          if (!next && mutation.isPending) return;
-          setOpen(next);
-        }}
-      >
-        <DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Kirim hasil akhir</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              Klien akan mendapat notifikasi dan bisa approve atau minta revisi.
-            </p>
-          </DialogHeader>
-          <form
-            className="space-y-4"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (desc.trim()) mutation.mutate();
-            }}
-          >
-            <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-              Setelah dikirim, klien bisa approve atau meminta revisi sesuai kuota project. Pastikan hasilnya sudah final.
-            </p>
-            <div className="space-y-2">
-              <Label htmlFor={`final-desc-${project.id}`}>
-                Catatan hasil akhir <span className="text-destructive" aria-hidden>*</span>
-              </Label>
-              <Textarea
-                id={`final-desc-${project.id}`}
-                value={desc}
-                onChange={(e) => setDesc(e.target.value)}
-                placeholder="Jelaskan file yang dikirim, misalnya format dan ukurannya."
-                rows={4}
-                required
-                disabled={mutation.isPending}
-                className="text-base md:text-sm"
-              />
-            </div>
-            <ProgressUploader
-              files={files}
-              onChange={setFiles}
-              onUploadingChange={setUploading}
-              maxFiles={10}
-              label="File hasil akhir"
-              disabled={mutation.isPending}
-              uploadCategory="final"
-              projectId={project.id}
-            />
-            {mutation.isError && (
-              <p role="alert" className="text-sm text-destructive">
-                {mutation.error.message}
-              </p>
-            )}
-            <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" className="h-11 md:h-9" disabled={mutation.isPending} onClick={() => setOpen(false)}>
-                Batal
-              </Button>
-              <Button type="submit" className="h-11 md:h-9" disabled={mutation.isPending || uploading || !desc.trim()}>
-                {mutation.isPending ? (
-                  <>
-                    <Loader2 className="animate-spin" aria-hidden /> Mengirim…
-                  </>
-                ) : (
-                  "Kirim hasil akhir"
-                )}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
+  return null;
 }
 
 export function ProjectDetail({ project, onBack }: { project: DesignerProject; onBack: () => void }) {
@@ -282,11 +171,11 @@ export function ProjectDetail({ project, onBack }: { project: DesignerProject; o
         </TabsList>
 
         <TabsContent value="progress" className="space-y-6 pt-3">
+          <FinalStatus project={project} />
           <section className="rounded-lg border bg-card p-4">
             <ProgressUpdateForm key={project.id} project={project} />
           </section>
           <StatusControl project={project} />
-          <FinalSection project={project} />
           <section className="space-y-3" aria-labelledby={`history-${project.id}`}>
             <h3 id={`history-${project.id}`} className="text-sm font-semibold">
               Riwayat update

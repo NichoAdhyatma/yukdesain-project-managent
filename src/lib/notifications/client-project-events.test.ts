@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   waConversation: { findFirst: vi.fn() },
   projectUpdate: { findUnique: vi.fn() },
   revision: { findUnique: vi.fn() },
+  paymentAccount: { findMany: vi.fn() },
   clientProjectNotice: { create: vi.fn(), update: vi.fn(), findFirst: vi.fn(), deleteMany: vi.fn(), findUnique: vi.fn(), updateMany: vi.fn() },
 }));
 const outbound = vi.hoisted(() => ({ sendSystemText: vi.fn() }));
@@ -119,5 +120,31 @@ describe("sendNoticeNow: kabar progres tertunda tidak menyusul setelah final", (
     expect(await sendNoticeNow("n9")).toBe("SKIPPED");
     expect(db.clientProjectNotice.update).toHaveBeenCalledWith({ where: { id: "n9" }, data: { status: "SKIPPED", reason: "SUPERSEDED" } });
     expect(outbound.sendSystemText).not.toHaveBeenCalled();
+  });
+});
+
+describe("hasil final dan pelunasan (2026-11-12)", () => {
+  it("FINAL_SUBMITTED belum lunas: sisa pelunasan dan rekening aktif ikut dikirim", async () => {
+    db.project.findUnique.mockResolvedValue({ ...project, agreedPrice: 250000, paidAmount: 50000 });
+    db.paymentAccount.findMany.mockResolvedValue([{ name: "BCA", accountNumber: "2141358555", accountHolder: "Mochammad Rizal" }]);
+    expect(await notifyClientProjectEvent("p1", { kind: "FINAL_SUBMITTED" }, now)).toBe("SENT");
+    const text = outbound.sendSystemText.mock.calls[0][1];
+    expect(text).toContain("File final bisa diunduh setelah pelunasan *Rp200.000*.");
+    expect(text).toContain("• BCA 2141358555 a.n. Mochammad Rizal");
+    expect(db.paymentAccount.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { isActive: true } }));
+  });
+
+  it("FINAL_SUBMITTED sudah lunas: tanpa tagihan", async () => {
+    db.project.findUnique.mockResolvedValue({ ...project, agreedPrice: 250000, paidAmount: 250000 });
+    await notifyClientProjectEvent("p1", { kind: "FINAL_SUBMITTED" }, now);
+    expect(outbound.sendSystemText.mock.calls[0][1]).not.toContain("pelunasan");
+    expect(db.paymentAccount.findMany).not.toHaveBeenCalled();
+  });
+
+  it("FILES_UNLOCKED dikirim sekali per project", async () => {
+    db.project.findUnique.mockResolvedValue({ ...project, agreedPrice: 250000, paidAmount: 250000 });
+    expect(await notifyClientProjectEvent("p1", { kind: "FILES_UNLOCKED" }, now)).toBe("SENT");
+    expect(db.clientProjectNotice.create).toHaveBeenCalledWith({ data: { projectId: "p1", event: "FILES_UNLOCKED", refId: "-", status: "SENDING" }, select: { id: true } });
+    expect(outbound.sendSystemText.mock.calls[0][1]).toContain("File final sudah bisa diunduh");
   });
 });

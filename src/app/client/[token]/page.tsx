@@ -27,6 +27,7 @@ import {
   Building,
   Smartphone,
   ExternalLink,
+  Lock,
 } from "lucide-react";
 import { ServiceBriefForm } from "@/components/forms/brief/ServiceBriefForm";
 import type { BriefResponses } from "@/components/forms/brief/types";
@@ -1282,6 +1283,78 @@ function FinalApprovalCard({
   );
 }
 
+// ── File final: terkunci sampai lunas (2026-11-12) ────────────────────────────
+
+function FinalFilesCard({
+  project,
+  formatCurrency,
+  onPaymentClick,
+}: {
+  project: NonNullable<ClientLink["project"]>;
+  formatCurrency: (n: number) => string;
+  onPaymentClick: () => void;
+}) {
+  const { locked, files } = project.finalFiles;
+  if (!project.finalSubmittedAt || files.length === 0) return null;
+  const balance = Math.max(0, project.agreedPrice - project.paidAmount);
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          {locked ? <Lock className="h-4 w-4" aria-hidden /> : <Download className="h-4 w-4" aria-hidden />}
+          File final
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {locked && (
+          <div
+            role="note"
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+          >
+            <p className="text-sm font-medium">Bisa diunduh setelah pelunasan</p>
+            <p className="mt-0.5 text-xs">
+              Sisa pelunasan <span className="font-semibold tabular-nums">{formatCurrency(balance)}</span>. Setelah admin
+              mencatat pelunasan, file di bawah langsung bisa diunduh dari halaman ini.
+            </p>
+          </div>
+        )}
+        <ul className="space-y-2">
+          {files.map((f) => (
+            <li key={f.id}>
+              {locked || !f.storageKey ? (
+                <div className="flex min-h-11 items-center gap-2 rounded-lg border border-dashed px-3 text-sm text-muted-foreground">
+                  <Lock className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="min-w-0 break-all">{f.filename}</span>
+                  <span className="sr-only">, terkunci sampai pelunasan</span>
+                </div>
+              ) : (
+                <a
+                  href={`${process.env.NEXT_PUBLIC_STORAGE_URL || ""}/${f.storageKey}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download
+                  className="flex min-h-11 items-center gap-2 rounded-lg border px-3 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <Download className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                  <span className="min-w-0 break-all">{f.filename}</span>
+                  <span className="sr-only">, unduh</span>
+                </a>
+              )}
+            </li>
+          ))}
+        </ul>
+        {locked && (
+          <Button type="button" variant="outline" className="h-11 w-full rounded-xl" onClick={onPaymentClick}>
+            <CreditCard className="mr-2 h-4 w-4" aria-hidden />
+            Lihat cara bayar pelunasan
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Revision Form ─────────────────────────────────────────────────────────────
 
 function RevisionForm({
@@ -1848,7 +1921,7 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         )}
 
         {/* Tab Bar — mobile-friendly, full width */}
-        <div className="flex gap-1 bg-muted/30 rounded-xl p-1">
+        <div id="project-tabs" className="flex gap-1 bg-muted/30 rounded-xl p-1 scroll-mt-4">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -1927,6 +2000,16 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
             approvingFinal={approvingFinal}
             onApprove={handleApproveFinal}
             formatDate={formatDate}
+          />
+
+          <FinalFilesCard
+            project={project}
+            formatCurrency={formatCurrency}
+            onPaymentClick={() => {
+              setActiveTab("payment");
+              const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+              document.getElementById("project-tabs")?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+            }}
           />
 
           <RevisionForm
