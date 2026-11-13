@@ -1,0 +1,7 @@
+[Unit]
+Description=YukDesain: pengingat chat dan pertanyaan yang menunggu admin
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/yukdesain/cron.env
+ExecStart=/bin/sh -c 'curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" http://127.0.0.1:3000/api/cron/admin-reminders'

@@ -21,7 +21,7 @@ vi.mock("./owner/identity", () => owners);
 import { getMonthlyBrake, isSmallTalk, notifyOwnersBrakeOnce, trimForAi } from "./spam-guard";
 
 describe("isSmallTalk", () => {
-  it.each(["ok", "Oke kak", "okeee", "siapp", "makasih kak 🙏", "terima kasih banyak", "thanks", "👍", "🙏🙏", "ok sip!", "iya kak makasih ya"])(
+  it.each(["ok", "Oke kak", "okeee", "siapp", "makasih kak 🙏", "terima kasih banyak", "thanks", "👍", "🙏🙏", "ok sip!", "iya kak makasih ya", "Baik dtunggu kak ☺️", "ok kak, ditunggu", "oke ditunggu ya kak"])(
     "basa-basi: %s",
     (text) => expect(isSmallTalk(text)).toBe(true),
   );

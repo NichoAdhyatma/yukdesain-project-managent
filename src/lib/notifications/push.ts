@@ -6,7 +6,7 @@ import { getStudioSettings } from "@/lib/studio";
 // Web push ke owner (docs/OWNER_NOTIFICATIONS_INBOX.md §2). Gratis, tanpa kuota pesan WhatsApp.
 // Kunci VAPID hanya di env server; kunci publik boleh ke browser untuk berlangganan.
 
-export const NOTIFY_EVENTS = ["NEEDS_QUOTE", "DP_PROOF", "NEW_CLIENT", "NEEDS_ADMIN"] as const;
+export const NOTIFY_EVENTS = ["NEEDS_QUOTE", "DP_PROOF", "NEW_CLIENT", "NEEDS_ADMIN", "WAITING_REMINDER"] as const;
 export type NotifyEvent = (typeof NOTIFY_EVENTS)[number];
 
 export const NOTIFY_EVENT_LABELS: Record<NotifyEvent, { label: string; description: string }> = {
@@ -14,6 +14,11 @@ export const NOTIFY_EVENT_LABELS: Record<NotifyEvent, { label: string; descripti
   DP_PROOF: { label: "Bukti DP masuk", description: "Klien mengirim bukti transfer yang perlu dicek." },
   NEW_CLIENT: { label: "Klien baru", description: "Nomor baru menghubungi bot untuk pertama kali." },
   NEEDS_ADMIN: { label: "Chat menunggu admin", description: "Klien minta admin, AI gagal, atau batas bot tercapai." },
+  WAITING_REMINDER: {
+    label: "Pengingat menunggu admin",
+    description:
+      "Chat mode admin belum dibalas, pertanyaan bot belum dijawab owner, atau DP lewat HP belum dicatat di portal. Setelah 30 menit dan 2 jam, lalu berhenti.",
+  },
 };
 
 const vapidSchema = z.object({

@@ -166,6 +166,17 @@ model User {
   @@map("users")
 }
 
+// Pengingat "menunggu admin" yang sudah dikirim (docs/OWNER_NOTIFICATIONS_INBOX.md §2a): paling banyak 2 per item.
+// key: chat:<id pesan klien pertama yang belum dibalas> | query:<WaOwnerQuery.id> | dp:<id pesan rekening/DP dari HP>
+model AdminWaitReminder {
+  key        String   @id
+  count      Int      @default(0)
+  lastSentAt DateTime
+
+  @@index([lastSentAt])
+  @@map("admin_wait_reminders")
+}
+
 // Langganan web push per perangkat/browser (docs/OWNER_NOTIFICATIONS_INBOX.md §2).
 model WebPushSubscription {
   id         String   @id @default(cuid())

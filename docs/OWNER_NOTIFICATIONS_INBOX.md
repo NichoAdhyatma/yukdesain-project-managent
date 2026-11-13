@@ -56,6 +56,33 @@ mengaktifkan notifikasi di perangkatnya (bisa beberapa perangkat).
 
 **Biaya**: gratis (memakai layanan push bawaan browser: Google, Apple, Mozilla).
 
+## 2a. Pengingat "menunggu admin" (2026-11-13)
+
+Disetujui owner 2026-11-13 setelah evaluasi chat: 4 chat mode admin menunggu 1–2 jam ("chatnya ketimbun"), pertanyaan
+bot ke owner menunggu berjam-jam (median dijawab 6 menit, tetapi 6 masih tertunda), dan DP Mif diterima lewat HP tanpa
+invoice di portal. Notifikasi kejadian di atas hanya dikirim sekali, jadi yang terlewat tidak diingatkan lagi.
+
+- **Saluran**: web push (keputusan 2026-11-07), kejadian **Pengingat menunggu admin**; bisa dimatikan di
+  Settings › Notifications seperti kejadian lain.
+- **Yang dihitung** (`src/lib/notifications/waiting-reminders.ts`):
+  - **Chat belum dibalas**: chat mode admin (bukan Uji bot, bukan nomor diblokir, bukan nomor owner) yang pesan
+    terakhirnya dari klien, dalam 24 jam terakhir. Lama menunggu dihitung dari pesan klien pertama sesudah balasan
+    terakhir yang bukan basa-basi. Basa-basi saja ("Baik kak", "ok, ditunggu") tidak dihitung. Chat mode bot tidak dihitung (bot membalas).
+  - **Pertanyaan bot belum dijawab**: `WaOwnerQuery` `PENDING` yang belum kedaluwarsa (24 jam). Dilewati bila admin
+    sudah membalas klien itu langsung (HP atau portal) atau order klien itu sudah diberi harga sesudah pertanyaan
+    dibuat, karena dianggap sudah ditangani.
+  - **DP lewat HP belum dicatat di portal**: pesan admin dari HP dalam 24 jam terakhir yang memuat nomor rekening aktif
+    (Settings › Pembayaran) atau kabar "DP/pembayaran … terima", padahal percakapan itu tidak punya invoice portal dalam
+    30 hari dan klien tidak punya project baru dalam 30 hari (pelunasan project berjalan tidak dihitung).
+- **Waktu**: pengingat pertama setelah menunggu 30 menit, kedua setelah 2 jam (paling cepat 30 menit dari yang
+  pertama), lalu berhenti untuk item itu (`admin_wait_reminders`, dibersihkan setelah 3 hari). Pesan klien baru setelah
+  admin membalas dihitung sebagai item baru.
+- **Isi**: satu notifikasi ringkas, judul "3 hal menunggu admin", maksimal 4 baris urut dari yang paling lama, nomor
+  tersamar, mis. "Coffee Duri (6281****2256) · pertanyaan bot belum dijawab · 3 jam 30 mnt". Notifikasi berikutnya
+  menggantikan yang lama di perangkat (tag sama). Tautan: Inbox (langsung ke chat bila hanya satu chat).
+- **Cron**: `POST /api/cron/admin-reminders` (Bearer `CRON_SECRET`, sama dengan kabar progres klien), dipanggil timer
+  `yukdesain-admin-reminders` tiap 5 menit. Unit systemd ada di `deploy/systemd/`.
+
 ## 3. Inbox chat
 
 Menu **Order WA** mendapat dua tab: **Order** (daftar yang sekarang) dan **Inbox**.
@@ -106,3 +133,6 @@ Menu **Order WA** mendapat dua tab: **Order** (daftar yang sekarang) dan **Inbox
    `npx web-push generate-vapid-keys` → isi `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT="mailto:…"`.
    Kunci jangan diganti setelah dipakai: semua perangkat harus mengaktifkan ulang.
 3. Owner: Settings › Notifications › **Aktifkan di perangkat ini** → **Kirim notifikasi uji**.
+4. Pengingat menunggu admin (§2a, 2026-11-13), sekali di VPS setelah deploy yang memuat route-nya:
+   `cp deploy/systemd/yukdesain-admin-reminders.* /etc/systemd/system/ && systemctl daemon-reload &&
+   systemctl enable --now yukdesain-admin-reminders.timer`. Memakai `/etc/yukdesain/cron.env` yang sudah ada.
