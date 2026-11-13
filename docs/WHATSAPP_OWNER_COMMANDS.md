@@ -97,6 +97,15 @@ sedang mengirim menu satu per satu.
   kecuali pesan owner menyebut klien itu (kata dari namanya, nama utuh, atau 4 digit akhir nomornya); asisten lalu
   menanyakan jawaban itu untuk klien yang mana. Temuan 12 Nov 18:57: "BISA, ini masuk ke desain poster menu" tanpa
   reply ditempel ke klien yang ditebak AI.
+- Pengecualian (2026-11-13, kasus hastalinuwih: owner harus mengetik "9821" padahal pertanyaannya baru masuk 1 menit
+  sebelumnya): bila satu pertanyaan masuk dalam 10 menit terakhir (`FRESH_QUERY_MS`) dan semua pertanyaan terbuka
+  lain minimal 60 menit lebih lama (`OLDER_QUERY_GAP_MS`), jawaban tanpa reply/nama dicatat untuk pertanyaan baru itu.
+  Dua pertanyaan baru yang berdekatan tetap ditanyakan yang mana.
+- **Kembalikan chat klien ke bot lewat WA (2026-11-13, kasus Mif: "nomor berakhiran 2367 coba kamu jawab"):** tool
+  asisten owner `return_chat_to_bot` mencari chat klien seminggu terakhir dari nama atau 4 digit akhir nomor; tepat
+  satu → mode BOT (ActivityLog `WA_CHAT_RETURNED_TO_BOT`, `via: owner_whatsapp`), lalu sistem menjawab pesan klien
+  yang tertinggal (`replyPendingAfterReturn`) dan melapor ke owner: sudah dibalas / belum ada yang perlu dibalas /
+  gagal (kembali ke admin) / Balas otomatis nonaktif. Tidak ketemu atau lebih dari satu → asisten menanyakan yang mana.
 - STATE asisten owner memuat jawaban yang sudah terkirim ke klien (2 jam terakhir); asisten tidak bilang jawaban
   "belum tentu tersimpan" bila tercantum di sana.
 - Gangguan teknis AI (rate limit, 5xx, jaringan) dicoba sekali lagi setelah 4 detik sebelum chat dialihkan ke admin.

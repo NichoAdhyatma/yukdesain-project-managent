@@ -15,6 +15,8 @@ import { sandboxWaId, type OwnerContext } from "../owner/identity";
 // yang diperiksa server.
 
 const HISTORY_LIMIT = 20;
+/** Chat klien yang bisa dikembalikan ke bot lewat perintah owner: ada pesan klien dalam rentang ini. */
+const RETURN_CHAT_WINDOW_MS = 7 * 24 * 3_600_000;
 const MAX_TOOL_ROUNDS = 3;
 
 export function buildOwnerSystemPrompt(studioName: string): string {
@@ -38,11 +40,14 @@ export function buildOwnerSystemPrompt(studioName: string): string {
 # Pertanyaan klien
 - STATE berisi pertanyaan klien yang menunggu jawaban owner. Jika pesan owner menjawab salah satunya (ditandai di STATE jika owner membalas pesan pertanyaannya) atau jelas merujuk satu pertanyaan, panggil answer_client_query: approved=true untuk bisa, false untuk tidak; note = catatan owner untuk bot (harga khusus, syarat, layanan yang dipakai).
 - Cocokkan isi jawaban owner dengan permintaan di STATE (mis. jawaban menyebut banner → pertanyaan soal banner).
-- Jika ada beberapa pertanyaan terbuka dan owner tidak me-reply pesan pertanyaannya, jawaban hanya bisa dicatat bila pesan owner menyebut nama klien atau 4 digit akhir nomornya. Jangan menebak: minta owner menyebut nama klien atau me-reply pesan pertanyaannya, sambil menyebut daftar klien yang menunggu.
+- Jika ada beberapa pertanyaan terbuka dan owner tidak me-reply pesan pertanyaannya, jawaban hanya bisa dicatat bila pesan owner menyebut nama klien atau 4 digit akhir nomornya, atau bila satu pertanyaan baru masuk (10 menit terakhir) dan pertanyaan lain jauh lebih lama: jawaban itu untuk pertanyaan yang baru masuk. Jangan menebak: minta owner menyebut nama klien atau me-reply pesan pertanyaannya, sambil menyebut daftar klien yang menunggu.
 - Jangan mengingatkan pertanyaan klien lain yang masih menunggu di setiap balasan. Sebut hanya bila owner menanyakannya atau saat perlu memastikan jawaban ini untuk pertanyaan yang mana.
 - Setelah answer_client_query berhasil, cukup bilang jawabannya sudah dicatat. Jangan menyatakan jawaban sudah terkirim ke klien: sistem yang mengirimnya lalu melaporkan hasilnya ke owner.
 - Jangan bilang jawaban owner belum tersimpan atau belum terkirim bila jawaban itu tercantum di STATE sebagai sudah terkirim; hasil kirim selalu dilaporkan sistem ke owner.
 - STATE juga berisi jawaban owner yang belum terkirim ke klien (mis. gagal dikirim karena AI error). Jika owner minta mengirim ulang, panggil resend_client_answer dengan id-nya; jika ada beberapa dan tidak jelas yang mana, tanyakan.
+
+# Chat klien
+- Jika owner meminta bot membalas atau melayani lagi chat klien tertentu (mis. "nomor berakhiran 2367 coba kamu jawab", "Mif balas pakai bot"), panggil return_chat_to_bot dengan nama klien atau 4 digit akhir nomor yang disebut owner. Setelah berhasil cukup bilang chatnya dikembalikan ke bot; hasil balasan ke klien dilaporkan sistem. Jika klien tidak ketemu atau ada beberapa, tanyakan yang mana.
 
 # Gaya
 Bahasa Indonesia santai dan singkat. Format WhatsApp (*tebal*, _miring_), tanpa Markdown lain dan tanpa tabel.`;
@@ -71,6 +76,7 @@ const inputs = {
     note: z.string().trim().max(1000).optional(),
   }),
   resend_client_answer: z.object({ query_id: z.string().min(1) }),
+  return_chat_to_bot: z.object({ client: z.string().trim().min(2).max(100) }),
 };
 
 export const OWNER_TOOLS: Anthropic.Tool[] = [
@@ -125,6 +131,17 @@ export const OWNER_TOOLS: Anthropic.Tool[] = [
         note: { type: "string", description: "Catatan owner untuk bot, opsional" },
       },
       required: ["query_id", "approved"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "return_chat_to_bot",
+    description:
+      "Kembalikan chat klien yang sedang ditangani admin ke bot; bot lalu langsung menjawab pesan klien yang belum terbalas. Untuk perintah owner seperti \"nomor 2367 coba kamu jawab\".",
+    input_schema: {
+      type: "object",
+      properties: { client: { type: "string", description: "Nama klien atau 4 digit akhir nomor yang disebut owner" } },
+      required: ["client"],
       additionalProperties: false,
     },
   },
@@ -254,6 +271,8 @@ export type OwnerTurnResult = {
   answeredQueryIds: string[];
   /** Jawaban yang diminta owner untuk dikirim ulang (resend_client_answer) */
   resendQueryIds: string[];
+  /** Chat klien yang dikembalikan ke bot (return_chat_to_bot); sistem lalu menjawab pesan yang tertinggal */
+  returnedChats: { conversationId: string; label: string }[];
   /** Alasan berhenti respons terakhir model (untuk log saat balasan kosong) */
   stopReason: string | null;
 };
@@ -283,7 +302,7 @@ export async function runOwnerAiTurn(p: {
     }),
   ]);
   const chat = createChatSession(targets);
-  const openClients = new Map(queries.map((q) => [q.id, q.conversation]));
+  const openClients = new Map(queries.map((q) => [q.id, { ...q.conversation, createdAt: q.createdAt }]));
   const unrelayedIds = new Set(unrelayed.map((q) => q.id));
   // history urut terbaru dulu: pesan owner terakhir dipakai untuk memastikan jawaban untuk klien yang mana.
   const ownerText = history.find((m) => m.direction === "INBOUND")?.body ?? "";
@@ -310,7 +329,7 @@ export async function runOwnerAiTurn(p: {
     },
   ];
 
-  const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [], resendQueryIds: [], stopReason: null };
+  const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [], resendQueryIds: [], returnedChats: [], stopReason: null };
 
   for (let round = 0; ; round++) {
     const response = await chat.create({
@@ -361,12 +380,24 @@ type OwnerToolContext = {
   result: OwnerTurnResult;
 };
 
-type OpenQueryClient = { profileName: string | null; waId: string };
+type OpenQueryClient = { profileName: string | null; waId: string; createdAt: Date };
+
+/** Pertanyaan yang baru masuk: jawaban owner tanpa reply sesaat setelahnya hampir pasti untuk pertanyaan ini. */
+export const FRESH_QUERY_MS = 10 * 60_000;
+/** Pertanyaan lain harus jauh lebih lama (bukan dua pertanyaan baru yang berdekatan, kasus 12 Nov 18:57). */
+export const OLDER_QUERY_GAP_MS = 60 * 60_000;
+
+/** Satu-satunya pertanyaan baru (≤10 menit) dan semua pertanyaan lain ≥60 menit lebih lama (kasus 13 Nov 07:52). */
+function isSoleFreshQuery(openQueries: Map<string, OpenQueryClient>, id: string, now: number): boolean {
+  const target = openQueries.get(id);
+  if (!target || now - target.createdAt.getTime() > FRESH_QUERY_MS) return false;
+  return [...openQueries].every(([key, q]) => key === id || target.createdAt.getTime() - q.createdAt.getTime() >= OLDER_QUERY_GAP_MS);
+}
 
 const NOT_WORD = "[^\\p{L}\\p{N}]";
 
 /** Pesan owner menyebut klien ini: kata dari namanya (≥3 huruf), nama utuh, atau 4 digit akhir nomornya. */
-export function mentionsClient(text: string, client: OpenQueryClient): boolean {
+export function mentionsClient(text: string, client: { profileName: string | null; waId: string }): boolean {
   const words = (client.profileName ?? "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
   const whole = words.join(" ");
   const candidates = [...words.filter((w) => w.length >= 3), ...(whole.length >= 2 ? [whole] : []), client.waId.slice(-4)];
@@ -417,7 +448,12 @@ export async function executeOwnerTool(name: string, rawInput: unknown, ctx: Own
     const client = ctx.openQueries.get(input.data.query_id);
     if (!client) return fail("Pertanyaan tidak ditemukan atau sudah dijawab");
     // Beberapa pertanyaan terbuka tanpa reply: jawaban tidak boleh ditebak (produksi 12 Nov 18:57).
-    if (ctx.openQueries.size > 1 && ctx.repliedQueryId !== input.data.query_id && !mentionsClient(ctx.ownerText, client)) {
+    if (
+      ctx.openQueries.size > 1 &&
+      ctx.repliedQueryId !== input.data.query_id &&
+      !mentionsClient(ctx.ownerText, client) &&
+      !isSoleFreshQuery(ctx.openQueries, input.data.query_id, Date.now())
+    ) {
       return fail(
         "Ada beberapa pertanyaan terbuka dan pesan owner tidak menyebut klien ini. Jangan dicatat; tanyakan ke owner jawaban ini untuk klien yang mana (minta sebut nama klien atau reply pesan pertanyaannya).",
       );
@@ -439,6 +475,43 @@ export async function executeOwnerTool(name: string, rawInput: unknown, ctx: Own
     if (!ctx.unrelayedIds.has(input.data.query_id)) return fail("Jawaban tidak ditemukan atau sudah terkirim");
     ctx.result.resendQueryIds.push(input.data.query_id);
     return ok({ queued: true });
+  }
+
+  if (name === "return_chat_to_bot") {
+    const input = inputs.return_chat_to_bot.safeParse(rawInput);
+    if (!input.success) return fail("Input tidak valid");
+    // Chat klien sungguhan (owner Uji bot: hanya percakapan ujinya) yang masih aktif seminggu terakhir.
+    const candidates = await prisma.waConversation.findMany({
+      where: {
+        ...(ctx.owner.target === "DRAFT" ? { waId: sandboxWaId(ctx.owner.user.id) } : { isSandbox: false }),
+        blockedAt: null,
+        lastInboundAt: { gt: new Date(Date.now() - RETURN_CHAT_WINDOW_MS) },
+      },
+      select: { id: true, waId: true, profileName: true, mode: true },
+      take: 300,
+    });
+    const label = (c: { waId: string; profileName: string | null }) => `${c.profileName ?? "Klien"} (${maskPhone(c.waId)})`;
+    const matches = candidates.filter((c) => mentionsClient(input.data.client, c));
+    if (matches.length === 0) return fail("Klien tidak ditemukan di chat seminggu terakhir. Tanyakan nama atau 4 digit akhir nomornya.");
+    if (matches.length > 1) return fail("Ada beberapa klien yang cocok; tanyakan yang mana", matches.map(label));
+    const [chat] = matches;
+    if (chat.mode === "HUMAN") {
+      const { count } = await prisma.waConversation.updateMany({ where: { id: chat.id, mode: "HUMAN" }, data: { mode: "BOT" } });
+      if (count === 1) {
+        await prisma.activityLog.create({
+          data: {
+            entityType: "WaConversation",
+            entityId: chat.id,
+            action: "WA_CHAT_RETURNED_TO_BOT",
+            actorId: ctx.owner.user.id,
+            previousValue: { mode: "HUMAN" },
+            newValue: { mode: "BOT", via: "owner_whatsapp" },
+          },
+        });
+      }
+    }
+    ctx.result.returnedChats.push({ conversationId: chat.id, label: label(chat) });
+    return ok({ returned: true, client: label(chat), alreadyBot: chat.mode !== "HUMAN" });
   }
 
   return fail(`Tool ${name} tidak tersedia`);

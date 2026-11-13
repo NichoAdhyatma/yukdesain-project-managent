@@ -358,3 +358,16 @@ describe("tambahan brief setelah brief dikunci (kasus Alfa Indah 2026-11-12)", (
     expect(state).toContain("add_brief_note");
   });
 });
+
+describe("evaluasi chat 13 Nov (Mr.K4z)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("catatan tanpa field brief masuk add_brief_note; tidak mengaku mencatat tanpa tool", () => {
+    expect(prompt).toContain("Permintaan klien yang tidak punya field brief");
+    expect(prompt).toContain("Jangan pernah bilang sudah dicatat, disimpan, atau diteruskan ke tim kalau belum ada tool yang berhasil");
+  });
+
+  it("foto daftar menu / foto produk masuk referensi, bukan logo", () => {
+    expect(prompt).toContain("logos_json hanya untuk logo");
+  });
+});

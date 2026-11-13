@@ -2,7 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const proposals = vi.hoisted(() => ({ createProposal: vi.fn(), findPendingProposal: vi.fn() }));
 const queries = vi.hoisted(() => ({ answerOwnerQuery: vi.fn() }));
-vi.mock("@/lib/db", () => ({ prisma: {} }));
+const db = vi.hoisted(() => ({
+  waConversation: { findMany: vi.fn(), updateMany: vi.fn() },
+  activityLog: { create: vi.fn() },
+}));
+vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/studio", () => ({ getStudioSettings: async () => ({ name: "YukDesain Studio" }) }));
 vi.mock("../owner/proposals", async (orig) => ({ ...(await orig<typeof import("../owner/proposals")>()), ...proposals }));
 vi.mock("../owner/query-store", () => queries);
@@ -19,14 +23,15 @@ const base = {
   knowledgeFiles: [{ title: "Gaya komunikasi", whenToUse: "", content: "Sapa dengan kak." }],
 };
 
-type OpenClient = { profileName: string | null; waId: string };
+type OpenClient = { profileName: string | null; waId: string; createdAt: Date };
+const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
 function ctx(over: { openQueries?: Map<string, OpenClient>; ownerText?: string; repliedQueryId?: string | null } = {}) {
-  const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [], resendQueryIds: [], stopReason: null };
+  const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [], resendQueryIds: [], returnedChats: [], stopReason: null };
   return {
     owner,
     conversationId: "conv_o",
     current: { guide: base, version: 4 },
-    openQueries: new Map([["q_1", { profileName: "Sari", waId: "6281234567890" }]]),
+    openQueries: new Map([["q_1", { profileName: "Sari", waId: "6281234567890", createdAt: minutesAgo(30) }]]),
     unrelayedIds: new Set(["q_9"]),
     ownerText: "BISA",
     repliedQueryId: null,
@@ -182,8 +187,8 @@ describe("jawaban owner yang belum terkirim (review produksi 2026-11-11)", () =>
 // AI menebak Coffee Duri Citata; lalu bilang ke owner jawabannya "belum tentu tersimpan" padahal sudah terkirim.
 describe("jawaban owner saat beberapa pertanyaan terbuka", () => {
   const two = new Map<string, OpenClient>([
-    ["q_coffee", { profileName: "Coffee Duri Citata", waId: "6281200002256" }],
-    ["q_mahre", { profileName: "Mahresyiadnan", waId: "6283100008846" }],
+    ["q_coffee", { profileName: "Coffee Duri Citata", waId: "6281200002256", createdAt: minutesAgo(67) }],
+    ["q_mahre", { profileName: "Mahresyiadnan", waId: "6283100008846", createdAt: minutesAgo(10) }],
   ]);
 
   it("tanpa reply dan tanpa menyebut klien → ditolak, AI diminta menanyakan yang mana", async () => {
@@ -239,5 +244,88 @@ describe("jawaban owner saat beberapa pertanyaan terbuka", () => {
     const prompt = buildOwnerSystemPrompt("YukDesain");
     expect(prompt).toContain("minta owner menyebut nama klien atau me-reply pesan pertanyaannya");
     expect(prompt).toContain("Jangan bilang jawaban owner belum tersimpan");
+  });
+});
+
+// Produksi 13 Nov 07:51–07:53: pertanyaan hastalinuwih baru masuk 1 menit sebelumnya, pertanyaan lain berumur
+// berjam-jam, tetapi "BISA, namun tanyakan dulu detail desainnya" ditolak sampai owner mengetik "9821".
+describe("jawaban owner untuk satu pertanyaan yang baru masuk", () => {
+  const open = new Map<string, OpenClient>([
+    ["q_wietas", { profileName: "CV WIETAS Creative Studio", waId: "6285100006679", createdAt: minutesAgo(21 * 60) }],
+    ["q_day", { profileName: "Day", waId: "6285100008867", createdAt: minutesAgo(17 * 60) }],
+    ["q_hasta", { profileName: "hastalinuwih", waId: "6282300009821", createdAt: minutesAgo(1) }],
+  ]);
+
+  it("pertanyaan terbaru (≤10 menit) dan yang lain jauh lebih lama → dicatat untuk pertanyaan terbaru", async () => {
+    const c = ctx({ openQueries: open, ownerText: "BISA, namun kamu tanyakan dulu detail desainnya" });
+    expect((await executeOwnerTool("answer_client_query", { query_id: "q_hasta", approved: true }, c)).isError).toBe(false);
+  });
+
+  it("tetap ditolak untuk pertanyaan lama yang tidak disebut", async () => {
+    const c = ctx({ openQueries: open, ownerText: "BISA" });
+    expect((await executeOwnerTool("answer_client_query", { query_id: "q_day", approved: true }, c)).isError).toBe(true);
+  });
+
+  it("dua pertanyaan baru berdekatan (12 Nov 18:57) → tetap ditanyakan yang mana", async () => {
+    const two = new Map<string, OpenClient>([
+      ["q_a", { profileName: "A", waId: "6281100001111", createdAt: minutesAgo(9) }],
+      ["q_b", { profileName: "B", waId: "6281100002222", createdAt: minutesAgo(5) }],
+    ]);
+    expect((await executeOwnerTool("answer_client_query", { query_id: "q_b", approved: true }, ctx({ openQueries: two, ownerText: "BISA" }))).isError).toBe(true);
+  });
+
+  it("prompt: jawaban tanpa reply sesaat setelah satu pertanyaan baru masuk dianggap untuk pertanyaan itu", () => {
+    expect(buildOwnerSystemPrompt("YukDesain")).toContain("baru masuk (10 menit terakhir)");
+  });
+});
+
+// Produksi 13 Nov 07:48: owner menulis "nomor berakhiran 2367 coba kamu jawab" (Mif, mode admin sejak kemarin);
+// asisten owner tidak punya cara mengembalikan chat ke bot.
+describe("return_chat_to_bot", () => {
+  const chats = [
+    { id: "c_mif", waId: "6281100002367", profileName: "Mif", mode: "HUMAN" },
+    { id: "c_xn", waId: "6281100009999", profileName: "Xn", mode: "BOT" },
+  ];
+  beforeEach(() => {
+    db.waConversation.findMany.mockResolvedValue(chats);
+    db.waConversation.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  it("4 digit akhir nomor → chat kembali ke bot, tercatat di ActivityLog, dilaporkan untuk dibalas", async () => {
+    const c = ctx();
+    const out = await executeOwnerTool("return_chat_to_bot", { client: "2367" }, c);
+    expect(out.isError).toBe(false);
+    expect(db.waConversation.updateMany).toHaveBeenCalledWith({ where: { id: "c_mif", mode: "HUMAN" }, data: { mode: "BOT" } });
+    expect(db.activityLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ entityType: "WaConversation", entityId: "c_mif", action: "WA_CHAT_RETURNED_TO_BOT", actorId: "u_owner" }),
+    });
+    expect(c.result.returnedChats).toEqual([{ conversationId: "c_mif", label: "Mif (6281****2367)" }]);
+    expect(db.waConversation.findMany.mock.calls[0][0].where).toMatchObject({ isSandbox: false, blockedAt: null });
+  });
+
+  it("nama klien juga bisa", async () => {
+    const c = ctx();
+    expect((await executeOwnerTool("return_chat_to_bot", { client: "Mif" }, c)).isError).toBe(false);
+    expect(c.result.returnedChats.map((r) => r.conversationId)).toEqual(["c_mif"]);
+  });
+
+  it("tidak ketemu atau lebih dari satu → error ke model, tidak ada yang diubah", async () => {
+    expect((await executeOwnerTool("return_chat_to_bot", { client: "Budi" }, ctx())).isError).toBe(true);
+    db.waConversation.findMany.mockResolvedValue([...chats, { id: "c_mif2", waId: "6281100005555", profileName: "Mif Dua", mode: "HUMAN" }]);
+    const out = await executeOwnerTool("return_chat_to_bot", { client: "Mif" }, ctx());
+    expect(out.isError).toBe(true);
+    expect(out.content).toContain("Mif Dua");
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("chat yang sudah dilayani bot: tidak diubah, tetapi pesan yang tertinggal tetap dicek", async () => {
+    const c = ctx();
+    expect((await executeOwnerTool("return_chat_to_bot", { client: "9999" }, c)).isError).toBe(false);
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+    expect(c.result.returnedChats.map((r) => r.conversationId)).toEqual(["c_xn"]);
+  });
+
+  it("prompt: perintah owner untuk membalas chat klien memakai return_chat_to_bot", () => {
+    expect(buildOwnerSystemPrompt("YukDesain")).toContain("return_chat_to_bot");
   });
 });
