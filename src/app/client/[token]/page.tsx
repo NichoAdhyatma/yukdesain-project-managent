@@ -293,9 +293,13 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
     </span>
   );
 
+  // Dibuka akun desainer: data keuangan tidak dikirim server, hanya kartu Revisi (keputusan owner 2026-11-13).
+  const showFinance = !project.financeHidden;
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className={cn("grid grid-cols-1 gap-3", showFinance && "sm:grid-cols-3")}>
       {/* Pembayaran: yang sudah dibayar dan sisanya langsung terlihat (audit 009 #2) */}
+      {showFinance && (
       <button type="button" className={clickable} onClick={onPaymentClick}>
         <div className="flex items-center justify-between gap-2 mb-2">
           <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
@@ -327,6 +331,7 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
         <p className="mt-1 text-xs text-muted-foreground tabular-nums">Dibayar {formatCurrency(project.paidAmount)}</p>
         {action("Lihat pembayaran")}
       </button>
+      )}
 
       {/* Revisi: informasi, tidak bisa diketuk */}
       <div className="rounded-xl border bg-card text-left p-4">
@@ -351,6 +356,7 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
       </div>
 
       {/* Invoice */}
+      {showFinance && (
       <button type="button" className={clickable} onClick={onInvoiceClick}>
         <div className="flex items-center gap-2 mb-2">
           <Receipt className="h-4 w-4 text-muted-foreground" aria-hidden />
@@ -366,6 +372,7 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
         )}
         {action(latestInvoice ? "Lihat & unduh" : "Lihat detail")}
       </button>
+      )}
     </div>
   );
 }
@@ -389,10 +396,13 @@ function NextStepCard({
   let title: string;
   let body: string;
   let cta: { label: string; onClick: () => void } | null = null;
-  if (project.finalApprovedAt && balance > 0 && hasFinalFiles) {
+  if (project.finalApprovedAt && balance > 0 && hasFinalFiles && !project.financeHidden) {
     title = "Bayar pelunasan untuk membuka file final";
     body = `Sisa ${formatCurrency(balance)}. Setelah admin mencatat pelunasan, file final langsung bisa diunduh.`;
     cta = { label: "Lihat cara bayar", onClick: onPayment };
+  } else if (project.finalApprovedAt && project.financeHidden) {
+    title = "Project selesai";
+    body = "Hasil akhir sudah disetujui klien.";
   } else if (project.finalApprovedAt) {
     title = hasFinalFiles ? "File final siap diunduh" : "Project selesai";
     body = hasFinalFiles ? "Terima kasih sudah mempercayakan desainnya ke kami." : "Terima kasih! File akhir dikirim admin lewat WhatsApp.";
@@ -1115,7 +1125,7 @@ function PaymentTab({
 }) {
   const paymentCfg = paymentStatusConfig[project.paymentStatus] || paymentStatusConfig.UNPAID;
   const remaining = project.agreedPrice - project.paidAmount;
-  const paidPct = Math.round((project.paidAmount / project.agreedPrice) * 100);
+  const paidPct = project.agreedPrice > 0 ? Math.round((project.paidAmount / project.agreedPrice) * 100) : 0;
 
   return (
     <div className="space-y-4">
@@ -1387,7 +1397,10 @@ function FinalFilesCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {locked && (
+        {locked && project.financeHidden && (
+          <p role="note" className="text-sm text-muted-foreground">File final terbuka untuk klien setelah pelunasan.</p>
+        )}
+        {locked && !project.financeHidden && (
           <div
             role="note"
             className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
@@ -1424,7 +1437,7 @@ function FinalFilesCard({
             </li>
           ))}
         </ul>
-        {locked && (
+        {locked && !project.financeHidden && (
           <Button type="button" variant="outline" className="h-11 w-full rounded-xl" onClick={onPaymentClick}>
             <CreditCard className="mr-2 h-4 w-4" aria-hidden />
             Lihat cara bayar pelunasan
@@ -1954,13 +1967,13 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const latestInvoice = project?.invoices?.[0];
   const statusCfg = projectStatusConfig[project.status] || projectStatusConfig.DRAFT;
   const paymentCfg = paymentStatusConfig[project.paymentStatus] || paymentStatusConfig.UNPAID;
-  const paidPct = Math.round((project.paidAmount / project.agreedPrice) * 100);
+  const paidPct = project.agreedPrice > 0 ? Math.round((project.paidAmount / project.agreedPrice) * 100) : 0;
   const workPct = workProgressPercent(project);
 
   const timelineEvents = buildTimeline(project);
   const deadlineStr = project.deadline ? formatDate(project.deadline) : "-";
 
-  const tabs = [
+  const allTabs = [
     {
       id: "brief" as const,
       label: "Brief",
@@ -1981,6 +1994,8 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
       badge: paymentCfg.label,
     },
   ];
+  // Dibuka akun desainer: tab Invoice dan Pembayaran tidak ditampilkan (keputusan owner 2026-11-13).
+  const tabs = project.financeHidden ? allTabs.filter((t) => t.id === "brief") : allTabs;
 
   return (
     <>

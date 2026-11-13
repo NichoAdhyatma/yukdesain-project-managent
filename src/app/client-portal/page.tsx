@@ -11,6 +11,8 @@ import Link from "next/link";
 
 export default function ClientPortalPage() {
   const [code, setCode] = useState("");
+  // 4 digit akhir nomor WhatsApp klien: kode project saja tidak cukup (keputusan owner 2026-11-13).
+  const [phone, setPhone] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [studioName, setStudioName] = useState(STUDIO_DEFAULTS.name);
@@ -24,13 +26,13 @@ export default function ClientPortalPage() {
 
   const handleLookup = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code.trim()) return;
+    if (!code.trim() || phone.length !== 4) return;
 
     setLoading(true);
     setError("");
 
     try {
-      const res = await fetch(`/api/portal/lookup?code=${encodeURIComponent(code.trim())}`);
+      const res = await fetch(`/api/portal/lookup?code=${encodeURIComponent(code.trim())}&phone=${encodeURIComponent(phone)}`);
       const data = await res.json();
 
       if (!res.ok) {
@@ -61,7 +63,7 @@ export default function ClientPortalPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-lg">Lacak Pesanan</CardTitle>
             <CardDescription>
-              Masukkan kode project yang telah diberikan oleh designer
+              Masukkan kode project dan 4 digit terakhir nomor WhatsApp yang dipakai saat order
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -80,13 +82,32 @@ export default function ClientPortalPage() {
                 />
               </div>
 
+              <div className="space-y-2">
+                <Label htmlFor="phone4">4 digit terakhir nomor WhatsApp</Label>
+                <Input
+                  id="phone4"
+                  inputMode="numeric"
+                  pattern="[0-9]{4}"
+                  maxLength={4}
+                  placeholder="Contoh: 7890"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  aria-describedby="phone4-help"
+                  className="text-center font-mono text-base tracking-[0.5em] placeholder:tracking-normal"
+                  autoComplete="off"
+                />
+                <p id="phone4-help" className="text-xs text-muted-foreground">
+                  Nomor WhatsApp yang dipakai saat memesan.
+                </p>
+              </div>
+
               {error && (
-                <p className="text-sm text-destructive text-center bg-destructive/10 rounded-lg px-3 py-2">
+                <p role="alert" className="text-sm text-destructive text-center bg-destructive/10 rounded-lg px-3 py-2">
                   {error}
                 </p>
               )}
 
-              <Button type="submit" className="w-full" disabled={loading || !code.trim()}>
+              <Button type="submit" className="h-11 w-full" disabled={loading || !code.trim() || phone.length !== 4}>
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -106,7 +127,7 @@ export default function ClientPortalPage() {
         {/* Info */}
         <div className="text-center space-y-2">
           <p className="text-xs text-muted-foreground">
-            Kode project diberikan oleh designer setelah brief diterima.
+            Kode project ada di pesan konfirmasi order dari kami.
           </p>
           <p className="text-xs text-muted-foreground">
             Contoh: <code className="font-mono bg-muted px-1.5 py-0.5 rounded">PRJ-20261010-K7M4Q2</code>
