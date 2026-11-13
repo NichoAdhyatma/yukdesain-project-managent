@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const db = vi.hoisted(() => ({ project: { findFirst: vi.fn() } }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 
-import { GET, resetLookupAttempts } from "./route";
+import { GET } from "./route";
+import { resetLookupAttempts } from "@/lib/client-portal/lookup-attempts";
 
 const call = (code: string, phone?: string) =>
   GET(new Request(`http://x/api/portal/lookup?code=${encodeURIComponent(code)}${phone !== undefined ? `&phone=${phone}` : ""}`));

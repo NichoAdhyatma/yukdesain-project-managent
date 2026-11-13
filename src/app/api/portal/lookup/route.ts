@@ -1,21 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { clearLookupAttempts, isLookupLocked, recordFailedLookup } from "@/lib/client-portal/lookup-attempts";
 
 // "Lacak pesanan": kode project + 4 digit akhir nomor WhatsApp klien (keputusan owner 2026-11-13). Sebelumnya kode
 // project saja cukup untuk membuka portal lengkap dengan invoice, dan kode itu terlihat oleh desainer di Workspace.
 // Klien yang membuka link portal dari WhatsApp tidak melewati halaman ini.
-
-/** Percobaan 4 digit salah per kode project sebelum dikunci sementara. */
-export const MAX_FAILED_LOOKUPS = 5;
-export const LOOKUP_LOCK_MS = 15 * 60_000;
-
-// Satu proses Node di VPS: cukup di memori (restart hanya mengosongkan hitungan).
-const failures = new Map<string, { count: number; firstAt: number }>();
-
-/** Untuk tes. */
-export function resetLookupAttempts(): void {
-  failures.clear();
-}
 
 const lastFour = (phone: string | null | undefined) => {
   const digits = (phone ?? "").replace(/\D/g, "");
@@ -36,10 +25,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Isi 4 digit terakhir nomor WhatsApp yang dipakai saat order." }, { status: 400 });
   }
 
-  const now = Date.now();
-  const tried = failures.get(code);
-  if (tried && now - tried.firstAt > LOOKUP_LOCK_MS) failures.delete(code);
-  if ((failures.get(code)?.count ?? 0) >= MAX_FAILED_LOOKUPS) {
+  if (isLookupLocked(code)) {
     return NextResponse.json({ error: "Terlalu banyak percobaan. Coba lagi 15 menit lagi, atau minta link project ke admin." }, { status: 429 });
   }
 
@@ -60,8 +46,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Project ini belum punya nomor WhatsApp klien. Minta link project ke admin." }, { status: 404 });
   }
   if (!project || !knownNumbers.includes(phone)) {
-    const current = failures.get(code);
-    failures.set(code, { count: (current?.count ?? 0) + 1, firstAt: current?.firstAt ?? now });
+    recordFailedLookup(code);
     return NextResponse.json({ error: NOT_FOUND }, { status: 404 });
   }
 
@@ -70,6 +55,6 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Link tracking belum dibuat untuk project ini. Hubungi admin." }, { status: 404 });
   }
 
-  failures.delete(code);
+  clearLookupAttempts(code);
   return NextResponse.json({ projectNumber: project.projectNumber, clientName: project.clientName, token: activeLink.token });
 }
