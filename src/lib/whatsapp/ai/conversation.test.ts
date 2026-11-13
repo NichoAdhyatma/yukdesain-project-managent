@@ -143,6 +143,15 @@ describe("runAiTurn", () => {
     expect(result.recentOutbound).toEqual(["invoice", "bot f", "bot e", "bot d", "bot c"]);
   });
 
+  // Produksi 13 Nov (Mif): foto ditolak batas gambar, bot tetap bilang "gambarnya tetap kami terima".
+  it("gambar yang tidak tersimpan diberi tahu jelas ke AI: jangan bilang sudah diterima", async () => {
+    givenHistory([inbound("m_img", "Ini logonya", { type: "image" }), inbound("m_last", "sudah kak")]);
+    create.mockResolvedValue(textResponse("Oke kak"));
+    await runAiTurn(params);
+    expect(sentMessages()[0].content).toContain("TIDAK tersimpan");
+    expect(sentMessages()[0].content).toContain("Jangan bilang gambar ini sudah diterima");
+  });
+
   it("jendela riwayat hanya berisi pesan bot → tetap ada satu pesan user", async () => {
     givenHistory([outbound("o1", "Sudah kami teruskan"), outbound("m_last", "Maaf kak, sistem kami sedang sibuk")]);
     create.mockResolvedValue(textResponse("Kak, templatenya tersedia"));

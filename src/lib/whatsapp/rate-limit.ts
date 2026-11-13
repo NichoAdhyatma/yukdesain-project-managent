@@ -38,9 +38,12 @@ export async function botReplyLimitReached(conversationId: string, now = new Dat
 export async function imageLimitExceeded(conversationId: string, intakeCreatedAt: Date | null, now = new Date()): Promise<boolean> {
   const since = intakeCreatedAt ?? new Date(now.getTime() - 24 * 60 * 60_000);
   const count = await prisma.waMessage.count({
-    where: { conversationId, direction: "INBOUND", type: "image", createdAt: { gte: since } },
+    // Hanya gambar yang benar-benar tersimpan; gambar yang ditolak/gagal diunduh tidak menghabiskan kuota
+    // (produksi 2026-11-13, Mif: foto yang diminta bot untuk dikirim ulang ikut ditolak).
+    where: { conversationId, direction: "INBOUND", type: "image", mediaStorageKey: { not: null }, createdAt: { gte: since } },
   });
-  return count > WA_RATE_LIMITS.imagesPerIntake;
+  // Dicek sebelum gambar baru disimpan.
+  return count >= WA_RATE_LIMITS.imagesPerIntake;
 }
 
 /** Awal bulan kalender di WIB (UTC+7), untuk statistik bulanan. */

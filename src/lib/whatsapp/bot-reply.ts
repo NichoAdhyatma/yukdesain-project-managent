@@ -19,7 +19,7 @@ export const BOT_REPLIES = {
   handoff: "Baik kak, admin kami sudah dikabari dan akan membalas di chat ini secepatnya ya.",
   busy: "Maaf kak, sistem kami sedang sibuk. Admin kami akan membalas secepatnya ya.",
   tooManyMessages: "Kak, pesannya banyak sekali dalam waktu singkat. Kami balas lagi beberapa menit lagi ya.",
-  tooManyImages: "Maaf kak, gambar untuk order ini sudah banyak sekali, jadi gambar ini tidak kami simpan. Kalau masih ada gambar penting, ketik *admin* untuk dibantu tim kami.",
+  tooManyImages: "Maaf kak, gambar untuk order ini sudah banyak sekali, jadi gambar berikutnya belum kami simpan. Admin kami sudah dikabari dan akan membantu langsung ya.",
   dailyLimit: "Kak, percakapan hari ini sudah panjang sekali. Kami teruskan ke admin supaya bisa dibantu langsung ya.",
   monthlyCap: "Pesan kakak sudah kami terima. Admin kami akan membalas secepatnya ya.",
   ownerClientModeOn:

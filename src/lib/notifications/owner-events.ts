@@ -8,7 +8,15 @@ import { notifyOwnersPush, type NotifyEvent } from "./push";
 // instruksi. Owner yang tes sebagai klien (#klien) tetap menerima notifikasi, berjudul "[Tes] …", supaya bisa
 // memastikan notifikasi masuk tanpa nomor kedua.
 
-export type HandoffReason = "client_asked" | "ai_failed" | "daily_limit" | "monthly_brake" | "owner_timeout" | "proof_limit" | "bot_handoff";
+export type HandoffReason =
+  | "client_asked"
+  | "ai_failed"
+  | "daily_limit"
+  | "monthly_brake"
+  | "owner_timeout"
+  | "proof_limit"
+  | "bot_handoff"
+  | "image_limit";
 
 const HANDOFF_TEXT: Record<HandoffReason, string> = {
   client_asked: "klien minta admin",
@@ -18,6 +26,7 @@ const HANDOFF_TEXT: Record<HandoffReason, string> = {
   owner_timeout: "pertanyaan ke owner tidak dijawab",
   proof_limit: "bukti transfer terlalu banyak",
   bot_handoff: "bot mengalihkan ke admin",
+  image_limit: "gambar klien melewati batas",
 };
 
 type ConversationInfo = {
