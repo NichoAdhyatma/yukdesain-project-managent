@@ -18,7 +18,9 @@ Klien chat ke nomor WhatsApp studio. AI (Claude API) melayani klien dari awal sa
 2. Merangkum brief, lalu klien mengonfirmasi ringkasannya.
 3. Admin memberi harga dan deadline di portal.
 4. Sistem mengirim **invoice** (nomor INV-WA-…, tagihan DP sesuai Operasional, sisa pelunasan, deadline) + semua metode bayar aktif (rekening dan gambar QRIS). Bot tidak menyebut DP sendiri (2026-11-11).
-5. Klien mengirim bukti transfer. AI membaca isinya dan menandai kejanggalan.
+5. Klien mengirim bukti transfer. AI membaca isinya dan menandai kejanggalan. Bukti transfer tanpa order `QUOTED`
+   (pelunasan, atau order yang diurus admin langsung tanpa invoice di sistem) tidak memulai order baru: bot bilang
+   bukti diterima dan dicek admin, lalu memanggil admin (2026-11-13, kasus Rina: bot sempat mengirim ulang rincian harga).
 6. Admin memverifikasi lewat checklist di portal. Jika valid, project, brief, payment DP, struk, dan link tracking dibuat otomatis, lalu bot mengirim link tracking ke klien.
 
 Setelah project dibuat, bot juga menjawab pertanyaan status project (read-only).
@@ -927,6 +929,9 @@ merevisi harga di Order WA:
 
 - Nomor invoice `INV-WA-YYYYMMDD-XXXX` (tanggal WIB) dibuat sekali per order (`WaIntake.invoiceNumber`). Revisi harga
   memakai nomor yang sama; saat DP diverifikasi, `Invoice.invoiceNumber` project memakai nomor ini bila belum dipakai.
+- Simpan ulang dengan harga dan deadline yang sama dalam 10 menit sejak invoice terakhir ditolak (409, "tidak dikirim
+  ulang"), tanpa mengubah status atau log (2026-11-13: invoice dan QRIS YAHDI terkirim dua kali dalam 6 detik). Setelah
+  10 menit, simpan ulang tanpa perubahan tetap mengirim ulang invoice, misalnya saat klien kehilangan invoice-nya.
 - Isi (`invoiceMessage`, `src/lib/whatsapp/outbound.ts`): rincian kalkulator (bila totalnya sama dengan harga yang
   disimpan), total, tagihan DP n% dari snapshot order, sisa pelunasan, estimasi pengerjaan, semua `PaymentAccount` aktif
   urut `order` (bank dan e-wallet), lalu ajakan mengirim bukti transfer. Tanpa metode aktif: "Metode pembayaran akan

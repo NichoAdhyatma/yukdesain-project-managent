@@ -30,6 +30,23 @@ const quoteSchema = z.object({
     .refine((d) => d.slice(0, 10) >= todayWib(), "Deadline tidak boleh sebelum hari ini"),
 });
 
+/** Simpan ulang tanpa perubahan dalam rentang ini dianggap klik ganda (produksi 2026-11-13: invoice YAHDI terkirim 2x). */
+const SAME_QUOTE_WINDOW_MS = 10 * 60_000;
+
+function isRecentSameQuote(
+  intake: { status: string; agreedPrice: number | null; deadline: Date | null; quotedAt: Date | null },
+  agreedPrice: number,
+  deadline: string,
+): boolean {
+  return (
+    intake.status === "QUOTED" &&
+    intake.agreedPrice === agreedPrice &&
+    intake.deadline?.toISOString().slice(0, 10) === deadline.slice(0, 10) &&
+    intake.quotedAt !== null &&
+    Date.now() - intake.quotedAt.getTime() < SAME_QUOTE_WINDOW_MS
+  );
+}
+
 // POST: isi/revisi harga + deadline → QUOTED → kirim invoice + semua metode bayar aktif (§3.2, §13;
 // spec 2026-11-11-kb-merge-design §5).
 export async function POST(request: Request, { params }: Params) {
@@ -49,6 +66,7 @@ export async function POST(request: Request, { params }: Params) {
       conversationId: true,
       agreedPrice: true,
       deadline: true,
+      quotedAt: true,
       invoiceNumber: true,
       briefDraft: true,
       service: { select: { name: true, startingPrice: true, packages: true, unitPricing: true } },
@@ -56,6 +74,12 @@ export async function POST(request: Request, { params }: Params) {
   });
   if (!intake) return errorResponse("NOT_FOUND", "Order WA tidak ditemukan");
   if (!intake.service) return errorResponse("UNPROCESSABLE_ENTITY", "Layanan order belum dipilih");
+  if (isRecentSameQuote(intake, agreedPrice, deadline)) {
+    return errorResponse(
+      "CONFLICT",
+      "Invoice dengan harga dan deadline yang sama baru saja dikirim ke klien, jadi tidak dikirim ulang. Ubah harga atau deadline untuk merevisi.",
+    );
+  }
 
   // Penawaran baru memakai DP dari Operasional saat ini dan menyimpannya (docs/STUDIO_OPERATIONS.md).
   const { dpPercent } = await getStudioOperations();

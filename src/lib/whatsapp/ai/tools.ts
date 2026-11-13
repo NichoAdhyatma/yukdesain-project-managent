@@ -280,6 +280,7 @@ export function findActiveIntake(conversationId: string, db: Prisma.TransactionC
       briefDraft: true,
       pricingRulesApplied: true,
       createdAt: true,
+      quotedAt: true,
       agreedPrice: true,
       dpAmount: true,
       service: { select: { id: true, code: true } },

@@ -60,6 +60,15 @@ describe("imageLimitExceeded", () => {
     expect(db.waMessage.count.mock.calls[0][0].where).toMatchObject({ type: "image", mediaStorageKey: { not: null } });
   });
 
+  // Chat dipegang admin: admin sendiri yang meminta foto, jadi batasnya lebih longgar (produksi 13 Nov, Mif: bukti DP
+  // setelah 25 foto brief tidak tersimpan).
+  it("batas bisa diberikan pemanggil", async () => {
+    db.waMessage.count.mockResolvedValue(25);
+    await expect(imageLimitExceeded("c", null, new Date(), 40)).resolves.toBe(false);
+    db.waMessage.count.mockResolvedValue(40);
+    await expect(imageLimitExceeded("c", null, new Date(), 40)).resolves.toBe(true);
+  });
+
   it("dihitung sejak order dibuat", async () => {
     db.waMessage.count.mockResolvedValue(0);
     const created = new Date("2026-10-30T00:00:00Z");

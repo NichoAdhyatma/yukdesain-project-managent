@@ -46,6 +46,7 @@ import { BOT_REPLIES, handleInboundMessage } from "./bot";
 import { replyWithAi } from "./bot-reply";
 import { DP_PLACEHOLDER, PRICE_PLACEHOLDER } from "./ai/reply-guard";
 import { resetCallAdminThrottle } from "./handoff";
+import { WA_RATE_LIMITS } from "@/lib/constants";
 
 // Notifikasi "butuh admin" dibatasi per chat (handoff.ts); setiap tes mulai bersih.
 beforeEach(() => {
@@ -121,6 +122,15 @@ describe("handleInboundMessage", () => {
     expect(limits.imageLimitExceeded).toHaveBeenCalledWith("conv_1", new Date("2026-11-01T00:00:00Z"));
   });
 
+  // Bukti DP dikirim setelah harga keluar: foto brief sebelum invoice tidak boleh menghabiskan kuotanya.
+  it("order sudah diberi harga → batas gambar dihitung sejak invoice dikirim", async () => {
+    givenMessage("image", "");
+    tools.findActiveIntake.mockResolvedValue({ createdAt: new Date("2026-11-01T00:00:00Z"), quotedAt: new Date("2026-11-02T08:00:00Z") });
+    limits.imageLimitExceeded.mockResolvedValue(true);
+    await handleInboundMessage("msg_1");
+    expect(limits.imageLimitExceeded).toHaveBeenCalledWith("conv_1", new Date("2026-11-02T08:00:00Z"));
+  });
+
   // Produksi 13 Nov (Mif): 12 foto sekaligus → 12 pesan "gambar sudah banyak sekali" dalam 8 detik.
   it("banyak gambar melewati batas sekaligus → pesan batas cukup sekali, admin dipanggil sekali", async () => {
     limits.imageLimitExceeded.mockResolvedValue(true);
@@ -182,6 +192,19 @@ describe("handleInboundMessage", () => {
     expect(media.storeInboundMedia).toHaveBeenCalledWith("msg_1");
     expect(api.sendText).not.toHaveBeenCalled();
     expect(ai.runAiTurn).not.toHaveBeenCalled();
+  });
+
+  // Produksi 13 Nov (Mif): bukti DP yang dikirim saat admin melayani tidak tersimpan karena 25 foto brief.
+  it("gambar saat chat dipegang admin → batasnya lebih longgar dan dihitung sejak invoice", async () => {
+    givenMessage("image", "", "HUMAN");
+    tools.findActiveIntake.mockResolvedValue({ createdAt: new Date("2026-11-01T00:00:00Z"), quotedAt: new Date("2026-11-02T08:00:00Z") });
+    await handleInboundMessage("msg_1");
+    expect(limits.imageLimitExceeded).toHaveBeenCalledWith(
+      "conv_1",
+      new Date("2026-11-02T08:00:00Z"),
+      expect.any(Date),
+      WA_RATE_LIMITS.imagesWhileAdmin,
+    );
   });
 
   it("gambar saat bot nonaktif → tetap diunduh; batas gambar tetap berlaku", async () => {
