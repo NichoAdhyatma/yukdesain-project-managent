@@ -1,18 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
-  waOwnerQuery: { findUnique: vi.fn(), update: vi.fn() },
+  waOwnerQuery: { findUnique: vi.fn(), update: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
   waMessage: { findFirst: vi.fn(), count: vi.fn() },
   waConversation: { updateMany: vi.fn() },
 }));
-const botReply = vi.hoisted(() => ({ replyWithAi: vi.fn(), setHumanMode: vi.fn() }));
+const botReply = vi.hoisted(() => ({ replyWithAi: vi.fn() }));
+const handoff = vi.hoisted(() => ({ callAdmin: vi.fn() }));
+vi.mock("../handoff", () => handoff);
 const channel = vi.hoisted(() => ({ getChannel: vi.fn(), usesServiceWindow: vi.fn() }));
 
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("../bot-reply", () => botReply);
 vi.mock("../channel", () => channel);
 
-import { relayOwnerAnswer } from "./queries";
+import { expireOwnerQueries, relayOwnerAnswer } from "./queries";
 
 const HOUR = 3_600_000;
 const query = (over: Record<string, unknown> = {}, conv: Record<string, unknown> = {}) => ({
@@ -62,6 +64,9 @@ describe("relayOwnerAnswer: hasil nyata untuk dilaporkan ke owner", () => {
     channel.usesServiceWindow.mockReturnValue(true);
     db.waOwnerQuery.findUnique.mockResolvedValue(query({}, { lastInboundAt: new Date(Date.now() - 30 * HOUR) }));
     expect(await relayOwnerAnswer("q_1")).toMatchObject({ outcome: "window_closed" });
+    // Keputusan owner 13 Nov: admin dipanggil, chat tidak dipindah ke mode admin.
+    expect(handoff.callAdmin).toHaveBeenCalledWith("conv_c", "owner_timeout");
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
     expect(botReply.replyWithAi).not.toHaveBeenCalled();
   });
 
@@ -92,5 +97,16 @@ describe("relayOwnerAnswer: hasil nyata untuk dilaporkan ke owner", () => {
       expect(await relayOwnerAnswer("q_1", { force: true })).toMatchObject({ outcome: "admin" });
       expect(db.waConversation.updateMany).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("expireOwnerQueries (keputusan owner 13 Nov)", () => {
+  it("pertanyaan kedaluwarsa: status EXPIRED, owner dipanggil, chat klien tidak dipindah ke admin", async () => {
+    db.waOwnerQuery.findMany.mockResolvedValue([{ id: "q_old", conversationId: "conv_c", conversation: { isSandbox: false } }]);
+    db.waOwnerQuery.updateMany.mockResolvedValue({ count: 1 });
+    expect(await expireOwnerQueries(new Date())).toBe(1);
+    expect(db.waOwnerQuery.updateMany).toHaveBeenCalledWith({ where: { id: "q_old", status: "PENDING" }, data: { status: "EXPIRED" } });
+    expect(handoff.callAdmin).toHaveBeenCalledWith("conv_c", "owner_timeout");
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
   });
 });

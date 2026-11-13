@@ -11,7 +11,12 @@ Supaya owner/admin cepat bertindak tanpa harus membuka portal terus. Disetujui d
    - Brief lengkap → **Perlu harga**
    - **Bukti DP masuk** → perlu dicek
    - **Klien baru** mulai chat (nomor yang pertama kali menghubungi bot)
-   - **Chat dialihkan ke admin** (klien ketik "admin", AI gagal/"sibuk", batas harian, rem bulanan)
+   - **Chat menunggu admin** (klien ketik "admin", AI gagal/"sibuk", batas harian, rem bulanan, bot memanggil admin,
+     pertanyaan owner kedaluwarsa, bukti transfer terlalu banyak). Sejak 2026-11-13 (keputusan owner) kejadian ini
+     **tidak** memindahkan chat ke mode admin: bot tetap melayani, chat baru pindah ke mode admin bila admin sendiri
+     membalas (dari HP, tombol Ambil alih, atau balasan dari portal). Notifikasi paling banyak sekali per 30 menit per
+     chat dan alasan. Pesan sibuk / batas harian / rem bulanan ke klien hanya dikirim sekali (tidak diulang bila sudah
+     menjadi pesan terakhir bot); selama batas harian atau rem bulanan, bot diam setelah pesan itu.
 3. **Inbox baru** berisi semua chat WhatsApp, termasuk nomor yang belum punya order.
 
 ## 2. Notifikasi web push
@@ -84,8 +89,10 @@ Menu **Order WA** mendapat dua tab: **Order** (daftar yang sekarang) dan **Inbox
 - Kirim: `src/lib/notifications/push.ts` (`notifyOwnersPush`, `sendTestPush`, prefs `User.notifyPrefs.disabled`),
   kejadian: `src/lib/notifications/owner-events.ts`. Notifikasi tidak ditunggu (`void`) supaya balasan bot tidak tertunda.
 - Pemicu: `confirm_brief` (status Perlu harga) dan `submit_payment_proof` di `ai/tools.ts`; pesan masuk pertama sebuah
-  nomor di `bot.ts` (juga saat Balas otomatis nonaktif); `setHumanMode(conversationId, reason)` di
-  `src/lib/whatsapp/handoff.ts`, hanya saat chat berpindah dari bot (`updateMany` mode BOT → HUMAN).
+  nomor di `bot.ts` (juga saat Balas otomatis nonaktif); `callAdmin(conversationId, reason)` di
+  `src/lib/whatsapp/handoff.ts` (tanpa mengubah mode chat, dibatasi `CALL_ADMIN_INTERVAL_MS` = 30 menit per chat dan
+  alasan). Mode HUMAN hanya dari balasan admin: `phone-takeover.ts` (HP), `POST /api/wa-conversations/[id]/mode` dan
+  `/api/wa-intakes/[id]/mode` (Ambil alih), balasan manual dari portal.
 - PWA: `src/app/manifest.ts` (dinamis, logo studio) dan `public/sw.js` (tanpa cache offline). Keduanya ada di
   `PUBLIC_PATHS` proxy karena browser mengambil manifest tanpa cookie.
 - Inbox: `src/lib/whatsapp/inbox.ts`, `GET /api/wa-conversations` (+`[id]`, `mode`, `block`, `messages`); aktivitas

@@ -26,7 +26,7 @@ export function returnedChatReport(label: string, outcome: ResumeOutcome): strin
     case "nothing_pending":
       return `Chat ${label} sudah dilayani bot lagi. Belum ada pesan klien yang perlu dibalas; bot membalas pesan berikutnya.`;
     case "failed":
-      return `Chat ${label} sudah dikembalikan ke bot, tapi bot gagal membalas, jadi chat dialihkan ke admin lagi. Balas klien manual dari Inbox.`;
+      return `Chat ${label} sudah dilayani bot lagi, tapi bot gagal membalas pesan terakhir klien. Bot mencoba lagi saat klien mengirim pesan berikutnya, atau balas klien manual dari Inbox.`;
     default:
       return `Chat ${label} sudah dilayani bot lagi, tapi Balas otomatis sedang nonaktif, jadi belum ada balasan ke klien.`;
   }
@@ -41,7 +41,7 @@ export function relayReport({ outcome, clientLabel }: RelayResult, isResend: boo
     case "sent":
       return `Jawaban untuk ${clientLabel} sudah terkirim ke klien.`;
     case "failed":
-      return `Jawaban untuk ${clientLabel} tersimpan, tapi belum terkirim karena AI sedang gagal. Chat klien dialihkan ke admin. Balas *kirim ulang* untuk mencoba lagi, atau balas klien manual dari Inbox.`;
+      return `Jawaban untuk ${clientLabel} tersimpan, tapi belum terkirim karena AI sedang gagal. Balas *kirim ulang* untuk mencoba lagi, atau balas klien manual dari Inbox.`;
     case "admin":
       return `Jawaban untuk ${clientLabel} tersimpan, tapi tidak dikirim bot karena chat sedang ditangani admin. Balas klien manual dari Inbox.`;
     case "window_closed":
