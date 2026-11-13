@@ -7,7 +7,7 @@ import { normalizePricing, type BotService } from "@/lib/whatsapp/ai/service-cat
 export type PriceInput = { packageName?: string; units?: number };
 export type PriceResult = { ok: true; total: number; breakdown: string } | { ok: false; error: string };
 
-type PricedService = Pick<BotService, "startingPrice" | "packages" | "unitPricing">;
+export type PricedService = Pick<BotService, "startingPrice" | "packages" | "unitPricing">;
 
 export function calculatePrice(service: PricedService, input: PriceInput): PriceResult {
   const { packages, unitPricing: unit } = service;

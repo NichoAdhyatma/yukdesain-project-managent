@@ -101,6 +101,18 @@ sedang mengirim menu satu per satu.
   sebelumnya): bila satu pertanyaan masuk dalam 10 menit terakhir (`FRESH_QUERY_MS`) dan semua pertanyaan terbuka
   lain minimal 60 menit lebih lama (`OLDER_QUERY_GAP_MS`), jawaban tanpa reply/nama dicatat untuk pertanyaan baru itu.
   Dua pertanyaan baru yang berdekatan tetap ditanyakan yang mana.
+- Pengecualian kedua (2026-11-13 21:26, kasus Alfa Press: owner bertanya "2701 itu pesan berapa desain?", lalu
+  "BISA, namun ada tambahan biaya 50%" tetap dibalas "sebutkan Alfa Press (2701)"): bila pesan owner lain dalam 30
+  menit terakhir (`OWNER_FOCUS_MS`) menyebut tepat satu klien yang punya satu pertanyaan terbuka, jawaban tanpa
+  reply/nama dicatat untuk pertanyaan itu. Dua klien disebut, atau klien itu punya dua pertanyaan terbuka → tetap
+  ditanyakan yang mana.
+- STATE memuat 10 pertanyaan terbuka **terbaru** (sebelumnya 10 terlama, sehingga pertanyaan yang baru masuk tidak
+  terlihat asisten saat antrean ramai).
+- **Hitungan total untuk owner (2026-11-13 21:55, kasus Alfa Press: owner minta "2701 itu minta totalan… tinggal hitung
+  aja", asisten menolak, klien membatalkan karena tidak dapat angka):** tool `calculate_order_total` menghitung harga
+  katalog layanan (paket/unit bila ada, `calculatePrice`) × jumlah desain + persen tambahan yang owner sebut, mis.
+  5 banner × Rp135.000 = Rp675.000, tambahan 50% = Rp337.500, total Rp1.012.500. Hasil hanya untuk owner; harga ke
+  klien tetap lewat invoice Order WA (atau catatan jawaban pertanyaan klien yang masih terbuka).
 - **Kembalikan chat klien ke bot lewat WA (2026-11-13, kasus Mif: "nomor berakhiran 2367 coba kamu jawab"):** tool
   asisten owner `return_chat_to_bot` mencari chat klien seminggu terakhir dari nama atau 4 digit akhir nomor; tepat
   satu → mode BOT (ActivityLog `WA_CHAT_RETURNED_TO_BOT`, `via: owner_whatsapp`), lalu sistem menjawab pesan klien
