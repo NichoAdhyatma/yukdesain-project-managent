@@ -197,7 +197,8 @@ export const WA_MAX_FAILED_LOOKUPS_PER_HOUR = 5;
 export const WA_RATE_LIMITS = {
   inboundPerWindow: 20, // pesan masuk per nomor… (10 terlalu ketat untuk wawancara brief, 2026-11-12)
   inboundWindowMinutes: 5, // …per 5 menit → peringatan sekali, sisanya diabaikan
-  imagesPerIntake: 20, // gambar per order → tolak, arahkan ke admin
+  imagesPerIntake: 20, // gambar per tahap order (brief, lalu sejak invoice) → tolak, arahkan ke admin
+  imagesWhileAdmin: 40, // saat chat dipegang admin / bot nonaktif: admin sendiri yang meminta foto (Mif, 2026-11-13)
   botRepliesPerDay: 80, // balasan bot per nomor per hari → mode HUMAN
   outboundMonthlyWarning: 800, // pesan keluar per bulan → banner peringatan
   outboundMonthlyFreeTier: 1000, // kuota gratis Meta per nomor per bulan (§5.3)

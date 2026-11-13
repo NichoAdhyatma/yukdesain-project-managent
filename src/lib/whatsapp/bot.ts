@@ -13,6 +13,7 @@ import { handleOwnerMessage } from "./owner/handle";
 import { notifyNewClient } from "@/lib/notifications/owner-events";
 import { SMALL_TALK_SILENT_STATUSES, getMonthlyBrake, isSmallTalk, notifyOwnersBrakeOnce } from "./spam-guard";
 import { resendPendingInvoice } from "./invoice";
+import { WA_RATE_LIMITS } from "@/lib/constants";
 
 export { BOT_REPLIES, sendBotText } from "./bot-reply";
 
@@ -132,7 +133,7 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
 
   if (message.type === "image") {
     const intake = await findActiveIntake(conversation.id);
-    if (await imageLimitExceeded(conversation.id, intake?.createdAt ?? null)) {
+    if (await imageLimitExceeded(conversation.id, imageWindowStart(intake))) {
       callAdmin(conversation.id, "image_limit");
       if (onceWithin(`image-limit:${conversation.id}`, IMAGE_LIMIT_NOTICE_MS)) await sendBotText(conversation, BOT_REPLIES.tooManyImages);
       return;
@@ -168,17 +169,27 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
 /**
  * Bot tidak membalas (nonaktif / chat dipegang admin), tetapi gambar klien tetap diunduh ke storage privat supaya
  * terlihat di Inbox dan bisa dibaca bot setelah chat dikembalikan. Produksi 2026-11-13 (Mif): 10 foto saat mode admin
- * tidak pernah diunduh. Batas gambar per order tetap berlaku; gagal unduh tidak menghentikan apa pun.
+ * tidak pernah diunduh. Batasnya lebih longgar dari mode bot (admin sendiri yang meminta foto); gagal unduh tidak
+ * menghentikan apa pun.
  */
 async function storeImageWhileSilent(message: { id: string; type: string }, conversationId: string): Promise<void> {
   if (message.type !== "image") return;
   const intake = await findActiveIntake(conversationId);
-  if (await imageLimitExceeded(conversationId, intake?.createdAt ?? null)) return;
+  if (await imageLimitExceeded(conversationId, imageWindowStart(intake), new Date(), WA_RATE_LIMITS.imagesWhileAdmin)) return;
   try {
     await storeInboundMedia(message.id);
   } catch (error) {
     console.error("[whatsapp] unduh gambar saat bot diam gagal:", (error as Error).name);
   }
+}
+
+/**
+ * Kuota gambar dihitung per tahap order: sejak order dibuat, lalu mulai lagi sejak invoice dikirim, supaya foto brief
+ * tidak menghabiskan kuota bukti transfer (produksi 2026-11-13, Mif: bukti DP setelah 25 foto brief tidak tersimpan).
+ */
+function imageWindowStart(intake: { createdAt: Date; quotedAt?: Date | null } | null): Date | null {
+  if (!intake) return null;
+  return intake.quotedAt && intake.quotedAt > intake.createdAt ? intake.quotedAt : intake.createdAt;
 }
 
 /** Order terakhir sudah lewat tahap brief (menunggu harga, verifikasi DP, atau sudah jadi project). */

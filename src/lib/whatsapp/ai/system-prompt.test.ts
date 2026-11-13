@@ -339,6 +339,17 @@ describe("pelunasan project yang sudah berjalan (2026-11-12)", () => {
   });
 });
 
+// Produksi 13 Nov (Rina): order dikerjakan admin lewat HP tanpa invoice di sistem. Klien kirim bukti transfer, bot
+// malah membuat order baru dan mengirim ulang rincian harga serta menanyakan bentuk cup yang sudah dikirim.
+describe("bukti transfer tanpa invoice di sistem (kasus Rina 2026-11-13)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("tidak memulai order atau brief; bukti diteruskan ke admin", () => {
+    expect(prompt).toContain("Klien mengirim bukti transfer atau bilang sudah transfer, tetapi tidak ada order berstatus QUOTED di STATE");
+    expect(prompt).toContain("jangan memanggil start_intake, jangan mengirim rincian harga, dan jangan menanyakan brief");
+  });
+});
+
 describe("tambahan brief setelah brief dikunci (kasus Alfa Indah 2026-11-12)", () => {
   const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
 

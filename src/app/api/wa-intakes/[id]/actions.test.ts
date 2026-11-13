@@ -133,6 +133,24 @@ describe("POST quote", () => {
     expect(outbound.sendInvoiceToClient).not.toHaveBeenCalled();
   });
 
+  // Produksi 13 Nov (YAHDI): harga yang sama disimpan dua kali dalam 6 detik → invoice + QRIS terkirim dua kali.
+  it("harga & deadline sama dengan invoice yang baru dikirim → 409, invoice tidak dikirim ulang", async () => {
+    intake("QUOTED", { agreedPrice: 135000, deadline: new Date(`${tomorrow}T00:00:00.000Z`), quotedAt: new Date(Date.now() - 6000) });
+    const res = await quote(req({ agreedPrice: 135000, deadline: tomorrow }), ctx);
+    expect(res.status).toBe(409);
+    expect((await res.json()).message).toContain("tidak dikirim ulang");
+    expect(outbound.sendInvoiceToClient).not.toHaveBeenCalled();
+    expect(db.waIntake.updateMany).not.toHaveBeenCalled();
+    expect(db.activityLog.create).not.toHaveBeenCalled();
+  });
+
+  it("harga & deadline sama tetapi invoice sudah lama → boleh dikirim ulang (klien kehilangan invoice)", async () => {
+    intake("QUOTED", { agreedPrice: 135000, deadline: new Date(`${tomorrow}T00:00:00.000Z`), quotedAt: new Date(Date.now() - 60 * 60_000) });
+    const res = await quote(req({ agreedPrice: 135000, deadline: tomorrow }), ctx);
+    expect(res.status).toBe(200);
+    expect(outbound.sendInvoiceToClient).toHaveBeenCalledTimes(1);
+  });
+
   it("klik ganda (status sudah berubah) → 409", async () => {
     intake("AWAITING_QUOTE");
     db.waIntake.updateMany.mockResolvedValue({ count: 0 });
