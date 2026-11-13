@@ -9,6 +9,8 @@ import { EMPTY_GUIDE, botGuideSchema, describeRuleValue, getDraftGuide, getPubli
 import { createProposal, findPendingProposal, isNoChange } from "../owner/proposals";
 import { answerOwnerQuery } from "../owner/query-store";
 import { sandboxWaId, type OwnerContext } from "../owner/identity";
+import { calculateOrderTotal } from "../owner/order-total";
+import { BOT_SERVICE_SELECT, toBotService } from "./service-catalog";
 
 // Percakapan owner ↔ bot (docs/WHATSAPP_OWNER_COMMANDS.md §4–5). Terpisah dari percakapan
 // klien: prompt, STATE, dan tools sendiri. AI hanya membuat usulan; penerapannya lewat YA
@@ -34,17 +36,21 @@ export function buildOwnerSystemPrompt(studioName: string): string {
 - Aturan harga hanya untuk potongan atau biaya tambahan dengan nilai pasti: kind DISCOUNT atau SURCHARGE; amountType FIXED (rupiah, angka bulat, mis. 50rb = 50000) atau PERCENT. condition = syarat dari owner. note = cara menyampaikan jika owner meminta (mis. "pakai kalimat promosi yang menarik"). Pertahankan id aturan yang sudah ada.
 - Bot sudah otomatis bertanya ke owner untuk permintaan di luar katalog. Jika owner memberi instruksi soal itu, cukup tambahkan aturan tambahan yang menjelaskan kapan bot perlu bertanya.
 - Jika nilai, syarat, atau maksud instruksi belum jelas, tanyakan dulu sebelum membuat usulan.
-- Tidak bisa diubah lewat panduan: harga dan paket layanan (diatur di menu Layanan portal), bot menghitung total di luar kalkulator, menyebut nominal/persen DP, menyatakan DP valid, atau membahas topik di luar studio. Jika owner meminta itu, jelaskan singkat dan tawarkan alternatif (mis. aturan harga, atau ubah harga di menu Layanan).
+- Tidak bisa diubah lewat panduan: harga dan paket layanan (diatur di menu Layanan portal), bot klien menghitung total gabungan sendiri, menyebut nominal/persen DP, menyatakan DP valid, atau membahas topik di luar studio. Jika owner meminta itu, jelaskan singkat dan tawarkan alternatif (mis. aturan harga, atau ubah harga di menu Layanan).
 - Harga khusus untuk satu klien bukan perubahan panduan: harga order klien itu diisi admin di Order WA portal. Jika berkaitan dengan pertanyaan klien yang menunggu, catat sebagai note di answer_client_query.
 
 # Pertanyaan klien
 - STATE berisi pertanyaan klien yang menunggu jawaban owner. Jika pesan owner menjawab salah satunya (ditandai di STATE jika owner membalas pesan pertanyaannya) atau jelas merujuk satu pertanyaan, panggil answer_client_query: approved=true untuk bisa, false untuk tidak; note = catatan owner untuk bot (harga khusus, syarat, layanan yang dipakai).
 - Cocokkan isi jawaban owner dengan permintaan di STATE (mis. jawaban menyebut banner → pertanyaan soal banner).
-- Jika ada beberapa pertanyaan terbuka dan owner tidak me-reply pesan pertanyaannya, jawaban hanya bisa dicatat bila pesan owner menyebut nama klien atau 4 digit akhir nomornya, atau bila satu pertanyaan baru masuk (10 menit terakhir) dan pertanyaan lain jauh lebih lama: jawaban itu untuk pertanyaan yang baru masuk. Jangan menebak: minta owner menyebut nama klien atau me-reply pesan pertanyaannya, sambil menyebut daftar klien yang menunggu.
+- Jika ada beberapa pertanyaan terbuka dan owner tidak me-reply pesan pertanyaannya, jawaban hanya bisa dicatat bila pesan owner menyebut nama klien atau 4 digit akhir nomornya, bila owner baru saja (30 menit terakhir) membicarakan satu klien yang punya satu pertanyaan terbuka, atau bila satu pertanyaan baru masuk (10 menit terakhir) dan pertanyaan lain jauh lebih lama: jawaban itu untuk pertanyaan tersebut. Jangan menebak: minta owner menyebut nama klien atau me-reply pesan pertanyaannya, sambil menyebut daftar klien yang menunggu.
 - Jangan mengingatkan pertanyaan klien lain yang masih menunggu di setiap balasan. Sebut hanya bila owner menanyakannya atau saat perlu memastikan jawaban ini untuk pertanyaan yang mana.
 - Setelah answer_client_query berhasil, cukup bilang jawabannya sudah dicatat. Jangan menyatakan jawaban sudah terkirim ke klien: sistem yang mengirimnya lalu melaporkan hasilnya ke owner.
 - Jangan bilang jawaban owner belum tersimpan atau belum terkirim bila jawaban itu tercantum di STATE sebagai sudah terkirim; hasil kirim selalu dilaporkan sistem ke owner.
 - STATE juga berisi jawaban owner yang belum terkirim ke klien (mis. gagal dikirim karena AI error). Jika owner minta mengirim ulang, panggil resend_client_answer dengan id-nya; jika ada beberapa dan tidak jelas yang mana, tanyakan.
+
+# Hitungan total untuk owner
+- Jika owner minta dihitungkan total pesanan klien (mis. "2701 minta totalan", "hitung 5 banner + express 50%"), panggil calculate_order_total: layanan dari pertanyaan klien di STATE, jumlah desain, jumlah item/unit bila ada, dan persen tambahan yang owner sebut. Tampilkan rinciannya ke owner apa adanya. Jangan menghitung sendiri di luar tool.
+- Hasil hitungan hanya untuk owner. Harga ke klien tetap lewat invoice: sarankan owner mengisi harga di Order WA portal, atau mencatatnya sebagai note di answer_client_query bila pertanyaan klien itu masih terbuka.
 
 # Chat klien
 - Jika owner meminta bot membalas atau melayani lagi chat klien tertentu (mis. "nomor berakhiran 2367 coba kamu jawab", "Mif balas pakai bot"), panggil return_chat_to_bot dengan nama klien atau 4 digit akhir nomor yang disebut owner. Setelah berhasil cukup bilang chatnya dikembalikan ke bot; hasil balasan ke klien dilaporkan sistem. Jika klien tidak ketemu atau ada beberapa, tanyakan yang mana.
@@ -77,6 +83,13 @@ const inputs = {
   }),
   resend_client_answer: z.object({ query_id: z.string().min(1) }),
   return_chat_to_bot: z.object({ client: z.string().trim().min(2).max(100) }),
+  calculate_order_total: z.object({
+    service: z.string().trim().min(2).max(100),
+    package: z.string().trim().max(100).optional(),
+    units: z.number().int().positive().optional(),
+    quantity: z.number().optional(),
+    surcharge_percent: z.number().optional(),
+  }),
 };
 
 export const OWNER_TOOLS: Anthropic.Tool[] = [
@@ -155,6 +168,23 @@ export const OWNER_TOOLS: Anthropic.Tool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: "calculate_order_total",
+    description:
+      "Hitung total pesanan untuk OWNER dari katalog: harga layanan (paket/unit bila ada) × jumlah desain, ditambah persen tambahan yang disebut owner (mis. express 50%). Hasil hanya untuk owner.",
+    input_schema: {
+      type: "object",
+      properties: {
+        service: { type: "string", description: "Nama atau kode layanan, mis. Banner UMKM" },
+        package: { type: "string", description: "Nama paket, bila layanannya berpaket" },
+        units: { type: "integer", description: "Jumlah item/unit untuk layanan per unit, mis. jumlah menu" },
+        quantity: { type: "integer", description: "Jumlah desain, mis. 5 banner = 5. Default 1" },
+        surcharge_percent: { type: "number", description: "Persen tambahan dari owner, mis. 50 untuk express 50%" },
+      },
+      required: ["service"],
+      additionalProperties: false,
+    },
+  },
 ];
 
 type GuideInEffect = { guide: BotGuide; version: number | null };
@@ -165,17 +195,19 @@ async function guideFor(owner: OwnerContext): Promise<GuideInEffect> {
   return { guide: published?.guide ?? EMPTY_GUIDE, version: published?.version ?? null };
 }
 
-async function openQueries(owner: OwnerContext) {
+/** 10 pertanyaan terbuka TERBARU (dulu 10 terlama: pertanyaan baru tidak masuk STATE saat antrean ramai), urut lama → baru. */
+export async function loadOpenQueries(owner: OwnerContext) {
   // Owner Uji bot hanya melihat pertanyaan dari percakapan uji; owner WA hanya pertanyaan klien sungguhan.
-  return prisma.waOwnerQuery.findMany({
+  const rows = await prisma.waOwnerQuery.findMany({
     where: {
       status: "PENDING",
       conversation: owner.target === "DRAFT" ? { waId: sandboxWaId(owner.user.id) } : { isSandbox: false },
     },
-    orderBy: { createdAt: "asc" },
+    orderBy: { createdAt: "desc" },
     take: 10,
     select: { id: true, question: true, createdAt: true, conversation: { select: { waId: true, profileName: true } } },
   });
+  return rows.reverse();
 }
 
 const RECENTLY_RELAYED_HOURS = 2;
@@ -214,7 +246,7 @@ export function buildOwnerState(p: {
   owner: OwnerContext;
   current: GuideInEffect;
   pendingProposalSummary: string | null;
-  queries: Awaited<ReturnType<typeof openQueries>>;
+  queries: Awaited<ReturnType<typeof loadOpenQueries>>;
   unrelayed: Awaited<ReturnType<typeof unrelayedAnswers>>;
   recentlyRelayed: Awaited<ReturnType<typeof recentlyRelayedAnswers>>;
   repliedQueryId: string | null;
@@ -291,21 +323,24 @@ export async function runOwnerAiTurn(p: {
     getStudioSettings(),
     guideFor(p.owner),
     findPendingProposal(p.conversationId),
-    openQueries(p.owner),
+    loadOpenQueries(p.owner),
     unrelayedAnswers(p.owner),
     recentlyRelayedAnswers(p.owner),
     prisma.waMessage.findMany({
       where: { conversationId: p.conversationId, NOT: { direction: "OUTBOUND", deliveryStatus: "failed" } },
       orderBy: { createdAt: "desc" },
       take: HISTORY_LIMIT,
-      select: { direction: true, body: true },
+      select: { direction: true, body: true, createdAt: true },
     }),
   ]);
   const chat = createChatSession(targets);
   const openClients = new Map(queries.map((q) => [q.id, { ...q.conversation, createdAt: q.createdAt }]));
   const unrelayedIds = new Set(unrelayed.map((q) => q.id));
   // history urut terbaru dulu: pesan owner terakhir dipakai untuk memastikan jawaban untuk klien yang mana.
-  const ownerText = history.find((m) => m.direction === "INBOUND")?.body ?? "";
+  const ownerMessages = history.filter((m) => m.direction === "INBOUND");
+  const ownerText = ownerMessages[0]?.body ?? "";
+  const focusSince = Date.now() - OWNER_FOCUS_MS;
+  const recentOwnerTexts = ownerMessages.slice(1).filter((m) => m.createdAt.getTime() >= focusSince).map((m) => m.body);
   const repliedQueryId = p.repliedQueryId && openClients.has(p.repliedQueryId) ? p.repliedQueryId : null;
 
   const messages: Anthropic.MessageParam[] = history
@@ -357,7 +392,7 @@ export async function runOwnerAiTurn(p: {
     messages.push({ role: "assistant", content: response.content });
     const results: Anthropic.ToolResultBlockParam[] = [];
     for (const use of toolUses) {
-      const outcome = await executeOwnerTool(use.name, use.input, { ...p, current, openQueries: openClients, unrelayedIds, ownerText, repliedQueryId, result });
+      const outcome = await executeOwnerTool(use.name, use.input, { ...p, current, openQueries: openClients, unrelayedIds, ownerText, recentOwnerTexts, repliedQueryId, result });
       results.push({ type: "tool_result", tool_use_id: use.id, content: outcome.content, is_error: outcome.isError });
     }
     messages.push({ role: "user", content: results });
@@ -375,6 +410,8 @@ type OwnerToolContext = {
   unrelayedIds: Set<string>;
   /** Pesan owner terbaru (untuk memastikan jawaban saat beberapa pertanyaan terbuka) */
   ownerText: string;
+  /** Pesan owner sebelumnya dalam OWNER_FOCUS_MS: klien yang sedang dibicarakan */
+  recentOwnerTexts: string[];
   /** Pertanyaan yang di-reply owner, bila ada */
   repliedQueryId: string | null;
   result: OwnerTurnResult;
@@ -386,6 +423,19 @@ type OpenQueryClient = { profileName: string | null; waId: string; createdAt: Da
 export const FRESH_QUERY_MS = 10 * 60_000;
 /** Pertanyaan lain harus jauh lebih lama (bukan dua pertanyaan baru yang berdekatan, kasus 12 Nov 18:57). */
 export const OLDER_QUERY_GAP_MS = 60 * 60_000;
+
+/** Owner baru membicarakan klien (pesan owner ≤30 menit sebelumnya), kasus 13 Nov 21:26: "2701 itu pesan berapa desain?". */
+export const OWNER_FOCUS_MS = 30 * 60_000;
+
+/**
+ * Pertanyaan yang sedang dibicarakan: pesan owner sebelumnya menyebut tepat satu klien yang punya pertanyaan terbuka,
+ * dan klien itu hanya punya satu pertanyaan terbuka. Selain itu null (owner tetap ditanya yang mana).
+ */
+function focusedQueryId(openQueries: Map<string, OpenQueryClient>, recentOwnerTexts: string[]): string | null {
+  const mentioned = [...openQueries].filter(([, q]) => recentOwnerTexts.some((t) => mentionsClient(t, q)));
+  const clients = new Set(mentioned.map(([, q]) => q.waId));
+  return clients.size === 1 && mentioned.length === 1 ? mentioned[0][0] : null;
+}
 
 /** Satu-satunya pertanyaan baru (≤10 menit) dan semua pertanyaan lain ≥60 menit lebih lama (kasus 13 Nov 07:52). */
 function isSoleFreshQuery(openQueries: Map<string, OpenQueryClient>, id: string, now: number): boolean {
@@ -452,6 +502,7 @@ export async function executeOwnerTool(name: string, rawInput: unknown, ctx: Own
       ctx.openQueries.size > 1 &&
       ctx.repliedQueryId !== input.data.query_id &&
       !mentionsClient(ctx.ownerText, client) &&
+      focusedQueryId(ctx.openQueries, ctx.recentOwnerTexts) !== input.data.query_id &&
       !isSoleFreshQuery(ctx.openQueries, input.data.query_id, Date.now())
     ) {
       return fail(
@@ -512,6 +563,27 @@ export async function executeOwnerTool(name: string, rawInput: unknown, ctx: Own
     }
     ctx.result.returnedChats.push({ conversationId: chat.id, label: label(chat) });
     return ok({ returned: true, client: label(chat), alreadyBot: chat.mode !== "HUMAN" });
+  }
+
+  if (name === "calculate_order_total") {
+    const input = inputs.calculate_order_total.safeParse(rawInput);
+    if (!input.success) return fail("Input tidak valid");
+    const row = await prisma.service.findFirst({
+      where: {
+        isActive: true,
+        OR: [{ code: { equals: input.data.service, mode: "insensitive" } }, { name: { equals: input.data.service, mode: "insensitive" } }],
+      },
+      select: BOT_SERVICE_SELECT,
+    });
+    if (!row) return fail("Layanan tidak ditemukan di katalog. Tanyakan nama layanannya ke owner.");
+    const result = calculateOrderTotal(toBotService(row), {
+      packageName: input.data.package,
+      units: input.data.units,
+      quantity: input.data.quantity,
+      surchargePercent: input.data.surcharge_percent,
+    });
+    if (!result.ok) return fail(result.error);
+    return ok({ total: result.total, lines: result.lines, note: "Hanya untuk owner; harga ke klien lewat invoice Order WA." });
   }
 
   return fail(`Tool ${name} tidak tersedia`);

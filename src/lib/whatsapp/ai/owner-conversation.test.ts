@@ -5,13 +5,15 @@ const queries = vi.hoisted(() => ({ answerOwnerQuery: vi.fn() }));
 const db = vi.hoisted(() => ({
   waConversation: { findMany: vi.fn(), updateMany: vi.fn() },
   activityLog: { create: vi.fn() },
+  service: { findFirst: vi.fn() },
+  waOwnerQuery: { findMany: vi.fn() },
 }));
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/studio", () => ({ getStudioSettings: async () => ({ name: "YukDesain Studio" }) }));
 vi.mock("../owner/proposals", async (orig) => ({ ...(await orig<typeof import("../owner/proposals")>()), ...proposals }));
 vi.mock("../owner/query-store", () => queries);
 
-import { buildOwnerState, buildOwnerSystemPrompt, executeOwnerTool, type OwnerTurnResult } from "./owner-conversation";
+import { buildOwnerState, buildOwnerSystemPrompt, executeOwnerTool, loadOpenQueries, type OwnerTurnResult } from "./owner-conversation";
 
 const owner = { user: { id: "u_owner", name: "Rizal" }, target: "PUBLISH" as const };
 const base = {
@@ -25,7 +27,9 @@ const base = {
 
 type OpenClient = { profileName: string | null; waId: string; createdAt: Date };
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000);
-function ctx(over: { openQueries?: Map<string, OpenClient>; ownerText?: string; repliedQueryId?: string | null } = {}) {
+function ctx(
+  over: { openQueries?: Map<string, OpenClient>; ownerText?: string; recentOwnerTexts?: string[]; repliedQueryId?: string | null } = {},
+) {
   const result: OwnerTurnResult = { reply: null, proposal: null, answeredQueryIds: [], resendQueryIds: [], returnedChats: [], stopReason: null };
   return {
     owner,
@@ -34,6 +38,7 @@ function ctx(over: { openQueries?: Map<string, OpenClient>; ownerText?: string; 
     openQueries: new Map([["q_1", { profileName: "Sari", waId: "6281234567890", createdAt: minutesAgo(30) }]]),
     unrelayedIds: new Set(["q_9"]),
     ownerText: "BISA",
+    recentOwnerTexts: [] as string[],
     repliedQueryId: null,
     result,
     ...over,
@@ -279,6 +284,65 @@ describe("jawaban owner untuk satu pertanyaan yang baru masuk", () => {
   });
 });
 
+// Produksi 13 Nov 21:26: owner bertanya "2701 itu pesan berapa desain?", bot menjawab soal 2701, lalu owner menulis
+// "BISA, namun ada tambahan biaya 50%" dan bot tetap meminta owner menyebut "Alfa Press (2701)".
+describe("jawaban owner yang mengikuti obrolan tentang satu klien", () => {
+  const open = new Map<string, OpenClient>([
+    ["q_alfa", { profileName: "Alfa Press", waId: "6287100002701", createdAt: minutesAgo(310) }],
+    ["q_gian", { profileName: "Gian Sanjaya", waId: "6287100001996", createdAt: minutesAgo(617) }],
+    ["q_eric", { profileName: "Eric Felix", waId: "6287100007776", createdAt: minutesAgo(151) }],
+  ]);
+
+  it("owner baru saja menyebut satu klien (≤30 menit) → jawaban tanpa nama dicatat untuk klien itu", async () => {
+    const c = ctx({ openQueries: open, ownerText: "BISA, namun ada tambahan biaya 50% dari harga total", recentOwnerTexts: ["2701 itu pesan berapa desain?"] });
+    expect((await executeOwnerTool("answer_client_query", { query_id: "q_alfa", approved: true }, c)).isError).toBe(false);
+  });
+
+  it("tetap ditolak untuk klien lain yang tidak disebut", async () => {
+    const c = ctx({ openQueries: open, ownerText: "BISA", recentOwnerTexts: ["2701 itu pesan berapa desain?"] });
+    expect((await executeOwnerTool("answer_client_query", { query_id: "q_gian", approved: true }, c)).isError).toBe(true);
+  });
+
+  it("owner baru menyebut dua klien → tetap ditanyakan yang mana", async () => {
+    const c = ctx({ openQueries: open, ownerText: "BISA", recentOwnerTexts: ["2701 itu pesan berapa desain?", "kalau 7776 gimana?"] });
+    expect((await executeOwnerTool("answer_client_query", { query_id: "q_alfa", approved: true }, c)).isError).toBe(true);
+  });
+
+  it("klien yang disebut punya dua pertanyaan terbuka → tetap ditanyakan yang mana", async () => {
+    const twoFromAlfa = new Map(open).set("q_alfa2", { profileName: "Alfa Press", waId: "6287100002701", createdAt: minutesAgo(20) });
+    const c = ctx({ openQueries: twoFromAlfa, ownerText: "BISA", recentOwnerTexts: ["2701 itu pesan berapa desain?"] });
+    expect((await executeOwnerTool("answer_client_query", { query_id: "q_alfa", approved: true }, c)).isError).toBe(true);
+  });
+});
+
+describe("calculate_order_total (owner)", () => {
+  it("menghitung dari katalog: 5 desain banner + express 50%", async () => {
+    db.service.findFirst.mockResolvedValue({
+      code: "SVC-04",
+      name: "Banner UMKM",
+      priceMode: "FIXED",
+      startingPrice: 135000,
+      packages: null,
+      unitPricing: null,
+    });
+    const out = await executeOwnerTool("calculate_order_total", { service: "Banner UMKM", quantity: 5, surcharge_percent: 50 }, ctx());
+    expect(out.isError).toBe(false);
+    expect(JSON.parse(out.content)).toMatchObject({ total: 1012500, lines: expect.arrayContaining(["Total: Rp1.012.500"]) });
+    expect(db.service.findFirst.mock.calls[0][0].where).toMatchObject({ isActive: true });
+  });
+
+  it("layanan tidak dikenal → error", async () => {
+    db.service.findFirst.mockResolvedValue(null);
+    expect((await executeOwnerTool("calculate_order_total", { service: "Jasa Joki", quantity: 1 }, ctx())).isError).toBe(true);
+  });
+
+  it("prompt: owner boleh minta hitungan total; harga ke klien tetap lewat invoice", () => {
+    const prompt = buildOwnerSystemPrompt("YukDesain");
+    expect(prompt).toContain("calculate_order_total");
+    expect(prompt).not.toContain("bot menghitung total di luar kalkulator");
+  });
+});
+
 // Produksi 13 Nov 07:48: owner menulis "nomor berakhiran 2367 coba kamu jawab" (Mif, mode admin sejak kemarin);
 // asisten owner tidak punya cara mengembalikan chat ke bot.
 describe("return_chat_to_bot", () => {
@@ -327,5 +391,16 @@ describe("return_chat_to_bot", () => {
 
   it("prompt: perintah owner untuk membalas chat klien memakai return_chat_to_bot", () => {
     expect(buildOwnerSystemPrompt("YukDesain")).toContain("return_chat_to_bot");
+  });
+});
+
+// Daftar pertanyaan terbuka dibatasi 10. Dulu yang diambil 10 TERLAMA, sehingga pada hari ramai pertanyaan yang baru
+// masuk (yang paling mungkin sedang dijawab owner) tidak ada di STATE.
+describe("loadOpenQueries", () => {
+  it("mengambil 10 pertanyaan terbaru, ditampilkan urut dari yang terlama", async () => {
+    db.waOwnerQuery.findMany.mockResolvedValue([{ id: "q_new" }, { id: "q_mid" }, { id: "q_old" }]);
+    const rows = await loadOpenQueries(owner);
+    expect(db.waOwnerQuery.findMany.mock.calls[0][0]).toMatchObject({ orderBy: { createdAt: "desc" }, take: 10 });
+    expect(rows.map((r) => r.id)).toEqual(["q_old", "q_mid", "q_new"]);
   });
 });
