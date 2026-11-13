@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
   waMessage: { findUniqueOrThrow: vi.fn(), create: vi.fn(), count: vi.fn(), findFirst: vi.fn() },
-  waConversation: { update: vi.fn(), updateMany: vi.fn() },
+  waConversation: { update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
   waIntake: { findFirst: vi.fn() },
   studioSettings: { findUnique: vi.fn() },
   waOwnerQuery: { updateMany: vi.fn() },
@@ -95,6 +95,23 @@ describe("handleInboundMessage", () => {
     tools.findActiveIntake.mockResolvedValue({ createdAt: new Date("2026-11-01T00:00:00Z") });
     invoice.resendPendingInvoice.mockResolvedValue(false);
     owner.resolveOwner.mockResolvedValue(null);
+  });
+
+  // Produksi 13 Nov (Ketut Edy): admin membalas dari HP 19.26.40 (chat jadi mode admin), tetapi balasan bot yang
+  // sedang diproses tetap terkirim 19.27.03.
+  it("admin mengambil alih selama AI berpikir → balasan bot tidak dikirim", async () => {
+    givenMessage("text");
+    db.waConversation.findUnique.mockResolvedValueOnce({ mode: "HUMAN", blockedAt: null });
+    await handleInboundMessage("msg_1");
+    expect(ai.runAiTurn).toHaveBeenCalled();
+    expect(api.sendText).not.toHaveBeenCalled();
+  });
+
+  it("nomor diblokir selama AI berpikir → balasan bot tidak dikirim", async () => {
+    givenMessage("text");
+    db.waConversation.findUnique.mockResolvedValueOnce({ mode: "BOT", blockedAt: new Date() });
+    await handleInboundMessage("msg_1");
+    expect(api.sendText).not.toHaveBeenCalled();
   });
 
   it("banjir pesan: pesan pertama yang lewat batas mendapat peringatan, tanpa AI", async () => {
