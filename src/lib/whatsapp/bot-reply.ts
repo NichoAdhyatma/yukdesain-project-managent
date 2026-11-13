@@ -4,7 +4,7 @@ import { deliveryErrorCode, sendTextOnChannel } from "./channel";
 import { maskPhone } from "./phone";
 import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
-import { setHumanMode } from "./handoff";
+import { callAdmin, lastOutboundIs } from "./handoff";
 import { clampReply, dropRepeatedSentences, sanitizeReply, stripDpMentions, stripPriceMentions } from "./ai/reply-guard";
 import { AiProviderError, isTechnicalFailure } from "@/lib/ai/client";
 
@@ -16,7 +16,7 @@ export const BOT_REPLIES = {
     "Maaf kak, saat ini kami hanya bisa membaca pesan teks dan gambar. Silakan kirim ulang sebagai teks atau gambar ya.",
   MEDIA_TOO_LARGE: "Maaf kak, gambarnya terlalu besar. Kirim gambar maksimal 10 MB ya.",
   MEDIA_TYPE_NOT_ALLOWED: "Maaf kak, gambarnya tidak bisa kami proses. Kirim gambar JPG, PNG, atau WEBP ya.",
-  handoff: "Baik kak, percakapan ini kami teruskan ke admin. Admin kami akan membalas secepatnya ya.",
+  handoff: "Baik kak, admin kami sudah dikabari dan akan membalas di chat ini secepatnya ya.",
   busy: "Maaf kak, sistem kami sedang sibuk. Admin kami akan membalas secepatnya ya.",
   tooManyMessages: "Kak, pesannya banyak sekali dalam waktu singkat. Kami balas lagi beberapa menit lagi ya.",
   tooManyImages: "Maaf kak, gambar untuk order ini sudah banyak sekali, jadi gambar ini tidak kami simpan. Kalau masih ada gambar penting, ketik *admin* untuk dibantu tim kami.",
@@ -64,7 +64,7 @@ export async function sendBotText(
   }
 }
 
-export { setHumanMode } from "./handoff";
+export { callAdmin } from "./handoff";
 
 /** Ada pesan masuk yang lebih baru? Giliran pesan itu yang membalas (termasuk konteks pesan ini). */
 export async function isSuperseded(conversationId: string, createdAt: Date): Promise<boolean> {
@@ -75,10 +75,21 @@ export async function isSuperseded(conversationId: string, createdAt: Date): Pro
 }
 
 // Model lewat gateway sesekali menulis tool call sebagai teks atau membalas kosong. Satu percobaan
-// ulang biasanya cukup; baru setelah itu klien menerima pesan "sibuk" dan percakapan dialihkan ke admin.
+// ulang biasanya cukup; baru setelah itu klien menerima pesan "sibuk" dan admin dipanggil (chat tetap BOT).
 const AI_ATTEMPTS = 2;
 // Jeda sebelum mencoba lagi setelah gangguan teknis (SDK sudah mencoba ulang sendiri dengan backoff pendek).
 const AI_RETRY_DELAY_MS = 4000;
+
+/**
+ * AI gagal: admin dipanggil, chat tetap BOT supaya pesan klien berikutnya dicoba lagi (keputusan owner 2026-11-13).
+ * Pesan sibuk ke klien hanya bila klien sedang menunggu balasan dan belum menerima pesan sibuk sebagai pesan terakhir.
+ */
+async function notifyAiFailed(conversation: { id: string; waId: string; isSandbox?: boolean }, opts: { notifyClient?: boolean }) {
+  callAdmin(conversation.id, "ai_failed");
+  if (opts.notifyClient === false) return;
+  if (await lastOutboundIs(conversation.id, BOT_REPLIES.busy)) return;
+  await sendBotText(conversation, BOT_REPLIES.busy);
+}
 
 /**
  * Satu giliran AI untuk percakapan klien lalu kirim balasannya (dengan semua penjaga balasan).
@@ -107,15 +118,14 @@ export async function replyWithAi(
             : (error as Error).message === "AI_REFUSAL"
               ? "refusal"
               : (error as Error).name;
-      // Gangguan teknis (rate limit, 5xx, jaringan) dicoba sekali lagi sebelum chat dialihkan ke admin.
+      // Gangguan teknis (rate limit, 5xx, jaringan) dicoba sekali lagi sebelum admin dipanggil.
       if (attempt < AI_ATTEMPTS && isTechnicalFailure(error)) {
         console.warn(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)} (percobaan ${attempt}/${AI_ATTEMPTS}): ${reason}, dicoba lagi`);
         await new Promise((resolve) => setTimeout(resolve, AI_RETRY_DELAY_MS));
         continue;
       }
       console.error(`[whatsapp] AI gagal untuk ${maskPhone(conversation.waId)}: ${reason}`);
-      await setHumanMode(conversation.id, "ai_failed");
-      if (opts.notifyClient !== false) await sendBotText(conversation, BOT_REPLIES.busy);
+      await notifyAiFailed(conversation, opts);
       return false;
     }
 
@@ -132,9 +142,8 @@ export async function replyWithAi(
   }
 
   if (!turn || !sanitized || sanitized.rejected) {
-    console.error(`[whatsapp] balasan AI rusak untuk ${maskPhone(conversation.waId)}, dialihkan ke admin`);
-    await setHumanMode(conversation.id, "ai_failed");
-    if (opts.notifyClient !== false) await sendBotText(conversation, BOT_REPLIES.busy);
+    console.error(`[whatsapp] balasan AI rusak untuk ${maskPhone(conversation.waId)}, admin dipanggil`);
+    await notifyAiFailed(conversation, opts);
     return false;
   }
 

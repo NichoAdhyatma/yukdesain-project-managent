@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 import { isWithinServiceWindow } from "../outbound";
 import { getChannel, usesServiceWindow } from "../channel";
-import { replyWithAi, setHumanMode } from "../bot-reply";
+import { replyWithAi } from "../bot-reply";
+import { callAdmin } from "../handoff";
 import { maskPhone } from "../phone";
 import { sandboxWaId, type OwnerContext } from "./identity";
 
@@ -50,7 +51,7 @@ export async function relayOwnerAnswer(queryId: string, opts: { force?: boolean 
   }
 
   if (!conversation.isSandbox && usesServiceWindow(await getChannel()) && !isWithinServiceWindow(conversation.lastInboundAt)) {
-    await setHumanMode(conversation.id, "owner_timeout");
+    callAdmin(conversation.id, "owner_timeout");
     return { outcome: "window_closed", clientLabel };
   }
   const anchor = await prisma.waMessage.findFirst({
@@ -79,7 +80,7 @@ export async function findFailedRelays(owner: OwnerContext) {
   });
 }
 
-/** Pertanyaan yang tidak dijawab owner dalam batas waktu → kedaluwarsa, chat klien ke admin. */
+/** Pertanyaan yang tidak dijawab owner dalam batas waktu → kedaluwarsa, admin dipanggil (chat klien tetap di bot). */
 export async function expireOwnerQueries(now = new Date()): Promise<number> {
   const stale = await prisma.waOwnerQuery.findMany({
     where: { status: "PENDING", expiresAt: { lt: now } },
@@ -87,7 +88,8 @@ export async function expireOwnerQueries(now = new Date()): Promise<number> {
   });
   for (const q of stale) {
     const { count } = await prisma.waOwnerQuery.updateMany({ where: { id: q.id, status: "PENDING" }, data: { status: "EXPIRED" } });
-    if (count === 1 && !q.conversation.isSandbox) await setHumanMode(q.conversationId, "owner_timeout");
+    // Admin dipanggil; chat klien tetap dilayani bot (keputusan owner 2026-11-13).
+    if (count === 1 && !q.conversation.isSandbox) callAdmin(q.conversationId, "owner_timeout");
   }
   return stale.length;
 }

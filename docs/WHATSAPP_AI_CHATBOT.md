@@ -41,7 +41,7 @@ Prinsip yang tetap berlaku:
 | Deadline | **Admin** yang menentukan, bersamaan dengan harga |
 | Validasi DP | **Admin** lewat checklist. Hasil baca AI hanya bantuan, bukan keputusan. |
 | Alur lama (form link) | Tetap ada sebagai alternatif |
-| Nego harga | Bot tidak bernegosiasi. Permintaan nego/keberatan harga dialihkan ke admin (handoff). |
+| Nego harga | Bot tidak bernegosiasi. Permintaan nego/keberatan harga → admin dipanggil (`request_human_handoff`); chat tetap dilayani bot sampai admin membalas sendiri (2026-11-13). |
 
 ---
 
@@ -428,8 +428,8 @@ owner dan desainer. Supaya gambar yang dikirim sebelum order dibuat tidak tertin
 
 ```text
 1. waBotEnabled false → stop (pesan tetap tersimpan)
-2. mode HUMAN → stop
-3. "ADMIN" / "admin" / "cs" → mode HUMAN, balas konfirmasi, stop
+2. mode HUMAN → stop (gambar tetap diunduh ke storage privat, 2026-11-13; juga saat Balas otomatis nonaktif)
+3. "ADMIN" / "admin" / "cs" → admin dipanggil (notifikasi), balas konfirmasi, stop; chat tetap BOT (2026-11-13)
 4. rate limit → balas peringatan sekali, stop
 5. identifikasi klien (normalizePhone(waId) ↔ Client.phone)
 6. jika image: unduh → R2; siapkan gambar sebagai content block image (base64) untuk Claude
@@ -444,7 +444,7 @@ owner dan desainer. Supaya gambar yang dikirim sebelum order dibuat tidak tertin
 
 `briefDraft` di DB adalah sumber kebenaran, bukan history chat. History hanya konteks. Ini membuat percakapan yang terputus berhari-hari tetap nyambung.
 
-Kegagalan Claude API → balasan fallback "sistem sedang sibuk" + mode HUMAN. Balasan yang kosong atau ditolak
+Kegagalan Claude API → balasan fallback "sistem sedang sibuk" (sekali; tidak diulang bila sudah jadi pesan terakhir bot) + admin dipanggil; chat tetap BOT sehingga pesan klien berikutnya dicoba lagi (2026-11-13). Balasan yang kosong atau ditolak
 `sanitizeReply` (mis. model lewat gateway menulis tool call sebagai teks) dicoba ulang sekali dulu; fallback baru dipakai
 jika percobaan kedua juga gagal (2026-11-06). Saat meneruskan jawaban owner (tanpa pesan baru klien) kegagalan hanya dilaporkan ke
 owner, klien tidak dikirimi pesan sibuk; riwayat yang berakhir di pesan bot ditutup catatan user karena model menolak
@@ -519,7 +519,7 @@ Semua tool divalidasi zod. Semua aturan akses dan transisi status dicek di serve
 | `confirm_brief` | `summary` | Semua field wajib terisi (cek server). Simpan `briefSummary`, `briefConfirmedAt`, status → `AWAITING_QUOTE`. |
 | `submit_payment_proof` | `messageId` | Status harus `QUOTED`. Pindahkan media ke key bukti, buat `PaymentProof`, jalankan ekstraksi (§11), status → `DP_REVIEW`. |
 | `cancel_intake` | `reason` | Hanya sebelum `DP_REVIEW`. |
-| `request_human_handoff` | `reason` | Mode → HUMAN. |
+| `request_human_handoff` | `reason` | Admin dipanggil lewat notifikasi (`callAdmin`); mode chat **tidak** berubah (keputusan owner 2026-11-13: mode HUMAN hanya bila admin sendiri membalas). Bot tetap melayani tanpa bernegosiasi. |
 
 **Read-only untuk project yang sudah ada:**
 

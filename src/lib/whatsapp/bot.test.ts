@@ -45,6 +45,17 @@ import { WhatsAppApiError } from "./client-api";
 import { BOT_REPLIES, handleInboundMessage } from "./bot";
 import { replyWithAi } from "./bot-reply";
 import { DP_PLACEHOLDER, PRICE_PLACEHOLDER } from "./ai/reply-guard";
+import { resetCallAdminThrottle } from "./handoff";
+
+// Notifikasi "butuh admin" dibatasi per chat (handoff.ts); setiap tes mulai bersih.
+beforeEach(() => {
+  resetCallAdminThrottle();
+  db.waMessage.findFirst.mockReset();
+});
+const lastBotMessage = (body: string) =>
+  db.waMessage.findFirst.mockImplementation(async (args: { where?: { direction?: string } }) =>
+    args?.where?.direction === "OUTBOUND" ? { body } : null,
+  );
 
 function givenMessage(type: string, body = "halo", mode = "BOT") {
   db.waMessage.findUniqueOrThrow.mockResolvedValue({
@@ -110,13 +121,23 @@ describe("handleInboundMessage", () => {
     expect(limits.imageLimitExceeded).toHaveBeenCalledWith("conv_1", new Date("2026-11-01T00:00:00Z"));
   });
 
-  it("80 balasan bot dalam sehari → mode HUMAN, tanpa AI", async () => {
+  // Keputusan owner 13 Nov: chat pindah ke admin hanya bila admin sendiri membalas.
+  it("80 balasan bot dalam sehari → satu pesan + owner dipanggil, chat tetap BOT, tanpa AI", async () => {
     givenMessage("text");
     limits.botReplyLimitReached.mockResolvedValue(true);
     await handleInboundMessage("msg_1");
-    expect(humanModeSet()).toBe(true);
+    expect(humanModeSet()).toBe(false);
+    expect(notify.notifyNeedsAdmin).toHaveBeenCalledWith("conv_1", "daily_limit");
     expect(sentBodies()).toEqual([BOT_REPLIES.dailyLimit]);
     expect(ai.runAiTurn).not.toHaveBeenCalled();
+  });
+
+  it("batas harian: pesan batas sudah terkirim sebelumnya → diam, tidak diulang", async () => {
+    givenMessage("text");
+    limits.botReplyLimitReached.mockResolvedValue(true);
+    lastBotMessage(BOT_REPLIES.dailyLimit);
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()).toEqual([]);
   });
 
   it("invoice yang tertunda (template di luar 24 jam) dikirim ulang saat klien membalas, walau bot nonaktif", async () => {
@@ -141,6 +162,30 @@ describe("handleInboundMessage", () => {
     expect(ai.runAiTurn).not.toHaveBeenCalled();
   });
 
+  // Produksi 13 Nov (Mif): 10 foto yang dikirim saat chat dipegang admin tidak pernah diunduh, jadi bot tidak bisa
+  // membacanya setelah chat dikembalikan ("beberapa foto tidak terbaca").
+  it("gambar saat chat dipegang admin → tetap diunduh, tanpa balasan", async () => {
+    givenMessage("image", "", "HUMAN");
+    await handleInboundMessage("msg_1");
+    expect(media.storeInboundMedia).toHaveBeenCalledWith("msg_1");
+    expect(api.sendText).not.toHaveBeenCalled();
+    expect(ai.runAiTurn).not.toHaveBeenCalled();
+  });
+
+  it("gambar saat bot nonaktif → tetap diunduh; batas gambar tetap berlaku", async () => {
+    db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
+    givenMessage("image", "");
+    await handleInboundMessage("msg_1");
+    expect(media.storeInboundMedia).toHaveBeenCalledWith("msg_1");
+    vi.clearAllMocks();
+    db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
+    limits.imageLimitExceeded.mockResolvedValue(true);
+    givenMessage("image", "");
+    await handleInboundMessage("msg_1");
+    expect(media.storeInboundMedia).not.toHaveBeenCalled();
+    expect(api.sendText).not.toHaveBeenCalled();
+  });
+
   it("mode HUMAN → tidak membalas", async () => {
     givenMessage("text", "halo", "HUMAN");
     await handleInboundMessage("msg_1");
@@ -159,10 +204,10 @@ describe("handleInboundMessage", () => {
     });
   });
 
-  it.each(["admin", " ADMIN ", "cs", "Cs"])("kata kunci %j → mode HUMAN tanpa AI", async (body) => {
+  it.each(["admin", " ADMIN ", "cs", "Cs"])("kata kunci %j → admin dipanggil, chat tetap BOT, tanpa AI", async (body) => {
     givenMessage("text", body);
     await handleInboundMessage("msg_1");
-    expect(humanModeSet()).toBe(true);
+    expect(humanModeSet()).toBe(false);
     expect(sentBodies()).toEqual([BOT_REPLIES.handoff]);
     expect(ai.runAiTurn).not.toHaveBeenCalled();
   });
@@ -215,12 +260,12 @@ describe("handleInboundMessage", () => {
     expect(api.sendText).not.toHaveBeenCalled();
   });
 
-  it("AI error → balasan sibuk + mode HUMAN, log tanpa nomor utuh", async () => {
+  it("AI error → balasan sibuk, chat tetap BOT (pesan berikutnya dicoba lagi), log tanpa nomor utuh", async () => {
     givenMessage("text");
     ai.runAiTurn.mockRejectedValue(new Error("boom: isi chat rahasia"));
     await handleInboundMessage("msg_1");
     expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
-    expect(humanModeSet()).toBe(true);
+    expect(humanModeSet()).toBe(false);
     const logged = vi.mocked(console.error).mock.calls.flat().join(" ");
     expect(logged).not.toContain("6281234567890");
     expect(logged).not.toContain("rahasia");
@@ -261,12 +306,20 @@ describe("handleInboundMessage", () => {
     expect(vi.mocked(console.warn).mock.calls.flat().join(" ")).toContain("stop=max_tokens");
   });
 
-  it("balasan AI kosong → balasan sibuk + mode HUMAN", async () => {
+  it("balasan AI kosong → balasan sibuk, chat tetap BOT", async () => {
     givenMessage("text");
     aiReply(null);
     await handleInboundMessage("msg_1");
     expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
-    expect(humanModeSet()).toBe(true);
+    expect(humanModeSet()).toBe(false);
+  });
+
+  it("pesan sibuk sudah jadi pesan terakhir bot → tidak dikirim ulang", async () => {
+    givenMessage("text");
+    aiReply(null);
+    lastBotMessage(BOT_REPLIES.busy);
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()).toEqual([]);
   });
 
   it("sebelum ada harga: kalimat yang menyebut harga dibuang", async () => {
@@ -330,12 +383,12 @@ describe("handleInboundMessage", () => {
     expect(sent).toContain(DP_PLACEHOLDER);
   });
 
-  it("balasan berisi markup tool-call → tidak dikirim, fallback sibuk + HUMAN", async () => {
+  it("balasan berisi markup tool-call → tidak dikirim, fallback sibuk, chat tetap BOT", async () => {
     givenMessage("text");
     aiReply("]<]minimax[>[<tool_call>\n<invoke name=\"get_brief\">");
     await handleInboundMessage("msg_1");
     expect(sentBodies()).toEqual([BOT_REPLIES.busy]);
-    expect(humanModeSet()).toBe(true);
+    expect(humanModeSet()).toBe(false);
   });
 
   it("markup tool-call sekali lalu balasan normal → percobaan ulang yang dikirim, tetap mode BOT", async () => {
@@ -389,12 +442,11 @@ describe("handleInboundMessage", () => {
       expect(notify.notifyNewClient).not.toHaveBeenCalled();
     });
 
-    it("klien minta admin → notifikasi menunggu admin (hanya jika chat baru pindah dari bot)", async () => {
+    it("klien minta admin → notifikasi menunggu admin, paling banyak sekali per 30 menit per chat", async () => {
       givenMessage("text", "admin");
       await handleInboundMessage("msg_1");
       expect(notify.notifyNeedsAdmin).toHaveBeenCalledWith("conv_1", "client_asked");
       vi.clearAllMocks();
-      db.waConversation.updateMany.mockResolvedValue({ count: 0 });
       givenMessage("text", "admin");
       await handleInboundMessage("msg_1");
       expect(notify.notifyNeedsAdmin).not.toHaveBeenCalled();
@@ -475,12 +527,12 @@ describe("handleInboundMessage", () => {
       expect(ai.runAiTurn).not.toHaveBeenCalled();
     });
 
-    it("rem bulanan aktif → satu pesan, mode HUMAN, owner diberi tahu, tanpa AI", async () => {
+    it("rem bulanan aktif → satu pesan, chat tetap BOT, owner diberi tahu, tanpa AI", async () => {
       givenMessage("text");
       guard.getMonthlyBrake.mockResolvedValue({ cap: 2000, used: 2000, active: true, month: "2026-11" });
       await handleInboundMessage("msg_1");
       expect(sentBodies()).toEqual([BOT_REPLIES.monthlyCap]);
-      expect(humanModeSet()).toBe(true);
+      expect(humanModeSet()).toBe(false);
       expect(guard.notifyOwnersBrakeOnce).toHaveBeenCalledWith(expect.objectContaining({ active: true }));
       expect(ai.runAiTurn).not.toHaveBeenCalled();
     });
@@ -544,17 +596,17 @@ describe("replyWithAi — meneruskan jawaban owner (notifyClient: false)", () =>
     db.waConversation.updateMany.mockResolvedValue({ count: 1 });
   });
 
-  it("AI gagal → chat ke admin, klien tidak dikirimi pesan sibuk (owner yang menerima laporan)", async () => {
+  it("AI gagal → chat tetap BOT, klien tidak dikirimi pesan sibuk (owner yang menerima laporan)", async () => {
     ai.runAiTurn.mockRejectedValue(new Error("boom"));
     expect(await replyWithAi(conversation, anchor, { checkSuperseded: false, notifyClient: false })).toBe(false);
-    expect(humanModeSet()).toBe(true);
+    expect(humanModeSet()).toBe(false);
     expect(api.sendText).not.toHaveBeenCalled();
   });
 
-  it("balasan AI kosong dua kali → chat ke admin tanpa pesan sibuk ke klien", async () => {
+  it("balasan AI kosong dua kali → chat tetap BOT, tanpa pesan sibuk ke klien", async () => {
     aiReply(null);
     expect(await replyWithAi(conversation, anchor, { checkSuperseded: false, notifyClient: false })).toBe(false);
-    expect(humanModeSet()).toBe(true);
+    expect(humanModeSet()).toBe(false);
     expect(api.sendText).not.toHaveBeenCalled();
   });
 });
@@ -606,10 +658,10 @@ describe("handleInboundMessage — Uji bot (sandbox)", () => {
     expect(body).not.toContain("1.500.000");
   });
 
-  it("kata kunci admin → mode HUMAN, balasan handoff tersimpan", async () => {
+  it("kata kunci admin → chat tetap BOT, balasan handoff tersimpan", async () => {
     givenSandboxMessage("admin");
     await handleInboundMessage("msg_s");
-    expect(humanModeSet()).toBe(true);
+    expect(humanModeSet()).toBe(false);
     expect(db.waMessage.create.mock.calls[0][0].data.body).toBe(BOT_REPLIES.handoff);
     expect(api.sendText).not.toHaveBeenCalled();
   });

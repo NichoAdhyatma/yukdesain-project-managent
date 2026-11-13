@@ -1,4 +1,4 @@
-import { setHumanMode } from "../handoff";
+import { callAdmin } from "../handoff";
 import { notifyDpProof, notifyNeedsQuote } from "@/lib/notifications/owner-events";
 import type Anthropic from "@anthropic-ai/sdk";
 import { Prisma } from "@prisma/client";
@@ -224,7 +224,7 @@ export const INTAKE_TOOLS: Anthropic.Tool[] = [
   {
     name: "request_human_handoff",
     description:
-      "Alihkan percakapan ke admin manusia: klien minta admin, menawar/keberatan harga, atau kamu tidak bisa membantu. Setelah ini bot berhenti membalas.",
+      "Panggil admin manusia: klien minta admin, menawar/keberatan harga, atau kamu tidak bisa membantu. Admin dikabari lewat notifikasi; chat tetap kamu layani sampai admin membalas sendiri.",
     input_schema: {
       type: "object",
       properties: { reason: { type: "string" } },
@@ -466,10 +466,10 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     if (quote.agreedPrice === null || quote.dpAmount === null) return fail("Harga order belum lengkap");
 
     if (quote._count.paymentProofs >= WA_MAX_PAYMENT_PROOFS_PER_INTAKE) {
-      await setHumanMode(ctx.conversationId, "proof_limit");
+      callAdmin(ctx.conversationId, "proof_limit");
       return ok({
-        handedOff: true,
-        message: "Batas pengiriman bukti tercapai. Beri tahu klien bahwa admin akan membantu langsung.",
+        adminCalled: true,
+        message: "Batas pengiriman bukti tercapai. Admin sudah dikabari; beri tahu klien bahwa admin akan membantu langsung.",
       });
     }
 
@@ -663,10 +663,12 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
   },
 
   async request_human_handoff(ctx) {
-    await setHumanMode(ctx.conversationId, "bot_handoff");
+    // Keputusan owner 2026-11-13: admin dipanggil, chat tidak dipindah; mode admin hanya bila admin membalas sendiri.
+    callAdmin(ctx.conversationId, "bot_handoff");
     return ok({
-      handedOff: true,
-      message: "Percakapan dialihkan ke admin. Beri tahu klien bahwa admin akan membalas secepatnya.",
+      adminCalled: true,
+      message:
+        "Admin sudah dikabari dan akan membalas langsung di chat ini. Sampaikan ke klien dengan singkat. Chat tetap kamu layani sampai admin membalas: bantu hal lain, jangan bernegosiasi atau menjanjikan hal yang diminta.",
     });
   },
 };

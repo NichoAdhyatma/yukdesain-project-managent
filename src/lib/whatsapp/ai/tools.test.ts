@@ -27,7 +27,8 @@ const storage = vi.hoisted(() => ({ copyToPublicBucket: vi.fn() }));
 
 const briefNotes = vi.hoisted(() => ({ addClientBriefNote: vi.fn() }));
 vi.mock("../brief-notes", () => briefNotes);
-vi.mock("@/lib/notifications/owner-events", () => ({ notifyNeedsQuote: vi.fn(), notifyDpProof: vi.fn(), notifyNeedsAdmin: vi.fn() }));
+const ownerEvents = vi.hoisted(() => ({ notifyNeedsQuote: vi.fn(), notifyDpProof: vi.fn(), notifyNeedsAdmin: vi.fn() }));
+vi.mock("@/lib/notifications/owner-events", () => ownerEvents);
 vi.mock("@/lib/db", () => ({ prisma: db }));
 vi.mock("@/lib/storage", () => storage);
 vi.mock("../env", () => ({ getWhatsAppEnv: () => ({ STORAGE_PRIVATE_BUCKET: "private-bucket" }), getPrivateBucket: () => "private-bucket" }));
@@ -58,6 +59,7 @@ vi.mock("./extract-payment-proof", async (orig) => ({
   extractPaymentProof: extraction.extractPaymentProof,
 }));
 
+import { resetCallAdminThrottle } from "../handoff";
 import { INTAKE_TOOLS, executeTool } from "./tools";
 
 const ctx = { conversationId: "conv_1" };
@@ -76,6 +78,7 @@ const activeIntake = (over: Record<string, unknown> = {}) => ({
 });
 
 beforeEach(() => {
+  resetCallAdminThrottle();
   vi.clearAllMocks();
   db.$transaction.mockImplementation(async (fn: (tx: typeof db) => unknown) => fn(db));
   db.waIntake.updateMany.mockResolvedValue({ count: 1 });
@@ -339,9 +342,10 @@ describe("tool lain", () => {
     expect(db.waIntake.updateMany).not.toHaveBeenCalled();
   });
 
-  it("request_human_handoff → mode HUMAN", async () => {
+  it("request_human_handoff → admin dipanggil, chat tidak dipindah ke mode admin", async () => {
     await run("request_human_handoff", { reason: "minta diskon" });
-    expect(db.waConversation.updateMany).toHaveBeenCalledWith({ where: { id: "conv_1", mode: "BOT" }, data: { mode: "HUMAN" } });
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+    expect(ownerEvents.notifyNeedsAdmin).toHaveBeenCalledWith("conv_1", "bot_handoff");
   });
 });
 
@@ -430,7 +434,7 @@ describe("submit_payment_proof", () => {
     expect(media.movePrivateMedia).not.toHaveBeenCalled();
   });
 
-  it("sudah 5 bukti → dialihkan ke admin tanpa membuat bukti baru", async () => {
+  it("sudah 5 bukti → admin dipanggil tanpa membuat bukti baru, chat tetap BOT (keputusan owner 13 Nov)", async () => {
     db.waIntake.findUniqueOrThrow.mockResolvedValue({
       agreedPrice: 1500000,
       dpAmount: 750000,
@@ -438,8 +442,9 @@ describe("submit_payment_proof", () => {
       _count: { paymentProofs: 5 },
     });
     const r = await run("submit_payment_proof", { message_id: "msg_bukti" });
-    expect(r.data.handedOff).toBe(true);
-    expect(db.waConversation.updateMany).toHaveBeenCalledWith({ where: { id: "conv_1", mode: "BOT" }, data: { mode: "HUMAN" } });
+    expect(r.data.adminCalled).toBe(true);
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+    expect(ownerEvents.notifyNeedsAdmin).toHaveBeenCalledWith("conv_1", "proof_limit");
     expect(db.paymentProof.create).not.toHaveBeenCalled();
   });
 });
@@ -626,5 +631,16 @@ describe("add_brief_note (kasus Alfa Indah 2026-11-12)", () => {
   it("tidak ada order/project yang bisa diberi catatan → error ke model", async () => {
     briefNotes.addClientBriefNote.mockResolvedValue({ ok: false, error: "Tidak ada order" });
     expect((await executeTool("add_brief_note", { note: "x" }, { conversationId: "conv_1" })).isError).toBe(true);
+  });
+});
+
+// Keputusan owner 13 Nov: chat pindah ke mode admin hanya bila admin sendiri membalas.
+describe("request_human_handoff memanggil admin tanpa memindahkan chat", () => {
+  it("owner dipanggil, mode chat tidak diubah, bot diminta tetap melayani", async () => {
+    const out = await executeTool("request_human_handoff", { reason: "klien menawar harga" }, { conversationId: "conv_h" });
+    expect(out.isError).toBe(false);
+    expect(db.waConversation.updateMany).not.toHaveBeenCalled();
+    expect(ownerEvents.notifyNeedsAdmin).toHaveBeenCalledWith("conv_h", "bot_handoff");
+    expect(JSON.parse(out.content).message).toContain("tetap kamu layani");
   });
 });

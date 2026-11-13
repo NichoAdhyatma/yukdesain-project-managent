@@ -3,7 +3,8 @@ import { markAsReadOnChannel } from "./channel";
 import { storeInboundMedia } from "./media";
 import { findActiveIntake } from "./ai/tools";
 import { botReplyLimitReached, checkInboundRate, imageLimitExceeded } from "./rate-limit";
-import { BOT_REPLIES, isSuperseded, replyWithAi, sendBotText, setHumanMode } from "./bot-reply";
+import { BOT_REPLIES, isSuperseded, replyWithAi, sendBotText } from "./bot-reply";
+import { callAdmin, lastOutboundIs } from "./handoff";
 import { resolveOwner } from "./owner/identity";
 import { handleOwnerMessage } from "./owner/handle";
 import { notifyNewClient } from "@/lib/notifications/owner-events";
@@ -83,16 +84,17 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
       where: { id: "default" },
       select: { waBotEnabled: true },
     });
-    if (!settings?.waBotEnabled) return;
+    if (!settings?.waBotEnabled) return storeImageWhileSilent(message, conversation.id);
   }
-  if (conversation.mode === "HUMAN") return;
+  if (conversation.mode === "HUMAN") return storeImageWhileSilent(message, conversation.id);
 
   // Rem bulanan: balasan bot bulan ini sudah mencapai batas owner → satu pesan, lalu admin (§3).
   if (!conversation.isSandbox) {
     const brake = await getMonthlyBrake();
     if (brake.active) {
-      await setHumanMode(conversation.id, "monthly_brake");
-      await sendBotText(conversation, BOT_REPLIES.monthlyCap);
+      // Chat tetap BOT (keputusan owner 2026-11-13); pesan rem cukup sekali, setelah itu bot diam selama rem aktif.
+      callAdmin(conversation.id, "monthly_brake");
+      if (!(await lastOutboundIs(conversation.id, BOT_REPLIES.monthlyCap))) await sendBotText(conversation, BOT_REPLIES.monthlyCap);
       await notifyOwnersBrakeOnce(brake).catch((error) =>
         console.error("[whatsapp] info rem bulanan gagal:", (error as Error).name),
       );
@@ -114,7 +116,8 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   if (rate === "ignore") return;
 
   if (message.type === "text" && HANDOFF_KEYWORDS.has(message.body.trim().toLowerCase())) {
-    await setHumanMode(conversation.id, "client_asked");
+    // Admin dipanggil; chat pindah ke mode admin saat admin membalas sendiri (keputusan owner 2026-11-13).
+    callAdmin(conversation.id, "client_asked");
     await sendBotText(conversation, BOT_REPLIES.handoff);
     return;
   }
@@ -147,14 +150,31 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
     return;
   }
 
-  // Batas biaya: percakapan yang sangat panjang dialihkan ke admin (§17).
+  // Batas biaya: percakapan yang sangat panjang → admin dipanggil, bot berhenti membalas sampai besok (§17).
+  // Chat tetap BOT (keputusan owner 2026-11-13); pesan batas cukup sekali.
   if (await botReplyLimitReached(conversation.id)) {
-    await setHumanMode(conversation.id, "daily_limit");
-    await sendBotText(conversation, BOT_REPLIES.dailyLimit);
+    callAdmin(conversation.id, "daily_limit");
+    if (!(await lastOutboundIs(conversation.id, BOT_REPLIES.dailyLimit))) await sendBotText(conversation, BOT_REPLIES.dailyLimit);
     return;
   }
 
   await replyWithAi(conversation, message, { checkSuperseded: true });
+}
+
+/**
+ * Bot tidak membalas (nonaktif / chat dipegang admin), tetapi gambar klien tetap diunduh ke storage privat supaya
+ * terlihat di Inbox dan bisa dibaca bot setelah chat dikembalikan. Produksi 2026-11-13 (Mif): 10 foto saat mode admin
+ * tidak pernah diunduh. Batas gambar per order tetap berlaku; gagal unduh tidak menghentikan apa pun.
+ */
+async function storeImageWhileSilent(message: { id: string; type: string }, conversationId: string): Promise<void> {
+  if (message.type !== "image") return;
+  const intake = await findActiveIntake(conversationId);
+  if (await imageLimitExceeded(conversationId, intake?.createdAt ?? null)) return;
+  try {
+    await storeInboundMedia(message.id);
+  } catch (error) {
+    console.error("[whatsapp] unduh gambar saat bot diam gagal:", (error as Error).name);
+  }
 }
 
 /** Order terakhir sudah lewat tahap brief (menunggu harga, verifikasi DP, atau sudah jadi project). */

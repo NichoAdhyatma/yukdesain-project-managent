@@ -371,3 +371,11 @@ describe("evaluasi chat 13 Nov (Mr.K4z)", () => {
     expect(prompt).toContain("logos_json hanya untuk logo");
   });
 });
+
+describe("memanggil admin tanpa memindahkan chat (keputusan owner 13 Nov)", () => {
+  it("setelah request_human_handoff bot tetap melayani dan tidak bilang chat dialihkan", () => {
+    const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+    expect(prompt).toContain("chat tetap kamu layani sampai admin membalas sendiri");
+    expect(prompt).toContain('bukan "chat sudah dialihkan"');
+  });
+});
