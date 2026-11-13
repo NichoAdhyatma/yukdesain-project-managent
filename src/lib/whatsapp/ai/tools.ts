@@ -88,7 +88,7 @@ export const INTAKE_TOOLS: Anthropic.Tool[] = [
   {
     name: "add_brief_note",
     description:
-      "Catat tambahan atau perubahan kecil brief dari klien setelah brief dikunci (invoice sudah dikirim, bukti DP sedang dicek, atau order sudah dikerjakan dan hasil akhir belum dikirim). Tulis catatan singkat dengan kata-kata klien. Selama brief masih dikumpulkan, pakai update_brief_draft.",
+      "Catat permintaan klien sebagai Catatan Tambahan Klien di brief: (1) permintaan yang tidak punya field brief (mis. kenaikan harga menu, bentuk cup, catatan tampilan), kapan saja selama order aktif; (2) tambahan setelah brief dikunci (invoice dikirim, bukti DP dicek, atau order dikerjakan dan hasil akhir belum dikirim). Untuk field yang ada di brief, pakai update_brief_draft. Tulis dengan kata-kata klien.",
     input_schema: {
       type: "object",
       properties: { note: { type: "string", description: "Tambahan dari klien, mis. tulis 12k di sebelah tiap rasa" } },

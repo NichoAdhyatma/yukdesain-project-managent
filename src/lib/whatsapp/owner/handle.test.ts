@@ -8,6 +8,8 @@ vi.mock("../bot-reply", () => reply);
 vi.mock("../ai/owner-conversation", () => ai);
 vi.mock("./proposals", async (orig) => ({ ...(await orig<typeof import("./proposals")>()), ...proposals }));
 vi.mock("./queries", () => queries);
+const resume = vi.hoisted(() => ({ replyPendingAfterReturn: vi.fn() }));
+vi.mock("../resume-after-return", () => resume);
 
 import { OWNER_REPLIES } from "./proposals";
 import { handleOwnerMessage } from "./handle";
@@ -166,5 +168,29 @@ describe("handleOwnerMessage", () => {
   it("gambar → minta teks", async () => {
     await handleOwnerMessage({ ...text(""), type: "image" }, conv, owner);
     expect(sent()).toEqual([OWNER_REPLIES.textOnly]);
+  });
+});
+
+describe("chat klien dikembalikan ke bot lewat perintah owner (13 Nov, Mif)", () => {
+  const returned = { reply: "Siap, chat Mif saya kembalikan ke bot.", proposal: null, answeredQueryIds: [], resendQueryIds: [], returnedChats: [{ conversationId: "c_mif", label: "Mif (6281****2367)" }] };
+
+  it("bot langsung membalas pesan klien yang tertinggal, hasilnya dilaporkan ke owner", async () => {
+    ai.runOwnerAiTurn.mockResolvedValue(returned);
+    resume.replyPendingAfterReturn.mockResolvedValue("replied");
+    await handleOwnerMessage(text("nomor berakhiran 2367 coba kamu jawab"), conv, owner);
+    expect(resume.replyPendingAfterReturn).toHaveBeenCalledWith("c_mif");
+    expect(sent()).toEqual(["Siap, chat Mif saya kembalikan ke bot.", "Chat Mif (6281****2367) sudah dilayani bot lagi, dan bot sudah membalas pesan terakhir klien."]);
+  });
+
+  it("tidak ada pesan yang perlu dibalas / bot gagal / balas otomatis mati → laporan sesuai", async () => {
+    ai.runOwnerAiTurn.mockResolvedValue(returned);
+    resume.replyPendingAfterReturn.mockResolvedValueOnce("nothing_pending").mockResolvedValueOnce("failed").mockResolvedValueOnce("skipped");
+    await handleOwnerMessage(text("Mif balas pakai bot"), conv, owner);
+    await handleOwnerMessage(text("Mif balas pakai bot"), conv, owner);
+    await handleOwnerMessage(text("Mif balas pakai bot"), conv, owner);
+    const reports = sent().filter((t) => t.startsWith("Chat Mif"));
+    expect(reports[0]).toContain("Belum ada pesan klien yang perlu dibalas");
+    expect(reports[1]).toContain("bot gagal membalas");
+    expect(reports[2]).toContain("Balas otomatis");
   });
 });

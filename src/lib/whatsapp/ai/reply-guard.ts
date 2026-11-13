@@ -13,6 +13,10 @@ const DURATION = /(selesai|jadi|estimasi|deadline|pengerjaan|dikerjakan|proses)[
 const STARTING = /\bmulai\b/i;
 const TOTAL = /\b(total|totalnya|jadi|semua|seluruh|sekalian|dikali)\b|\d\s?x\b|\bx\s?\d/i;
 
+// Pemisah kalimat untuk semua penjaga: titik/tanya/seru diikuti spasi, atau baris baru. Nomor daftar di awal baris
+// ("1. Nama") bukan akhir kalimat.
+const SENTENCE_SPLIT = /(?<=[.!?])(?<!^[ \t]*\d+\.)(?=\s)|(?<=\n)/m;
+
 export const PRICE_PLACEHOLDER = "Soal harga dan lama pengerjaannya nanti dikirim tim setelah brief-nya lengkap ya kak.";
 
 export function mentionsPriceOrDeadline(sentence: string): boolean {
@@ -128,9 +132,9 @@ export function stripPriceMentions(
     if (DISCOUNT_WORD.test(sentence)) return money.every(fromPolicy);
     return pricesAllowed(sentence, money.filter((n) => !fromPolicy(n)));
   };
-  // Pisah kalimat hanya di tanda baca yang diikuti spasi/baris baru, supaya
-  // pemisah ribuan ("Rp500.000") tidak memecah kalimat.
-  const parts = text.split(/(?<=[.!?])(?=\s)|(?<=\n)/);
+  // Pisah kalimat hanya di tanda baca yang diikuti spasi/baris baru, supaya pemisah ribuan ("Rp500.000") tidak
+  // memecah kalimat; nomor daftar ("6. ...") juga bukan akhir kalimat (ringkasan rusak "6.7.", 13 Nov).
+  const parts = text.split(SENTENCE_SPLIT);
   const kept = parts.filter((p) => !mentionsPriceOrDeadline(p) || allowedSentence(p));
   if (kept.length === parts.length) return { text, changed: false };
   const body = kept.join("").trim();
@@ -154,15 +158,13 @@ export function stripDpMentions(text: string, dpNumbers: string[] = []): { text:
   const mentionsDp = (p: string) =>
     (DP_WORD.test(p) && (moneyAmounts(p).length > 0 || percentAmounts(p).length > 0 || PERCENT_WORD.test(p) || BARE_NUMBER.test(p))) ||
     amountsOf(p).some((n) => dp.has(n));
-  const parts = text.split(/(?<=[.!?])(?=\s)|(?<=\n)/);
+  const parts = text.split(SENTENCE_SPLIT);
   const kept = parts.filter((p) => !mentionsDp(p));
   if (kept.length === parts.length) return { text, changed: false };
   const body = kept.join("").trim();
   return { text: body ? `${body}\n\n${DP_PLACEHOLDER}` : DP_PLACEHOLDER, changed: true };
 }
 
-// Nomor daftar di awal baris ("1. Nama") bukan akhir kalimat.
-const SENTENCE_SPLIT = /(?<=[.!?])(?<!^[ \t]*\d+\.)(?=\s)|(?<=\n)/m;
 const LIST_MARKER = /^\s*(?:[-•*]|\d+[.)])\s+/;
 // Ringkasan brief yang diperbarui memang dikirim ulang utuh.
 const SUMMARY_MIN_LIST_LINES = 3;

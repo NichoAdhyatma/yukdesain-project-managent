@@ -16,6 +16,21 @@ import {
   withoutFakeConfirmation,
 } from "./proposals";
 import { findFailedRelays, queryIdFromContext, relayOwnerAnswer, type RelayResult } from "./queries";
+import { replyPendingAfterReturn, type ResumeOutcome } from "../resume-after-return";
+
+/** Laporan setelah owner mengembalikan chat klien ke bot lewat WhatsApp (13 Nov, kasus Mif). */
+export function returnedChatReport(label: string, outcome: ResumeOutcome): string {
+  switch (outcome) {
+    case "replied":
+      return `Chat ${label} sudah dilayani bot lagi, dan bot sudah membalas pesan terakhir klien.`;
+    case "nothing_pending":
+      return `Chat ${label} sudah dilayani bot lagi. Belum ada pesan klien yang perlu dibalas; bot membalas pesan berikutnya.`;
+    case "failed":
+      return `Chat ${label} sudah dikembalikan ke bot, tapi bot gagal membalas, jadi chat dialihkan ke admin lagi. Balas klien manual dari Inbox.`;
+    default:
+      return `Chat ${label} sudah dilayani bot lagi, tapi Balas otomatis sedang nonaktif, jadi belum ada balasan ke klien.`;
+  }
+}
 
 // Tanda format WhatsApp (*tebal*, _miring_, ~coret~) ikut tersalin saat owner menyalin kata dari laporan bot.
 const RESEND_KEYWORD = /^[\s*_~]*kirim\s*ulang(?![a-z0-9])/i;
@@ -97,7 +112,7 @@ export async function handleOwnerMessage(
         ? (withoutFakeConfirmation(sanitized.text) ?? OWNER_REPLIES.notRecorded)
         : sanitized.text;
     await sendBotText(conversation, text);
-  } else if (turn.answeredQueryIds.length === 0 && turn.resendQueryIds.length === 0) {
+  } else if (turn.answeredQueryIds.length === 0 && turn.resendQueryIds.length === 0 && !turn.returnedChats?.length) {
     console.warn(`[whatsapp] AI owner tanpa balasan untuk ${maskPhone(conversation.waId)}: stop=${turn.stopReason ?? "-"}`);
     await sendBotText(conversation, OWNER_REPLIES.busy);
   }
@@ -110,5 +125,10 @@ export async function handleOwnerMessage(
   for (const { id, force } of relays) {
     const report = relayReport(await relayOwnerAnswer(id, { force }), force);
     if (report) await sendBotText(conversation, report);
+  }
+
+  // Chat yang dikembalikan ke bot: pesan klien yang tertinggal langsung dijawab, owner menerima hasilnya.
+  for (const chat of turn.returnedChats ?? []) {
+    await sendBotText(conversation, returnedChatReport(chat.label, await replyPendingAfterReturn(chat.conversationId)));
   }
 }

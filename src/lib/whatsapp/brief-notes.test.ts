@@ -36,11 +36,16 @@ describe("addClientBriefNote", () => {
     });
   });
 
-  it("order masih mengumpulkan brief: ditolak, pakai update_brief_draft", async () => {
-    db.waIntake.findFirst.mockResolvedValue({ id: "i1", status: "COLLECTING", briefDraft: {} });
-    const result = await addClientBriefNote("conv1", "x", now);
-    expect(result).toMatchObject({ ok: false, error: expect.stringContaining("update_brief_draft") });
-    expect(db.waIntake.update).not.toHaveBeenCalled();
+  // Produksi 13 Nov (Mr.K4z): "semua harga naik 1.000" saat brief dikumpulkan tidak punya field, bot bilang
+  // "diteruskan ke tim" tetapi tidak ada yang tersimpan.
+  it("order yang masih mengumpulkan brief: catatan bebas juga masuk brief order", async () => {
+    db.waIntake.findFirst.mockResolvedValue({ id: "i1", status: "COLLECTING", briefDraft: { size: "A3" } });
+    const result = await addClientBriefNote("conv1", "Semua harga menu naik 1.000, kecuali Amerikano dan teh hijau naik 2.000", now);
+    expect(result).toEqual({ ok: true, target: "ORDER" });
+    expect(db.waIntake.update).toHaveBeenCalledWith({
+      where: { id: "i1" },
+      data: { briefDraft: { size: "A3", client_notes: "• 12 Nov 21.19: Semua harga menu naik 1.000, kecuali Amerikano dan teh hijau naik 2.000" } },
+    });
   });
 
   it("tanpa order aktif: dicatat di brief project klien yang sedang berjalan", async () => {

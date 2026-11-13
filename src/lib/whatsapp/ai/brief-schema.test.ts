@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aiWritableBriefFields,
   allowedBriefFields,
+  imageTargetFields,
   mergeBriefDraft,
   missingRequiredFields,
   validateBriefFields,
@@ -19,6 +20,14 @@ describe("allowed fields per layanan", () => {
   it("AI tidak boleh menulis field gambar", () => {
     expect(aiWritableBriefFields(LOGO)).not.toContain("reference_items_json");
     expect(aiWritableBriefFields(POSTER)).toEqual(["main_text", "size", "style", "menu_items_json"]);
+  });
+
+  // Produksi 13 Nov (Mr.K4z) dan 12 Nov (Nurul): foto daftar menu / referensi masuk sebagai "Logo Brand" karena
+  // Poster Menu, Banner UMKM, dan Baliho hanya punya target gambar logos_json.
+  it("Poster Menu, Banner UMKM, Baliho punya target gambar referensi selain logo", () => {
+    for (const code of ["SVC-03", "SVC-04", "SVC-05"]) {
+      expect(imageTargetFields(code)).toEqual(["logos_json", "reference_items_json"]);
+    }
   });
 
   it("layanan tidak dikenal → kosong", () => {

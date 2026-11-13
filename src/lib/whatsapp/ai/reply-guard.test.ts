@@ -346,3 +346,20 @@ describe("kalimat tempelan penjaga terdengar seperti admin", () => {
     expect(DP_PLACEHOLDER).toBe("Nominal DP-nya ada di invoice yang tadi kami kirim ya kak.");
   });
 });
+
+// Produksi 13 Nov (Mr.K4z): ringkasan brief jadi "6.7. Sisa foto produk" karena nomor "6." dipotong sebagai kalimat.
+describe("penjaga harga/DP: nomor daftar bukan akhir kalimat", () => {
+  it("baris bernomor yang memuat harga terlarang dibuang utuh, nomor tidak menempel ke baris berikutnya", () => {
+    const text = "Ringkasan:\n5. Menu: 29 item\n6. Harga menu naik Rp1.000 semua\n7. Sisa foto produk: ditanyakan ke tim\n\nSudah sesuai kak?";
+    const out = stripPriceMentions(text).text;
+    expect(out).not.toContain("6.7.");
+    expect(out).toContain("7. Sisa foto produk: ditanyakan ke tim");
+    expect(out).not.toMatch(/^6\.\s*$/m);
+  });
+
+  it("DP: baris bernomor dengan nominal DP dibuang utuh", () => {
+    const out = stripDpMentions("Rincian:\n1. DP 50%: Rp67.500\n2. Kirim bukti transfer di sini", ["67500"]).text;
+    expect(out).toContain("2. Kirim bukti transfer di sini");
+    expect(out).not.toMatch(/^1\.\s*$/m);
+  });
+});

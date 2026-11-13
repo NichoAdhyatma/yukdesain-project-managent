@@ -2,13 +2,12 @@ import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type { BriefResponseEntry } from "@/lib/brief/responses";
 
-// Tambahan brief dari klien setelah brief dikunci (invoice terkirim / bukti DP / project berjalan), disetujui owner
+// Tambahan brief dari klien yang tidak punya field (kapan saja selama order aktif) atau setelah brief dikunci (invoice
+// terkirim / bukti DP / project berjalan), disetujui owner
 // 2026-11-12 (kasus Alfa Indah: minta "harga 12k di sebelah rasa" setelah kirim bukti DP, bot mengalihkan chat ke
 // admin dan tambahannya tidak masuk brief). Dicatat sebagai field `client_notes`, dibaca desainer dan owner di brief.
 
 export const CLIENT_NOTES_KEY = "client_notes";
-/** Order yang brief-nya sudah dikunci: tambahan masuk catatan, bukan mengubah field brief. */
-const LOCKED_ORDER_STATUSES = new Set(["QUOTED", "DP_REVIEW"]);
 
 export type BriefNoteResult =
   | { ok: true; target: "ORDER" }
@@ -30,10 +29,9 @@ export async function addClientBriefNote(conversationId: string, note: string, n
     orderBy: { createdAt: "desc" },
     select: { id: true, status: true, briefDraft: true },
   });
+  // Semua order aktif: brief dikunci (QUOTED/DP_REVIEW) maupun masih dikumpulkan, untuk permintaan yang tidak punya
+  // field brief (kasus Mr.K4z 13 Nov: kenaikan harga menu tidak tersimpan di mana pun).
   if (intake) {
-    if (!LOCKED_ORDER_STATUSES.has(intake.status)) {
-      return { ok: false, error: "Brief order masih bisa diubah: pakai update_brief_draft." };
-    }
     const draft = (intake.briefDraft ?? {}) as Record<string, unknown>;
     const notes = appendNote(draft[CLIENT_NOTES_KEY] as string | undefined, note, now);
     await prisma.waIntake.update({
