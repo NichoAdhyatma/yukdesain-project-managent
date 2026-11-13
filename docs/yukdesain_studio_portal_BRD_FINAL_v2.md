@@ -1264,6 +1264,13 @@ Invoice should include client-safe financial/project information such as:
 
 Client can view/download the invoice through the tokenized portal.
 
+**Change 2026-11-13 (approved by owner):** staff accounts without the OWNER role (designers) that are logged in do not
+receive invoice, price, payment, or payment-account data from the client portal API (`financeHidden`); the portal
+hides the Payment/Invoice cards and tabs. The public "Lacak pesanan" lookup (`/client-portal`) requires the project
+code **and** the last 4 digits of the client's WhatsApp number (client phone or linked WhatsApp chat), with at most 5
+wrong attempts per code per 15 minutes. Reason: a designer opened "Lacak pesanan" with a project code from the Workspace
+and saw the invoice.
+
 Internal payout calculations must not be exposed in the client invoice.
 
 **Implementation status: ✅ Implemented**

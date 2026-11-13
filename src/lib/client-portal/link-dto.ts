@@ -144,6 +144,8 @@ export type ClientProjectDto = {
     attachments: ClientAttachmentDto[];
   }>;
   finalFiles: ClientFinalFilesDto;
+  /** Dibuka akun staf non-owner (desainer): invoice, harga, dan pembayaran tidak dikirim (keputusan owner 2026-11-13). */
+  financeHidden: boolean;
 };
 
 export type ClientLinkDto = { status: string; project: ClientProjectDto };
@@ -237,6 +239,25 @@ export function toClientLinkDto(link: ClientLinkRow): ClientLinkDto {
         attachments: r.attachments.map(toAttachment),
       })),
       finalFiles: toFinalFiles(p.attachments, p.paymentStatus),
+      financeHidden: false,
+    },
+  };
+}
+
+/**
+ * Portal yang dibuka desainer (akun login tanpa peran OWNER): data keuangan dikosongkan di server, bukan hanya
+ * disembunyikan di tampilan. Owner 2026-11-13: karyawan melihat invoice lewat "Lacak pesanan".
+ */
+export function withoutFinance(dto: ClientLinkDto): ClientLinkDto {
+  return {
+    ...dto,
+    project: {
+      ...dto.project,
+      agreedPrice: 0,
+      paidAmount: 0,
+      paymentStatus: "",
+      invoices: [],
+      financeHidden: true,
     },
   };
 }

@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/db", () => ({ prisma: mocks.db }));
+const session = vi.hoisted(() => ({ getCurrentUser: vi.fn() }));
+vi.mock("@/lib/auth/session", () => session);
 vi.mock("@/lib/studio-operations", () => ({
   getStudioOperations: vi.fn(async () => ({ revisionNotice: "Isi revisi selengkap mungkin ya kak." })),
 }));
@@ -201,6 +203,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.db.paymentAccount.findMany.mockResolvedValue([rawAccount]);
   mocks.db.clientLink.update.mockResolvedValue({});
+  session.getCurrentUser.mockResolvedValue(null);
 });
 
 describe("GET /api/client-links/[token]", () => {
@@ -293,6 +296,7 @@ describe("GET /api/client-links/[token]", () => {
             },
           ],
           finalFiles: { locked: true, files: [{ id: "att_f", filename: "logo-final.ai", storageKey: null }] },
+          financeHidden: false,
         },
       },
       revisionNotice: "Isi revisi selengkap mungkin ya kak.",
@@ -392,5 +396,34 @@ describe("GET /api/client-links/[token]", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).link.status).toBe(status);
     expect(mocks.db.clientLink.update).not.toHaveBeenCalled();
+  });
+});
+
+// Owner 13 Nov: karyawan (desainer) membuka "Lacak pesanan" dan melihat invoice. Akun desainer yang login tidak
+// menerima data keuangan dari portal.
+describe("data keuangan disembunyikan untuk akun desainer", () => {
+  it("desainer login → tanpa invoice, harga, pembayaran, rekening", async () => {
+    session.getCurrentUser.mockResolvedValue({ id: "d1", roles: ["DESIGNER"] });
+    mocks.db.clientLink.findUnique.mockResolvedValue(rawLink("LOCKED"));
+    const res = await call();
+    const text = await res.text();
+    const body = JSON.parse(text);
+    expect(body.link.project.financeHidden).toBe(true);
+    expect(body.link.project.invoices).toEqual([]);
+    expect(body.link.project.agreedPrice).toBe(0);
+    expect(body.link.project.paidAmount).toBe(0);
+    expect(body.link.project.paymentStatus).toBe("");
+    expect(body.paymentAccounts).toEqual([]);
+    expect(text).not.toContain("1500000");
+    expect(text).not.toContain("750000");
+    expect(text).not.toContain("INV-2026-0001");
+  });
+
+  it("owner login atau klien tanpa login → data keuangan lengkap", async () => {
+    mocks.db.clientLink.findUnique.mockResolvedValue(rawLink("LOCKED"));
+    session.getCurrentUser.mockResolvedValue({ id: "o1", roles: ["OWNER", "DESIGNER"] });
+    expect((await (await call()).json()).link.project.agreedPrice).toBe(1500000);
+    session.getCurrentUser.mockResolvedValue(null);
+    expect((await (await call()).json()).link.project.financeHidden).toBe(false);
   });
 });

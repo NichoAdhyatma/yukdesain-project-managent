@@ -5,8 +5,10 @@ import {
   clientPaymentAccountSelect,
   toClientLinkDto,
   toClientPaymentAccountDto,
+  withoutFinance,
 } from "@/lib/client-portal/link-dto";
 import { getStudioOperations } from "@/lib/studio-operations";
+import { getCurrentUser } from "@/lib/auth/session";
 
 const linkExpired = () =>
   NextResponse.json({ error: "Link has expired", code: "LINK_EXPIRED" }, { status: 410 });
@@ -53,10 +55,14 @@ export async function GET(
     // ACTIVE, LOCKED and SUBMITTED links all return tracking data
     // Peringatan revisi dari Operasional studio (docs/STUDIO_OPERATIONS.md)
     const { revisionNotice } = await getStudioOperations();
+    // Akun staf non-owner (desainer) yang login: tanpa invoice, harga, pembayaran, rekening (keputusan owner 2026-11-13).
+    const viewer = await getCurrentUser().catch(() => null);
+    const hideFinance = !!viewer && !viewer.roles.includes("OWNER");
+    const dto = toClientLinkDto(link);
     return NextResponse.json({
-      link: toClientLinkDto(link),
+      link: hideFinance ? withoutFinance(dto) : dto,
       revisionNotice,
-      paymentAccounts: paymentAccounts.map(toClientPaymentAccountDto),
+      paymentAccounts: hideFinance ? [] : paymentAccounts.map(toClientPaymentAccountDto),
     });
   } catch (error) {
     console.error("Error fetching link:", error);
