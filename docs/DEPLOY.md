@@ -1,7 +1,8 @@
 # Deploy portal di VPS
 
 Portal berjalan di satu VPS (bukan Vercel): service systemd `yukdesain` (`next start` di `127.0.0.1:3000`), di
-belakang nginx. Bot WhatsApp (webhook Kirimi), web push owner, dan timer `yukdesain-client-notices` ada di server yang
+belakang nginx. Bot WhatsApp (webhook Kirimi), web push owner, dan timer `yukdesain-client-notices` serta
+`yukdesain-admin-reminders` (docs/OWNER_NOTIFICATIONS_INBOX.md §2a) ada di server yang
 sama, jadi error saat deploy juga mengenai webhook bot. Berlaku sejak 2026-11-08.
 
 ## 1. Masalah yang diperbaiki

@@ -29,6 +29,10 @@ const SMALL_TALK_WORDS = new Set([
   "sip",
   "siap",
   "baik",
+  // "ok kak, ditunggu" (Mirnasuhera 2026-11-12: "Baik dtunggu kak")
+  "ditunggu",
+  "dtunggu",
+  "tunggu",
   "noted",
   "mantap",
   "mantab",

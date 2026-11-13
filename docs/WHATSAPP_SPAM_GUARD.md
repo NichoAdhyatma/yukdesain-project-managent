@@ -34,7 +34,9 @@ banner 800 pesan keluar per bulan.
 
 - Hanya saat order **sudah dikonfirmasi** (status Perlu harga, Verifikasi DP, atau Jadi project).
 - Pesan yang isinya hanya basa-basi tidak dibalas dan tidak memanggil AI: "ok", "oke", "sip", "siap", "baik",
-  "noted", "makasih", "terima kasih", "thanks", "mantap", emoji, atau tanda baca saja (maks ±25 karakter).
+  "noted", "makasih", "terima kasih", "thanks", "mantap", "ditunggu" (sejak 2026-11-13, juga "dtunggu"/"tunggu"),
+  emoji, atau tanda baca saja (maks ±25 karakter). Daftar yang sama dipakai pengingat menunggu admin
+  (docs/OWNER_NOTIFICATIONS_INBOX.md §2a).
 - Pesan berisi pertanyaan atau permintaan tetap dibalas.
 - **Tidak berlaku** saat brief dikumpulkan atau saat menunggu DP, karena di sana "ok" bisa berarti setuju
   (konfirmasi brief, setuju penawaran) dan harus diproses bot.
