@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { latestProgress } from "@/lib/projects/progress-update";
+import { briefChangedSinceLastUpdate } from "@/lib/projects/brief-change";
 import type { ProjectStatus } from "@/types";
 import { ProjectDetail } from "@/components/designer/ProjectDetail";
 import {
@@ -46,6 +47,8 @@ function ProjectListItem({
   const progress = latestProgress(project.updates);
   const pendingRevisions = project.revisions.filter((r) => r.status === "PENDING").length;
   const overdue = isOverdue(project);
+  const briefChanged =
+    project.status !== "SELESAI" && !project.finalApprovedAt && briefChangedSinceLastUpdate(project.brief?.clientUpdatedAt, project.updates) !== null;
 
   return (
     <button
@@ -89,6 +92,7 @@ function ProjectListItem({
         {pendingRevisions > 0 && (
           <span className="font-medium text-amber-700 dark:text-amber-300">{pendingRevisions} revisi menunggu</span>
         )}
+        {briefChanged && <span className="font-medium text-amber-700 dark:text-amber-300">Klien menambah brief</span>}
       </div>
     </button>
   );
@@ -256,7 +260,7 @@ function DesignerWorkspace() {
         >
           {selected ? (
             <div className="mx-auto max-w-3xl">
-              <ProjectDetail project={selected} onBack={clearSelection} />
+              <ProjectDetail key={selected.id} project={selected} onBack={clearSelection} />
             </div>
           ) : selectedId && !isLoading && !isError ? (
             <div className="mx-auto flex max-w-md flex-col items-center gap-3 rounded-lg border border-dashed px-4 py-12 text-center">

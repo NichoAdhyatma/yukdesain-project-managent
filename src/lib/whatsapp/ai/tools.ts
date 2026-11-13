@@ -28,7 +28,7 @@ import { WA_OWNER } from "@/lib/constants";
 import { getDraftGuide, getPublishedGuide } from "./bot-guide";
 import { listOwnerNumbers } from "../owner/identity";
 import { createOwnerQuery, findPendingQuery, notifyOwners } from "../owner/query-store";
-import { addClientBriefNote } from "../brief-notes";
+import { addClientBriefNote, attachImageToProjectBrief } from "../brief-notes";
 
 // Tools AI untuk intake (docs/WHATSAPP_AI_CHATBOT.md §10.5). Model hanya menulis
 // ke draft intake milik percakapan ini; konteks (conversationId) datang dari server,
@@ -99,7 +99,7 @@ export const INTAKE_TOOLS: Anthropic.Tool[] = [
   {
     name: "attach_image_to_brief",
     description:
-      "Masukkan gambar dari klien ke brief (referensi/logo). message_id harus dari STATE, target harus salah satu target gambar di STATE.",
+      "Masukkan gambar dari klien ke brief (referensi/logo). message_id harus dari STATE, target harus salah satu target gambar di STATE. Tanpa order aktif, gambar masuk referensi brief project yang sedang dikerjakan (target reference_items_json).",
     input_schema: {
       type: "object",
       properties: {
@@ -377,7 +377,14 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
   },
 
   async attach_image_to_brief(ctx, input) {
-    const intake = await requireActiveIntake(ctx);
+    const intake = await findActiveIntake(ctx.conversationId);
+    // Tanpa order aktif: gambar referensi untuk project yang sedang dikerjakan (Yeni 13 Nov), target selalu referensi.
+    if (!intake) {
+      const result = await attachImageToProjectBrief(ctx.conversationId, input.message_id, input.caption);
+      return result.ok
+        ? ok({ ...result, attached: true, message: "Gambar masuk referensi brief project dan terlihat oleh desainer; sampaikan singkat ke klien." })
+        : fail(result.error);
+    }
     const serviceCode = intake.service?.code;
     if (!serviceCode) return fail("Layanan belum dipilih");
 

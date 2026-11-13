@@ -39,7 +39,12 @@ export type DesignerProject = {
   priority: string;
   deadline: string | null;
   service: { code: string; name: string };
-  brief: { id: string; responses: Array<{ questionId: string; question: string; answer: string }> } | null;
+  brief: {
+    id: string;
+    responses: Array<{ questionId: string; question: string; answer: string }>;
+    /** Tambahan klien lewat bot setelah project berjalan (lib/projects/brief-change.ts) */
+    clientUpdatedAt?: string | null;
+  } | null;
   finalSubmittedAt?: string | null;
   finalApprovedAt?: string | null;
   updates: DesignerUpdate[];

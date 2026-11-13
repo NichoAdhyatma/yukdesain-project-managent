@@ -24,3 +24,12 @@ export const BRIEF_FIELD_LABELS: Record<string, string> = {
   variant_count: "Jumlah Varian",
   pose_count: "Jumlah Pose",
 };
+
+/**
+ * Label tampilan satu isian brief. Label resmi didahulukan: brief dari WhatsApp menyimpan `question` berupa kunci
+ * mentah ("client notes"), sehingga desainer sempat melihat "client notes" (Yeni, 2026-11-13). Pertanyaan khusus
+ * Form Link yang tidak ada di daftar tetap memakai teks pertanyaannya.
+ */
+export function briefFieldLabel(questionId: string, question?: string | null): string {
+  return BRIEF_FIELD_LABELS[questionId] || question || questionId.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}

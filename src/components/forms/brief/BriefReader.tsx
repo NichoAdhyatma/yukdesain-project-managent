@@ -3,7 +3,7 @@
 import { SERVICE_BRIEF_CONFIGS } from "./types";
 import { ImageViewerGroup, ViewableImage } from "@/components/ui/image-viewer";
 import { FileText } from "lucide-react";
-import { BRIEF_FIELD_LABELS } from "./field-labels";
+import { BRIEF_FIELD_LABELS, briefFieldLabel } from "./field-labels";
 
 type BriefResponseItem = { questionId: string; question: string; answer: string };
 
@@ -335,7 +335,7 @@ export function BriefReader({ responses, serviceCode }: BriefReaderProps) {
           {regularFields.map((r) => (
             <div key={r.questionId} className="rounded-md border p-3">
               <p className="text-xs font-medium text-muted-foreground mb-1">
-                {r.question || getLabel(r.questionId)}
+                {briefFieldLabel(r.questionId, r.question)}
               </p>
               <p className="text-sm whitespace-pre-wrap break-words">
                 {r.answer}
