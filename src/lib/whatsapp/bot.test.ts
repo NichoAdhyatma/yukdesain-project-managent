@@ -121,6 +121,18 @@ describe("handleInboundMessage", () => {
     expect(limits.imageLimitExceeded).toHaveBeenCalledWith("conv_1", new Date("2026-11-01T00:00:00Z"));
   });
 
+  // Produksi 13 Nov (Mif): 12 foto sekaligus → 12 pesan "gambar sudah banyak sekali" dalam 8 detik.
+  it("banyak gambar melewati batas sekaligus → pesan batas cukup sekali, admin dipanggil sekali", async () => {
+    limits.imageLimitExceeded.mockResolvedValue(true);
+    for (let i = 0; i < 5; i++) {
+      givenMessage("image", "");
+      await handleInboundMessage("msg_1");
+    }
+    expect(sentBodies()).toEqual([BOT_REPLIES.tooManyImages]);
+    expect(notify.notifyNeedsAdmin).toHaveBeenCalledTimes(1);
+    expect(notify.notifyNeedsAdmin).toHaveBeenCalledWith("conv_1", "image_limit");
+  });
+
   // Keputusan owner 13 Nov: chat pindah ke admin hanya bila admin sendiri membalas.
   it("80 balasan bot dalam sehari → satu pesan + owner dipanggil, chat tetap BOT, tanpa AI", async () => {
     givenMessage("text");

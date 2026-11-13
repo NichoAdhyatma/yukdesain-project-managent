@@ -43,12 +43,21 @@ describe("botReplyLimitReached", () => {
 });
 
 describe("imageLimitExceeded", () => {
+  // Dicek sebelum gambar baru disimpan: 20 gambar tersimpan = gambar ke-21 ditolak.
   it.each([
-    [20, false],
-    [21, true],
-  ])("%i gambar → %s", async (count, expected) => {
+    [19, false],
+    [20, true],
+  ])("%i gambar tersimpan → %s", async (count, expected) => {
     db.waMessage.count.mockResolvedValue(count);
     await expect(imageLimitExceeded("c", new Date("2026-11-01T00:00:00Z"))).resolves.toBe(expected);
+  });
+
+  // Produksi 13 Nov (Mif): 10 foto kemarin yang tidak pernah tersimpan ikut dihitung, sehingga foto yang diminta bot
+  // untuk dikirim ulang justru ditolak.
+  it("hanya gambar yang benar-benar tersimpan yang dihitung", async () => {
+    db.waMessage.count.mockResolvedValue(0);
+    await imageLimitExceeded("c", null);
+    expect(db.waMessage.count.mock.calls[0][0].where).toMatchObject({ type: "image", mediaStorageKey: { not: null } });
   });
 
   it("dihitung sejak order dibuat", async () => {

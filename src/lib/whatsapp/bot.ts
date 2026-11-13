@@ -4,7 +4,10 @@ import { storeInboundMedia } from "./media";
 import { findActiveIntake } from "./ai/tools";
 import { botReplyLimitReached, checkInboundRate, imageLimitExceeded } from "./rate-limit";
 import { BOT_REPLIES, isSuperseded, replyWithAi, sendBotText } from "./bot-reply";
-import { callAdmin, lastOutboundIs } from "./handoff";
+import { callAdmin, lastOutboundIs, onceWithin } from "./handoff";
+
+/** Pesan "gambar sudah banyak" paling banyak sekali per chat per rentang ini (Mif 13 Nov: 12 pesan dalam 8 detik). */
+const IMAGE_LIMIT_NOTICE_MS = 10 * 60_000;
 import { resolveOwner } from "./owner/identity";
 import { handleOwnerMessage } from "./owner/handle";
 import { notifyNewClient } from "@/lib/notifications/owner-events";
@@ -130,7 +133,8 @@ export async function handleInboundMessage(messageId: string): Promise<void> {
   if (message.type === "image") {
     const intake = await findActiveIntake(conversation.id);
     if (await imageLimitExceeded(conversation.id, intake?.createdAt ?? null)) {
-      await sendBotText(conversation, BOT_REPLIES.tooManyImages);
+      callAdmin(conversation.id, "image_limit");
+      if (onceWithin(`image-limit:${conversation.id}`, IMAGE_LIMIT_NOTICE_MS)) await sendBotText(conversation, BOT_REPLIES.tooManyImages);
       return;
     }
     // Disimpan dulu walau nanti dilewati: giliran pesan berikutnya membutuhkan gambarnya.

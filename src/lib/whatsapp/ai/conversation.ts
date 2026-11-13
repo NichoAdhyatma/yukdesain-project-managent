@@ -62,7 +62,7 @@ function describe(row: HistoryRow): string {
     const caption = row.body ? ` Keterangan klien: ${row.body}` : "";
     return row.mediaStorageKey
       ? `[Gambar dari klien, messageId=${row.id}]${caption}`
-      : `[Gambar dari klien yang tidak bisa diproses]${caption}`;
+      : `[Gambar dari klien yang TIDAK tersimpan (melewati batas gambar atau gagal diunduh). Jangan bilang gambar ini sudah diterima atau dicatat.]${caption}`;
   }
   if (row.type === "unsupported") return "[Pesan jenis lain (suara/video/dokumen) yang tidak didukung]";
   // Teks panjang dipotong untuk AI; teks lengkap tetap tersimpan (docs/WHATSAPP_SPAM_GUARD.md §6).

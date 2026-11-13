@@ -9,7 +9,7 @@ Tambahan untuk `docs/WHATSAPP_AI_CHATBOT.md` §17 (batas bot). Disetujui dan dii
    potong teks panjang.
 2. **Batas balasan bot per nomor per hari tetap 80**: bot memang disiapkan menggantikan admin.
 
-Yang sudah ada tetap berlaku: banjir 20 pesan/5 menit (naik dari 10 pada 2026-11-12: jawaban brief yang cepat sempat terpotong), 20 gambar per order, 5 bukti transfer, 5 salah kode per jam,
+Yang sudah ada tetap berlaku: banjir 20 pesan/5 menit (naik dari 10 pada 2026-11-12: jawaban brief yang cepat sempat terpotong), 20 gambar tersimpan per order (sejak 2026-11-13 hanya gambar yang benar-benar tersimpan yang dihitung; pesan batas gambar paling banyak sekali per 10 menit per chat dan admin dipanggil lewat notifikasi, setelah kasus Mif: 12 foto sekaligus → 12 pesan batas dalam 8 detik), 5 bukti transfer, 5 salah kode per jam,
 banner 800 pesan keluar per bulan.
 
 ## 2. Gabung pesan beruntun
