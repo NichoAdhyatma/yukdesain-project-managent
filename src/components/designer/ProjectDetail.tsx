@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CalendarClock, CheckCircle2, FileText, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { BriefReader } from "@/components/forms/brief/BriefReader";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { latestProgress } from "@/lib/projects/progress-update";
+import { briefChangedSinceLastUpdate } from "@/lib/projects/brief-change";
 import type { ProjectStatus } from "@/types";
 import { ProgressUpdateForm } from "./ProgressUpdateForm";
 import { RevisionList, UpdateTimeline } from "./ProjectHistory";
@@ -17,6 +19,7 @@ import {
   STATUS_BADGE,
   WORK_STATUSES,
   formatDate,
+  formatDateTime,
   statusLabel,
   type DesignerProject,
 } from "./types";
@@ -108,6 +111,10 @@ export function ProjectDetail({ project, onBack }: { project: DesignerProject; o
   const progress = latestProgress(project.updates);
   // Revisi yang belum ditandai selesai dikerjakan
   const pendingRevisions = project.revisions.filter((r) => r.status === "PENDING" && !r.completedAt).length;
+  // Project selesai / hasil akhir disetujui: tidak ada pekerjaan lagi, penanda tidak perlu.
+  const finished = project.status === "SELESAI" || !!project.finalApprovedAt;
+  const briefChange = finished ? null : briefChangedSinceLastUpdate(project.brief?.clientUpdatedAt, project.updates);
+  const [tab, setTab] = useState("progress");
 
   return (
     <article aria-labelledby={`detail-${project.id}`} className="space-y-5">
@@ -153,11 +160,32 @@ export function ProjectDetail({ project, onBack }: { project: DesignerProject; o
         </div>
       </div>
 
-      <Tabs defaultValue="progress" className="w-full">
+      {briefChange && (
+        <div
+          role="status"
+          className="flex flex-col gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 sm:flex-row sm:items-center sm:justify-between dark:border-amber-900 dark:bg-amber-950 dark:text-amber-100"
+        >
+          <p>
+            <span className="font-medium">Klien menambah brief {formatDateTime(briefChange.changedAt)}</span>
+            {briefChange.lastUpdateAt ? `, setelah update terakhir ${formatDateTime(briefChange.lastUpdateAt)}.` : "."} Sesuaikan
+            sebelum update berikutnya.
+          </p>
+          <Button type="button" variant="outline" className="h-11 shrink-0 md:h-9" onClick={() => setTab("brief")}>
+            Lihat brief
+          </Button>
+        </div>
+      )}
+
+      <Tabs value={tab} onValueChange={setTab} className="w-full">
         <TabsList className="grid h-auto! w-full grid-cols-3">
           <TabsTrigger value="progress" className="h-11! text-xs sm:text-sm md:h-8!">Update progres</TabsTrigger>
           <TabsTrigger value="brief" className="h-11! text-xs sm:text-sm md:h-8!">
             Brief{!project.brief && <span className="sr-only"> (belum ada)</span>}
+            {briefChange && (
+              <span className="ml-1 rounded-full bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                Baru<span className="sr-only"> tambahan dari klien</span>
+              </span>
+            )}
           </TabsTrigger>
           <TabsTrigger value="revisions" className="h-11! text-xs sm:text-sm md:h-8!">
             Revisi

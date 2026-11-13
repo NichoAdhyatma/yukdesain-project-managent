@@ -350,6 +350,20 @@ describe("bukti transfer tanpa invoice di sistem (kasus Rina 2026-11-13)", () =>
   });
 });
 
+// Produksi 13 Nov (Yeni): gambar referensi saat sketsa sudah dikirim hanya dicatat sebagai teks; foto yang bot bilang
+// tidak dipakai tetap tercatat di brief sebagai "contoh untuk karakter".
+describe("gambar referensi saat project dikerjakan (kasus Yeni 2026-11-13)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("gambar dilampirkan ke brief project, bukan hanya dideskripsikan", () => {
+    expect(prompt).toContain("Gambar referensi baru dari klien saat project dikerjakan: panggil attach_image_to_brief");
+  });
+
+  it("gambar yang disampaikan tidak dipakai ditulis begitu di caption", () => {
+    expect(prompt).toContain("Jika kamu menyampaikan ke klien bahwa suatu gambar tidak dipakai atau tidak bisa dijadikan acuan, tulis itu di caption");
+  });
+});
+
 describe("tambahan brief setelah brief dikunci (kasus Alfa Indah 2026-11-12)", () => {
   const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
 

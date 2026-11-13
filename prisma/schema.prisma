@@ -318,6 +318,8 @@ model Brief {
   projectId   String   @unique
   responses   Json     // Array of { questionId, question, answer }
   submittedAt DateTime @default(now())
+  // Tambahan dari klien (catatan/gambar lewat bot) setelah project berjalan; desainer melihat penanda (Yeni 2026-11-13)
+  clientUpdatedAt DateTime?
 
   // Relations
   project     Project @relation(fields: [projectId], references: [id])

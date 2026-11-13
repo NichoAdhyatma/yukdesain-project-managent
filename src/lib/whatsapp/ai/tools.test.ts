@@ -25,7 +25,7 @@ const db = vi.hoisted(() => {
 });
 const storage = vi.hoisted(() => ({ copyToPublicBucket: vi.fn() }));
 
-const briefNotes = vi.hoisted(() => ({ addClientBriefNote: vi.fn() }));
+const briefNotes = vi.hoisted(() => ({ addClientBriefNote: vi.fn(), attachImageToProjectBrief: vi.fn() }));
 vi.mock("../brief-notes", () => briefNotes);
 const ownerEvents = vi.hoisted(() => ({ notifyNeedsQuote: vi.fn(), notifyDpProof: vi.fn(), notifyNeedsAdmin: vi.fn() }));
 vi.mock("@/lib/notifications/owner-events", () => ownerEvents);
@@ -265,6 +265,24 @@ describe("attach_image_to_brief", () => {
         { id: "wa-msg_img", type: "image", url: "https://pub.r2.dev/wa-intake/in_1/msg_img.png", caption: "logo lama" },
       ],
     });
+  });
+
+  // Produksi 13 Nov (Yeni): gambar referensi saat project dikerjakan hanya tercatat sebagai teks.
+  it("tanpa order aktif → gambar masuk referensi brief project yang sedang dikerjakan", async () => {
+    db.waIntake.findFirst.mockResolvedValue(null);
+    briefNotes.attachImageToProjectBrief.mockResolvedValue({ ok: true, target: "PROJECT", projectNumber: "PRJ-9" });
+    const r = await run("attach_image_to_brief", { message_id: "msg_img", target: "reference_items_json", caption: "gaya gambar dipakai sebagian" });
+    expect(r.isError).toBe(false);
+    expect(briefNotes.attachImageToProjectBrief).toHaveBeenCalledWith("conv_1", "msg_img", "gaya gambar dipakai sebagian");
+    expect(JSON.stringify(r.data)).toContain("PRJ-9");
+    expect(storage.copyToPublicBucket).not.toHaveBeenCalled();
+  });
+
+  it("tanpa order aktif dan tanpa project berjalan → error dari brief project", async () => {
+    db.waIntake.findFirst.mockResolvedValue(null);
+    briefNotes.attachImageToProjectBrief.mockResolvedValue({ ok: false, error: "Tidak ada order atau project yang sedang dikerjakan." });
+    const r = await run("attach_image_to_brief", { message_id: "msg_img", target: "reference_items_json", caption: "x" });
+    expect(r.isError).toBe(true);
   });
 
   it("hanya gambar milik percakapan ini", async () => {
