@@ -206,6 +206,35 @@ describe("stripPriceMentions: harga pasti, hasil kalkulator, estimasi (spec 2026
     expect(guard("Diskon 3% juga ya kak.", { calculatedTotals: ["160000", "135000", "5000", "3"] }).changed).toBe(true);
   });
 
+  // Produksi 13 Nov: kalimat harga katalog yang benar ikut terbuang karena dianggap menyebut total.
+  describe("kata 'jadi', 'total', dan '3x' yang bukan total harga (Fawzan, M rizky 13 Nov)", () => {
+    const logoExtras = { fixedGroups: [["250000"], ["300000", "100000"], ["135000", "5000"]], estimateGroups: [["3"]] };
+
+    it("'maks 3x revisi' dari catatan harga bukan perkalian harga", () => {
+      const text = "Untuk jasa desain logo ada dua pilihan:\n\n*Logo Minimalis*: *Rp250.000*, maks 3x revisi, file editable.\n\n*Logo Ilustrasi*: *Rp300.000* sudah termasuk 1 pose.";
+      expect(guard(text, logoExtras).text).toBe(text);
+    });
+
+    it("'jadi 1 lembar' bukan total harga", () => {
+      const text = "Rp135.000 itu jadi 1 lembar menu, isinya sampai 35 item. Kalau item menunya lebih dari 35, tambahannya Rp5.000 per item.";
+      expect(guard(text, logoExtras).changed).toBe(false);
+    });
+
+    it("'total menunya di bawah 35 item' bukan total harga (jawaban owner M rizky)", () => {
+      expect(guard("Harga tetap Rp135.000 karena total menunya masih di bawah 35 item ya kak.", logoExtras).changed).toBe(false);
+    });
+
+    it("total / jadi / kali yang diikuti nominal tetap dihapus", () => {
+      expect(guard("Kalau 2 logo jadi Rp300.000 kak.", logoExtras).changed).toBe(true);
+      expect(guard("Totalnya Rp135.000 ya, Kak.", logoExtras).changed).toBe(true);
+      expect(guard("Total harga Rp250.000 ya kak.", logoExtras).changed).toBe(true);
+      expect(guard("Logo 2x Rp250.000 ya kak.", logoExtras).changed).toBe(true);
+      expect(guard("Rp135.000 x 2 poster ya kak.", logoExtras).changed).toBe(true);
+      expect(guard("Untuk 2 logo Rp300.000 jadinya ya kak.", logoExtras).changed).toBe(true);
+      expect(guard("Semuanya Rp250.000 totalnya kak.", logoExtras).changed).toBe(true);
+    });
+  });
+
   it("harga dari dua layanan pasti berbeda tidak boleh dicampur dalam satu kalimat", () => {
     expect(guard("Banner Rp1.250.000 dengan tambahan Rp5.000 ya kak.").changed).toBe(true);
   });

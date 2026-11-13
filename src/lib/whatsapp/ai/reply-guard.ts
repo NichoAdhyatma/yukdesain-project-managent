@@ -11,7 +11,14 @@ const RUPIAH = /(rp\.?\s?\d|idr\s?\d|\d[\d.,]*\s?(rb|ribu|k|jt|juta)\b|\b\d{1,3}
 const DURATION = /(selesai|jadi|estimasi|deadline|pengerjaan|dikerjakan|proses)[^.!?\n]{0,30}\d+\s?(-\s?\d+\s?)?(hari|minggu|jam|bulan)/i;
 // Kalimat yang lolos karena angka katalog harus berupa harga mulai, bukan total / harga final.
 const STARTING = /\bmulai\b/i;
-const TOTAL = /\b(total|totalnya|jadi|semua|seluruh|sekalian|dikali)\b|\d\s?x\b|\bx\s?\d/i;
+// Tanda total/perkalian harga. "total" dan "jadi" hanya dihitung bila menempel pada nominal ("totalnya Rp150.000",
+// "Rp300.000 jadinya"), dan "3x revisi" bukan perkalian: produksi 13 Nov, "Rp135.000 itu jadi 1 lembar", "total menunya di bawah
+// 35 item", dan catatan harga "maks 3x revisi" membuat kalimat harga katalog yang benar terbuang.
+const MONEY_AHEAD = String.raw`(?=[^.!?\n]{0,25}?(?:rp\.?\s?\d|idr\s?\d|\d{1,3}(?:[.,]\d{3})+|\d+\s?(?:rb|ribu|k|jt|juta)\b))`;
+const TOTAL = new RegExp(
+  String.raw`\b(?:total(?:nya)?|jadi(?:nya)?)\b${MONEY_AHEAD}|(?<=\d\s{0,3})(?:total(?:nya)?|jadi(?:nya)?)\b|\b(?:semua|seluruh|sekalian|dikali)\b|\d\s?x\b(?!\s*revisi)|\bx\s?\d`,
+  "i",
+);
 
 // Pemisah kalimat untuk semua penjaga: titik/tanya/seru diikuti spasi, atau baris baru. Nomor daftar di awal baris
 // ("1. Nama") bukan akhir kalimat.

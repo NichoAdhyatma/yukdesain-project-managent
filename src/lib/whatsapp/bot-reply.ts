@@ -95,6 +95,12 @@ async function notifyAiFailed(conversation: { id: string; waId: string; isSandbo
  * Satu giliran AI untuk percakapan klien lalu kirim balasannya (dengan semua penjaga balasan).
  * `anchor` = pesan terakhir yang dijawab. Return true jika balasan AI terkirim/tersimpan.
  */
+async function stillBotMode(conversationId: string): Promise<boolean> {
+  const current = await prisma.waConversation.findUnique({ where: { id: conversationId }, select: { mode: true, blockedAt: true } });
+  // Baris tidak terbaca (mis. data uji) tidak menghalangi balasan; yang dicegah hanya perubahan mode yang tercatat.
+  return !current || (current.mode !== "HUMAN" && !current.blockedAt);
+}
+
 export async function replyWithAi(
   conversation: { id: string; waId: string; isSandbox?: boolean },
   anchor: { id: string; createdAt: Date },
@@ -155,6 +161,12 @@ export async function replyWithAi(
   // Kalimat yang sudah dikirim di pesan sebelumnya tidak diulang; balasan yang seluruhnya ulangan tidak dikirim.
   const fresh = dropRepeatedSentences(safe, turn.recentOutbound ?? []);
   if (!fresh) console.warn(`[whatsapp] balasan AI seluruhnya ulangan untuk ${maskPhone(conversation.waId)}, tidak dikirim`);
+  // Admin mengambil alih (HP / Ambil alih / portal) atau nomor diblokir selama AI berpikir → balasan tidak dikirim
+  // (produksi 2026-11-13, Ketut Edy: balasan bot terkirim 23 detik setelah admin membalas dari HP).
+  if (fresh && !(await stillBotMode(conversation.id))) {
+    console.warn(`[whatsapp] balasan AI dibatalkan untuk ${maskPhone(conversation.waId)}: chat dipegang admin atau diblokir`);
+    return false;
+  }
   const sent = fresh ? await sendBotText(conversation, clampReply(fresh)) : true;
   if (sent) {
     // Jawaban owner yang ada di STATE giliran ini sudah disampaikan ke klien (owner/queries.ts).

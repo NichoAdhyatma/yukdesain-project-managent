@@ -119,6 +119,11 @@ Total dan rincian hasil tool dicatat per giliran (`ctx.calculatedTotals` / `calc
 - Nominal layanan `FIXED` (harga, paket, tambahan per unit, nominal di catatan harga/paket) lolos **tanpa** kata
   "mulai", tetap tanpa kata total, dan semua nominal di satu kalimat harus dari **satu** layanan.
 - Nominal hasil `calculate_price` pada giliran itu (total + nominal rincian) lolos, termasuk dengan kata "total"/"jadi".
+- Kata **"total"/"jadi"** hanya dianggap total bila menempel pada nominal ("totalnya Rp150.000", "jadi 300rb",
+  "Rp300.000 jadinya"), dan "**3x revisi**" bukan perkalian (2026-11-13). Sebelumnya "Rp135.000 itu jadi 1 lembar",
+  "total menunya di bawah 35 item", dan catatan harga "maks 3x revisi" membuat kalimat harga katalog yang benar
+  terbuang: balasan Fawzan menjadi "ada dua pilihan:" dengan satu pilihan, dan jawaban owner untuk M rizky (harga tetap
+  Rp135.000 asal di bawah 35 menu) tidak sampai ke klien.
 - Kalimat **diskon/potongan/promo/cashback** dan **persen** hanya lolos bila angkanya dari brief, aturan harga owner,
   atau teks kebijakan; tidak pernah dari katalog atau kalkulator.
 - Lama pengerjaan: semua angka durasi ("3 hari", "5-7 hari", "1 sampai 2 hari") harus dari estimasi **satu** layanan;

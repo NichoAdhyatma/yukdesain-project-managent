@@ -491,6 +491,9 @@ Wajib memuat:
   contoh desain masuk referensi. Sebelumnya foto daftar menu tercatat sebagai "Logo Brand".
 - **Penjaga harga/DP:** nomor daftar di awal baris ("6. …") bukan akhir kalimat; baris bernomor yang dibuang hilang
   utuh (ringkasan Mr.K4z sempat jadi "6.7. Sisa foto produk").
+- **Admin mengambil alih saat AI berpikir (2026-11-13, kasus Ketut Edy):** sebelum balasan AI dikirim, mode chat dibaca
+  ulang. Chat yang sudah pindah ke mode admin (balasan dari HP, Ambil alih, balasan portal) atau nomor yang diblokir
+  tidak menerima balasan itu. Sebelumnya balasan bot tetap terkirim 23 detik setelah admin membalas dari HP.
 - **Tidak mengulang kalimat (2026-11-12, kasus Knn, Mif, Virgi):** penjaga server `dropRepeatedSentences` membuang
   kalimat balasan yang sama atau mirip dengan kalimat di 5 pesan keluar terakhir (≥5 kata; Jaccard ≥0,6 atau ≥80%
   katanya sudah ada). Kalimat yang membawa angka, teks *tebal*, atau teks "berkutip" baru tidak dianggap ulangan.
