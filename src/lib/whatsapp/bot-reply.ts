@@ -6,7 +6,7 @@ import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
 import { callAdmin, lastOutboundIs } from "./handoff";
 import { withConversationLock } from "./turn-lock";
-import { clampReply, dropRepeatedSentences, sanitizeReply, stripDpMentions, stripPriceMentions, stripRepeatedGreeting } from "./ai/reply-guard";
+import { clampReply, dropRepeatedSentences, sanitizeReply, stripDpMentions, stripPriceMentions, stripRepeatedGreeting, trimClientEcho } from "./ai/reply-guard";
 import { AiProviderError, isTechnicalFailure } from "@/lib/ai/client";
 
 // Bagian bersama bot: kirim/simpan balasan dan satu giliran AI → balasan ke klien.
@@ -96,6 +96,23 @@ async function notifyAiFailed(conversation: { id: string; waId: string; isSandbo
  * Satu giliran AI untuk percakapan klien lalu kirim balasannya (dengan semua penjaga balasan).
  * `anchor` = pesan terakhir yang dijawab. Return true jika balasan AI terkirim/tersimpan.
  */
+/** Teks pesan klien sejak balasan terakhir (pesan beruntun digabung), sampai pesan yang sedang dibalas. */
+async function trailingClientText(conversationId: string, until: Date): Promise<string> {
+  const rows =
+    (await prisma.waMessage.findMany({
+      where: { conversationId, createdAt: { lte: until } },
+      orderBy: { createdAt: "desc" },
+      take: 6,
+      select: { direction: true, type: true, body: true },
+    })) ?? [];
+  const texts: string[] = [];
+  for (const row of rows) {
+    if (row.direction !== "INBOUND") break;
+    if (row.body) texts.unshift(row.body);
+  }
+  return texts.join("\n");
+}
+
 async function stillBotMode(conversationId: string): Promise<boolean> {
   const current = await prisma.waConversation.findUnique({ where: { id: conversationId }, select: { mode: true, blockedAt: true } });
   // Baris tidak terbaca (mis. data uji) tidak menghalangi balasan; yang dicegah hanya perubahan mode yang tercatat.
@@ -178,8 +195,10 @@ async function replyWithAiNow(
   });
   const recent = turn.recentOutbound ?? [];
   const recentWithLatest = latestOut?.body && !recent.includes(latestOut.body) ? [latestOut.body, ...recent] : recent;
+  // Gema pesan klien diringkas jadi konfirmasi singkat (Icha 14 Nov: semua isi pesan klien diulang).
+  const clientText = await trailingClientText(conversation.id, anchor.createdAt);
   const fresh = stripRepeatedGreeting(
-    dropRepeatedSentences(safe, recentWithLatest),
+    trimClientEcho(dropRepeatedSentences(safe, recentWithLatest), clientText),
     latestOut?.createdAt ? { body: latestOut.body, createdAt: latestOut.createdAt } : null,
   );
   if (!fresh) console.warn(`[whatsapp] balasan AI seluruhnya ulangan untuk ${maskPhone(conversation.waId)}, tidak dikirim`);

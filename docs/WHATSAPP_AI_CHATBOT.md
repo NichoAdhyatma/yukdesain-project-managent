@@ -491,6 +491,11 @@ Wajib memuat:
   contoh desain masuk referensi. Sebelumnya foto daftar menu tercatat sebagai "Logo Brand".
 - **Penjaga harga/DP:** nomor daftar di awal baris ("6. …") bukan akhir kalimat; baris bernomor yang dibuang hilang
   utuh (ringkasan Mr.K4z sempat jadi "6.7. Sisa foto produk").
+- **Konfirmasi singkat, tanpa menggemakan pesan klien (2026-11-14, kasus Icha):** klien menulis warna dan foto daun,
+  bot membalas dengan mengulang semua isinya. Owner: cukup "Oke kak, noted, sudah saya catat ya". Prompt dan pesan
+  tool kini meminta konfirmasi singkat; penjaga server `trimClientEcho` mengganti kalimat konfirmasi yang mengulang ≥3
+  kata isi pesan klien dengan "Siap kak, sudah saya catat ya" dan membuang kalimat lain yang ≥60% kata isinya dari
+  pesan klien. Kalimat berangka/harga, pertanyaan, dan ringkasan brief (daftar) tidak disentuh.
 - **To the point, tidak mengulang (2026-11-14, kasus Ranie: "pusing konsultasinya"):** dalam 7 menit "harga spanduk
   dikirim tim setelah brief lengkap" muncul 4x, harga Poster Menu 2x, pertanyaan jumlah item 3x, pertanyaan "spanduk
   berapa?" tidak dijawab, dan dua giliran bersamaan saling bertentangan ("logo belum tersimpan" lalu "logo sudah masuk"

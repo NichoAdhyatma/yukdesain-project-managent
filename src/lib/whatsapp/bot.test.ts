@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const db = vi.hoisted(() => ({
-  waMessage: { findUniqueOrThrow: vi.fn(), create: vi.fn(), count: vi.fn(), findFirst: vi.fn() },
+  waMessage: { findUniqueOrThrow: vi.fn(), create: vi.fn(), count: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
   waConversation: { update: vi.fn(), updateMany: vi.fn(), findUnique: vi.fn() },
   waIntake: { findFirst: vi.fn() },
   studioSettings: { findUnique: vi.fn() },
@@ -118,6 +118,18 @@ describe("handleInboundMessage", () => {
     await handleInboundMessage("msg_1");
     db.waMessage.findFirst.mockReset();
     expect(sentBodies()).toEqual(["Daftar harga lengkap ada di katalog profil kami ya kak."]);
+  });
+
+  // Produksi 14 Nov (Icha): balasan mengulang semua isi pesan klien. Owner: cukup "Oke kak, noted, sudah saya catat ya".
+  it("balasan yang menggemakan pesan klien → konfirmasi singkat", async () => {
+    const client = "Warna banner nya putih pink tp pink nya jgn yg menyala ya ka. Pokoknya ad foto2 daun gt deh ad warna lain selain putih pink gpp ka asal bagus dn menarik";
+    givenMessage("text", client);
+    db.waMessage.findMany.mockResolvedValueOnce([{ direction: "INBOUND", type: "text", body: client }]);
+    aiReply(
+      "Oke kak Icha, warna putih pink dengan pink yang tidak menyala dan foto daun sudah masuk catatan untuk tim desain ya. Warna lain juga boleh kalau hasilnya tetap bagus dan menarik 😊",
+    );
+    await handleInboundMessage("msg_1");
+    expect(sentBodies()).toEqual(["Siap kak, sudah saya catat ya 😊"]);
   });
 
   it("nomor diblokir selama AI berpikir → balasan bot tidak dikirim", async () => {
