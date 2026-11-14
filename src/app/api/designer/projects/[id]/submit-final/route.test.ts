@@ -62,3 +62,35 @@ describe("POST submit-final (2026-11-12)", () => {
     expect(notices.notifyClientProjectEvent).toHaveBeenCalledWith("p1", { kind: "FINAL_SUBMITTED" });
   });
 });
+
+// Cara kirim hasil akhir (permintaan owner 14 Nov): file (unggah), link (Google Drive), atau lewat WhatsApp langsung.
+describe("POST submit-final: cara kirim", () => {
+  it("tanpa cara kirim (form lama) → file, dicatat FILE", async () => {
+    expect((await post({ description: "Logo final", attachmentIds: ["att_f"] })).status).toBe(200);
+    expect(db.project.update.mock.calls[0][0].data).toMatchObject({ finalDelivery: "FILE", finalLink: null });
+  });
+
+  it("link: wajib URL http(s); disimpan, tanpa file", async () => {
+    expect((await post({ description: "Final di Drive", method: "LINK" })).status).toBe(400);
+    expect((await post({ description: "Final di Drive", method: "LINK", link: "drive.google.com/x" })).status).toBe(400);
+    expect((await post({ description: "Final di Drive", method: "LINK", link: "javascript:alert(1)" })).status).toBe(400);
+    expect(db.project.update).not.toHaveBeenCalled();
+    const res = await post({ description: "Final di Drive", method: "LINK", link: " https://drive.google.com/drive/folders/abc " });
+    expect(res.status).toBe(200);
+    expect(db.project.update.mock.calls[0][0].data).toMatchObject({ finalDelivery: "LINK", finalLink: "https://drive.google.com/drive/folders/abc" });
+    expect(db.attachment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("lewat WhatsApp: tanpa file dan link; klien dikabari (pengingat pelunasan bila belum lunas)", async () => {
+    const res = await post({ description: "File dikirim lewat WA", method: "WHATSAPP" });
+    expect(res.status).toBe(200);
+    expect(db.project.update.mock.calls[0][0].data).toMatchObject({ finalDelivery: "WHATSAPP", finalLink: null });
+    expect(db.attachment.updateMany).not.toHaveBeenCalled();
+    await Promise.all(afterFns.map((fn) => fn()));
+    expect(notices.notifyClientProjectEvent).toHaveBeenCalledWith("p1", { kind: "FINAL_SUBMITTED" });
+  });
+
+  it("cara kirim tidak dikenal → 400", async () => {
+    expect((await post({ description: "x", method: "EMAIL" })).status).toBe(400);
+  });
+});

@@ -148,3 +148,25 @@ describe("hasil final dan pelunasan (2026-11-12)", () => {
     expect(outbound.sendSystemText.mock.calls[0][1]).toContain("File final sudah bisa diunduh");
   });
 });
+
+// Cara kirim hasil akhir (permintaan owner 14 Nov): kabar ke klien mengikuti cara yang dipilih desainer.
+describe("cara kirim hasil akhir di kabar klien", () => {
+  it("lewat WhatsApp, belum lunas: klien diingatkan melunasi dulu", async () => {
+    db.project.findUnique.mockResolvedValue({ ...project, agreedPrice: 250000, paidAmount: 50000, finalDelivery: "WHATSAPP" });
+    db.paymentAccount.findMany.mockResolvedValue([]);
+    await notifyClientProjectEvent("p1", { kind: "FINAL_SUBMITTED" }, now);
+    expect(outbound.sendSystemText.mock.calls[0][1]).toContain("File final kami kirim lewat WhatsApp setelah pelunasan *Rp200.000*.");
+  });
+
+  it("link, pelunasan diterima: link terbuka", async () => {
+    db.project.findUnique.mockResolvedValue({ ...project, agreedPrice: 250000, paidAmount: 250000, finalDelivery: "LINK" });
+    await notifyClientProjectEvent("p1", { kind: "FILES_UNLOCKED" }, now);
+    expect(outbound.sendSystemText.mock.calls[0][1]).toContain("Link file final sudah bisa dibuka.");
+  });
+
+  it("kolom cara kirim kosong (data lama) → file", async () => {
+    db.project.findUnique.mockResolvedValue({ ...project, agreedPrice: 250000, paidAmount: 250000, finalDelivery: null });
+    await notifyClientProjectEvent("p1", { kind: "FILES_UNLOCKED" }, now);
+    expect(outbound.sendSystemText.mock.calls[0][1]).toContain("File final sudah bisa diunduh");
+  });
+});

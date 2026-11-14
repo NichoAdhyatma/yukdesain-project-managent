@@ -280,6 +280,9 @@ model Project {
 
   // Final Approval (BRD Section 21)
   finalSubmittedAt DateTime?   // Designer submitted final work
+  // Cara kirim hasil akhir (2026-11-14): FILE (null = data lama) | LINK | WHATSAPP. Link hanya terlihat klien setelah lunas.
+  finalDelivery    String?
+  finalLink        String?
   finalApprovedAt  DateTime?   // Client approved final work
 
   // Metadata

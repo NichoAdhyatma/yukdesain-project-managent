@@ -35,6 +35,19 @@ project baru dibayar Rp50.000 dari Rp250.000.
   dicek admin, lalu mengalihkan chat ke admin.
 Kalimat `FINAL_SUBMITTED` akan berubah ke "balas setuju di chat" setelah Bagian B (revisi dan final lewat chat) aktif.
 
+## 1b. Cara kirim hasil akhir: file / link / WhatsApp (permintaan owner 2026-11-14)
+
+Di mode **Kirim hasil akhir**, desainer memilih cara kirim (`Project.finalDelivery`, kosong = data lama = file):
+
+| Cara | Yang diisi desainer | Portal klien sebelum lunas | Sesudah lunas | Kabar WA |
+|---|---|---|---|---|
+| `FILE` (default) | file wajib (kategori FINAL) | nama file terkunci + sisa pelunasan | unduh file | seperti §1a |
+| `LINK` | link http(s) lengkap (`Project.finalLink`), mis. Google Drive | "Link file final" terkunci + sisa pelunasan; link tidak dikirim ke browser | tombol "Buka link file final" | belum lunas: "Link file final bisa dibuka setelah pelunasan …"; lunas: "cek, setujui, dan buka link filenya"; `FILES_UNLOCKED`: "Link file final sudah bisa dibuka" |
+| `WHATSAPP` | tidak ada file/link; admin mengirim file dari HP | "Dikirim lewat WhatsApp setelah pelunasan" + sisa pelunasan | "File final dikirim tim kami lewat WhatsApp" | belum lunas: "File final kami kirim lewat WhatsApp setelah pelunasan …" + rekening; lunas: "File finalnya kami kirim lewat WhatsApp di chat ini"; `FILES_UNLOCKED`: "File final segera kami kirim lewat WhatsApp" |
+
+Untuk `WHATSAPP`, file tetap dikirim manual oleh admin/desainer dari HP (sistem tidak mengirim file). Link ditolak bila
+bukan http(s) (mis. `javascript:`), dan hanya dikirim ke browser klien setelah `paymentStatus` = `PAID`.
+
 ## 2. Pengiriman
 
 - `notifyClientProjectEvent` (`src/lib/notifications/client-project-events.ts`) dipanggil lewat `after()` dari route

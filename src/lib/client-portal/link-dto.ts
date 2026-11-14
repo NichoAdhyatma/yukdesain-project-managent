@@ -23,6 +23,8 @@ export const clientLinkSelect = {
       paidAmount: true,
       paymentStatus: true,
       finalSubmittedAt: true,
+      finalDelivery: true,
+      finalLink: true,
       finalApprovedAt: true,
       revisionQuota: true,
       service: { select: { code: true, name: true } },
@@ -95,6 +97,10 @@ export type ClientAttachmentDto = { id: string; filename: string; storageKey: st
 /** File final: nama selalu terlihat; storageKey null selama belum lunas (2026-11-12). */
 export type ClientFinalFilesDto = {
   locked: boolean;
+  /** Cara kirim hasil akhir (2026-11-14): file di portal, link Drive, atau lewat WhatsApp */
+  method: "FILE" | "LINK" | "WHATSAPP";
+  /** Link file final; null selama belum lunas */
+  link: string | null;
   files: Array<{ id: string; filename: string; storageKey: string | null }>;
 };
 
@@ -167,11 +173,22 @@ function toAttachment(a: ClientAttachmentDto): ClientAttachmentDto {
   return { id: a.id, filename: a.filename, storageKey: a.storageKey };
 }
 
-/** File final terkunci sampai lunas: tanpa storageKey, supaya URL file tidak pernah sampai ke klien sebelum lunas. */
-function toFinalFiles(files: ClientAttachmentDto[], paymentStatus: string): ClientFinalFilesDto {
+/**
+ * File final terkunci sampai lunas: tanpa storageKey, supaya URL file tidak pernah sampai ke klien sebelum lunas.
+ * Link Drive (cara kirim LINK) mengikuti aturan yang sama.
+ */
+export function toFinalFiles(
+  files: ClientAttachmentDto[],
+  paymentStatus: string,
+  delivery: string | null,
+  finalLink: string | null,
+): ClientFinalFilesDto {
   const locked = paymentStatus !== "PAID";
+  const method = delivery === "LINK" || delivery === "WHATSAPP" ? delivery : "FILE";
   return {
     locked,
+    method,
+    link: method === "LINK" && !locked ? finalLink : null,
     files: files.map((f) => ({ id: f.id, filename: f.filename, storageKey: locked ? null : f.storageKey })),
   };
 }
@@ -238,7 +255,7 @@ export function toClientLinkDto(link: ClientLinkRow): ClientLinkDto {
         completedAt: isoOrNull(r.completedAt),
         attachments: r.attachments.map(toAttachment),
       })),
-      finalFiles: toFinalFiles(p.attachments, p.paymentStatus),
+      finalFiles: toFinalFiles(p.attachments, p.paymentStatus, p.finalDelivery, p.finalLink),
       financeHidden: false,
     },
   };

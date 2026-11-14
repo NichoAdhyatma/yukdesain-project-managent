@@ -3,7 +3,7 @@ import { prisma } from "@/lib/db";
 import { getStudioSettings } from "@/lib/studio";
 import { getAppPublicUrl } from "@/lib/whatsapp/env";
 import { sendSystemText } from "@/lib/whatsapp/outbound";
-import { clientNoticeText, type ClientNoticeData, type ClientNoticeKind } from "./client-notice-text";
+import { clientNoticeText, type ClientNoticeData, type ClientNoticeKind, type FinalDelivery } from "./client-notice-text";
 
 // Kabar otomatis ke klien saat order berubah (docs/CLIENT_NOTIFICATIONS.md). Dipanggil lewat after() dari route
 // pemicu; tidak pernah melempar error, supaya aksi desainer/owner tidak ikut gagal.
@@ -33,6 +33,7 @@ type ProjectForNotice = {
   clientId: string;
   status: string;
   finalSubmittedAt: Date | null;
+  finalDelivery?: string | null;
   agreedPrice: number;
   paidAmount: number;
   clientName: string;
@@ -48,6 +49,7 @@ async function loadProject(projectId: string): Promise<ProjectForNotice | null> 
       clientId: true,
       status: true,
       finalSubmittedAt: true,
+      finalDelivery: true,
       agreedPrice: true,
       paidAmount: true,
       clientName: true,
@@ -77,18 +79,25 @@ async function eventData(event: ClientProjectEvent, project: ProjectForNotice): 
     const revision = await prisma.revision.findUnique({ where: { id: event.revisionId }, select: { number: true } });
     return revision ? { revisionNumber: revision.number } : null;
   }
+  const delivery = toDelivery(project.finalDelivery);
+  if (event.kind === "FILES_UNLOCKED") return { delivery };
   // Hasil final / selesai belum lunas: file final terkunci, klien diberi sisa pelunasan dan rekening aktif.
   if (event.kind === "FINAL_SUBMITTED" || event.kind === "COMPLETED") {
     const balance = Math.max(0, (project.agreedPrice ?? 0) - (project.paidAmount ?? 0));
-    if (balance === 0) return {};
+    if (balance === 0) return { delivery };
     const accounts = await prisma.paymentAccount.findMany({
       where: { isActive: true },
       orderBy: { order: "asc" },
       select: { name: true, accountNumber: true, accountHolder: true },
     });
-    return { balance, accounts };
+    return { balance, accounts, delivery };
   }
   return {};
+}
+
+/** Cara kirim hasil akhir dari kolom project; kosong / tidak dikenal = file (data sebelum 2026-11-14). */
+function toDelivery(value: string | null | undefined): FinalDelivery {
+  return value === "LINK" || value === "WHATSAPP" ? value : "FILE";
 }
 
 async function finish(noticeId: string, status: "SENT" | "SKIPPED" | "FAILED", reason?: string): Promise<NoticeOutcome> {
