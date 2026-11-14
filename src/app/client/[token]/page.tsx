@@ -45,6 +45,8 @@ import { revisionQuotaRemaining } from "@/lib/revisions/quota";
 import { CLIENT_PROJECT_STATUS, workProgressPercent } from "@/lib/client-portal/project-progress";
 import { REVISION_NOTICE } from "@/lib/constants";
 import type { ClientLinkDto, ClientPaymentAccountDto } from "@/lib/client-portal/link-dto";
+import { menuPriceLabel } from "@/components/forms/brief/menu-items";
+import { MenuItemRows } from "@/components/forms/brief/MenuItemRows";
 
 type BriefResponseItem = {
   questionId: string;
@@ -772,6 +774,9 @@ function BriefTab({ project }: { project: BriefTabProject }) {
             <CardTitle className="text-sm">Daftar Menu</CardTitle>
           </CardHeader>
           <CardContent>
+            {!menuItems.some((item) => item.image) ? (
+              <MenuItemRows items={menuItems} />
+            ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {menuItems.map((item, idx) => (
                 <div key={item.id || idx} className="rounded-xl border overflow-hidden">
@@ -784,9 +789,9 @@ function BriefTab({ project }: { project: BriefTabProject }) {
                     />
                   )}
                   <div className="p-2.5">
-                    <p className="text-sm font-medium truncate">{item.name}</p>
-                    {item.price && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(parseInt(item.price, 10) || 0)}</p>
+                    <p className="text-sm font-medium break-words">{item.name}</p>
+                    {menuPriceLabel(item.price) && (
+                      <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">{menuPriceLabel(item.price)}</p>
                     )}
                     {item.caption && (
                       <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.caption}</p>
@@ -795,6 +800,7 @@ function BriefTab({ project }: { project: BriefTabProject }) {
                 </div>
               ))}
             </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -867,8 +873,8 @@ function BriefTab({ project }: { project: BriefTabProject }) {
                   )}
                   <div className="p-2.5">
                     <p className="text-sm font-medium truncate">{item.name}</p>
-                    {item.price && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{formatCurrency(parseInt(item.price, 10) || 0)}</p>
+                    {menuPriceLabel(item.price) && (
+                      <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">{menuPriceLabel(item.price)}</p>
                     )}
                   </div>
                 </div>

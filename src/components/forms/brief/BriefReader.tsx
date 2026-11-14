@@ -4,6 +4,8 @@ import { SERVICE_BRIEF_CONFIGS } from "./types";
 import { ImageViewerGroup, ViewableImage } from "@/components/ui/image-viewer";
 import { FileText } from "lucide-react";
 import { BRIEF_FIELD_LABELS, briefFieldLabel } from "./field-labels";
+import { isMenuItemList, menuPriceLabel } from "./menu-items";
+import { MenuItemRows } from "./MenuItemRows";
 
 type BriefResponseItem = { questionId: string; question: string; answer: string };
 
@@ -12,13 +14,6 @@ interface BriefReaderProps {
   serviceCode: string;
 }
 
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    minimumFractionDigits: 0,
-  }).format(amount);
-}
 
 function isJsonString(str: string): boolean {
   try {
@@ -48,13 +43,21 @@ function ImageField({ label, url }: { label: string; url: string }) {
 function JsonTableField({ label, data }: { label: string; data: unknown }) {
   if (!Array.isArray(data) || data.length === 0) return null;
 
-  // Menu items
-  if (data[0] && "name" in data[0] && "price" in data[0]) {
+  // Menu items (harga boleh kosong; lihat menu-items.ts)
+  if (isMenuItemList(data)) {
+    if (!data.some((item) => item.image)) {
+      return (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground">{label}</p>
+          <MenuItemRows items={data} />
+        </div>
+      );
+    }
     return (
       <div className="space-y-2">
         <p className="text-xs font-medium text-muted-foreground">{label}</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {data.map((item: { id: string; name: string; price?: string; image?: string; caption?: string }, idx: number) => (
+          {data.map((item, idx) => (
             <div key={item.id || idx} className="rounded-lg border overflow-hidden">
               {item.image && (
                 <ViewableImage
@@ -64,11 +67,9 @@ function JsonTableField({ label, data }: { label: string; data: unknown }) {
                 />
               )}
               <div className="p-2">
-                <p className="text-sm font-medium truncate">{item.name || "-"}</p>
-                {item.price && (
-                  <p className="text-xs text-muted-foreground">
-                    {formatCurrency(parseInt(item.price, 10) || 0)}
-                  </p>
+                <p className="text-sm font-medium break-words">{item.name || "-"}</p>
+                {menuPriceLabel(item.price) && (
+                  <p className="text-xs text-muted-foreground tabular-nums">{menuPriceLabel(item.price)}</p>
                 )}
                 {item.caption && (
                   <p className="text-xs text-muted-foreground mt-0.5">{item.caption}</p>
