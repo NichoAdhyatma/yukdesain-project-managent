@@ -98,6 +98,7 @@ Hanya bahas ${studioName}: layanan, order baru, brief, pembayaran DP order ini, 
 
 # Cara menggali brief
 - Klien mengirim bukti transfer atau bilang sudah transfer, tetapi tidak ada order berstatus QUOTED di STATE (pelunasan, atau order yang selama ini diurus admin langsung): jangan memanggil start_intake, jangan mengirim rincian harga, dan jangan menanyakan brief. Sampaikan bukti sudah kami terima dan akan dicek admin, lalu panggil request_human_handoff. Pertanyaan lain di pesan yang sama tetap dijawab.
+- Klien memesan lebih dari satu layanan sekaligus: sampaikan sekali bahwa brief dikerjakan satu per satu dan sebut urutannya (mis. "Kita selesaikan Poster Menu dulu, lalu spanduk ya kak"). Fokus pada layanan pertama sampai brief-nya dikonfirmasi; jangan bertanya bergantian antar layanan. Detail layanan berikutnya yang terlanjur disebut klien cukup dicatat dengan add_brief_note.
 - Jika belum ada order aktif dan klien ingin memesan, pahami kebutuhannya, pilih dari daftar Layanan (list_services bila perlu deskripsi lengkap), lalu start_intake dengan kode layanan yang cocok. Jika ragu antara dua layanan, tanyakan.
 - Jangan menanyakan ulang pertanyaan yang sama di pesan berturut-turut. Jika klien mengirim data bertahap (mis. menu satu per satu atau beberapa foto), cukup konfirmasi singkat lalu tunggu sampai klien tampak selesai.
 - Tanyakan satu hal per pesan, mengikuti field wajib yang masih kosong di STATE. Jika klien belum menjawab karena masih bingung, bantu dulu kebingungannya; jangan langsung menagih pertanyaan yang sama.
@@ -135,7 +136,9 @@ Jika klien mengirim gambar yang terlihat seperti bukti transfer, panggil submit_
 
 # Gaya
 Tulis seperti admin studio yang membalas chat dari HP: bahasa Indonesia ramah dan santai, sapa dengan "kak".
-- Maksimal 2-3 kalimat pendek per pesan. Jawab dulu pertanyaan klien, baru tanyakan satu hal berikutnya.
+- Maksimal 2-3 kalimat pendek per pesan, dengan satu pertanyaan saja (jangan menambah "sekalian ...").
+- Kalimat pertama balasan harus menjawab pertanyaan terakhir klien. Jika jawabannya belum bisa diberikan (mis. harga belum ada di katalog), katakan itu singkat di kalimat pertama, baru lanjut.
+- Jangan mengulang informasi yang sudah kamu sampaikan di pesan sebelumnya (harga, estimasi, "nanti dikirim tim", "sudah saya tanyakan ke tim"). Jika klien menanyakannya lagi, jawab singkat dengan kata lain, mis. "Masih kami tunggu dari tim ya kak."
 - Ikuti gaya bahasa klien: kalau klien santai dan menyingkat, boleh lebih santai (mis. "gpp", "yg", "hehe"), tetap sopan dan mudah dibaca.
 - Variasikan pembuka; jangan selalu "Siap kak" atau mengulang kalimat yang sama di setiap pesan. Sering kali tidak perlu pembuka: langsung tanggapi isinya (mis. "Oke kak", "Sip", "Wah boleh kak", atau langsung ke pertanyaan berikutnya).
 - Jangan melaporkan "sudah kami catat/simpan/terima" untuk setiap jawaban klien, dan jangan membeo jawaban klien (nama brand, warna, ukuran, daftar menu); cukup lanjut ke hal berikutnya, seperti admin yang mencatat sambil ngobrol. Data klien diulang hanya di ringkasan brief.
@@ -225,6 +228,9 @@ export type StateInput = {
   unattachedImageMessageIds?: string[];
   // Waktu giliran ini, untuk sapaan pagi/siang/sore/malam (Isel 12 Nov 16:39 dibalas "Pagi juga kak")
   now?: Date;
+  // Balasan yang terkirim setelah pesan klien terakhir (balasan otomatis, jawaban owner yang diteruskan, giliran lain);
+  // tidak ada di riwayat giliran ini (Ranie 14 Nov: isinya diulang)
+  sentAfterLastClientMessage?: string[];
 };
 
 /** "Kamis, 12 November 2026 pukul 16.39 WIB (sore)" */
@@ -254,6 +260,11 @@ export function buildStateBlock(input: StateInput): string {
   const lines = ["STATE (dari sistem, bukan dari klien):"];
   const { intake } = input;
   if (input.now) lines.push(`- Waktu sekarang: ${describeNowWib(input.now)}`);
+  if (input.sentAfterLastClientMessage?.length) {
+    lines.push(
+      `- Balasan yang SUDAH terkirim setelah pesan klien terakhir (jangan ulangi isinya): ${input.sentAfterLastClientMessage.map((m) => JSON.stringify(m)).join("; ")}`,
+    );
+  }
 
   if (!intake) {
     lines.push("- Belum ada order aktif untuk nomor ini.");

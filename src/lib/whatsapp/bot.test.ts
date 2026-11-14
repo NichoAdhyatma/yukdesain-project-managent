@@ -668,6 +668,26 @@ describe("replyWithAi — meneruskan jawaban owner (notifyClient: false)", () =>
     expect(api.sendText).not.toHaveBeenCalled();
   });
 
+  // Produksi 14 Nov 12:42 (Ranie): meneruskan jawaban owner dan membalas pesan klien berjalan bersamaan.
+  it("dua giliran di chat yang sama berurutan: giliran kedua baru mulai setelah balasan pertama terkirim", async () => {
+    const order: string[] = [];
+    ai.runAiTurn.mockImplementation(async () => {
+      order.push("ai");
+      await new Promise((r) => setTimeout(r, 5));
+      const reply = order.length === 1 ? "Siap kak, logonya sudah kami terima ya." : "Oke kak, ukuran spanduknya mau berapa?";
+      return { reply, intakeStatus: "COLLECTING", briefText: "{}", allowedPriceNumbers: [], toolsCalled: [] };
+    });
+    api.sendText.mockImplementation(async () => {
+      order.push("kirim");
+      return "wamid.OUT";
+    });
+    await Promise.all([
+      replyWithAi(conversation, anchor, { checkSuperseded: false, notifyClient: false }),
+      replyWithAi(conversation, anchor, { checkSuperseded: false, notifyClient: false }),
+    ]);
+    expect(order).toEqual(["ai", "kirim", "ai", "kirim"]);
+  });
+
   it("balasan AI kosong dua kali → chat tetap BOT, tanpa pesan sibuk ke klien", async () => {
     aiReply(null);
     expect(await replyWithAi(conversation, anchor, { checkSuperseded: false, notifyClient: false })).toBe(false);

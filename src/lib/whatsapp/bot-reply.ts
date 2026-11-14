@@ -5,6 +5,7 @@ import { maskPhone } from "./phone";
 import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
 import { callAdmin, lastOutboundIs } from "./handoff";
+import { withConversationLock } from "./turn-lock";
 import { clampReply, dropRepeatedSentences, sanitizeReply, stripDpMentions, stripPriceMentions, stripRepeatedGreeting } from "./ai/reply-guard";
 import { AiProviderError, isTechnicalFailure } from "@/lib/ai/client";
 
@@ -106,6 +107,15 @@ export async function replyWithAi(
   anchor: { id: string; createdAt: Date },
   // notifyClient false: giliran tanpa pesan baru klien (meneruskan jawaban owner). Kalau gagal, owner yang menerima
   // laporan; klien tidak dikirimi "sistem sibuk" karena tidak sedang menunggu balasan.
+  opts: { checkSuperseded: boolean; notifyClient?: boolean },
+): Promise<boolean> {
+  // Satu giliran per chat pada satu waktu (Ranie 14 Nov: dua giliran bersamaan saling bertentangan).
+  return withConversationLock(conversation.id, () => replyWithAiNow(conversation, anchor, opts));
+}
+
+async function replyWithAiNow(
+  conversation: { id: string; waId: string; isSandbox?: boolean },
+  anchor: { id: string; createdAt: Date },
   opts: { checkSuperseded: boolean; notifyClient?: boolean },
 ): Promise<boolean> {
   const turnStartedAt = new Date();

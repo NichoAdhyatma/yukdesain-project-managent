@@ -425,3 +425,34 @@ describe("deskripsi field daftar menu", () => {
     expect(BRIEF_FIELD_DESCRIPTIONS.menu_items_json).toContain("add_brief_note");
   });
 });
+
+// Produksi 14 Nov (Ranie): balasan otomatis "kami hanya bisa membaca teks dan gambar" dan jawaban owner yang terkirim
+// sesudah pesan klien tidak terlihat oleh giliran berikutnya, sehingga AI mengulang isinya.
+describe("balasan yang sudah terkirim sesudah pesan klien terakhir", () => {
+  it("dicantumkan di STATE dengan larangan mengulang", () => {
+    const state = buildStateBlock({
+      intake: null,
+      pendingImageMessageIds: [],
+      sentAfterLastClientMessage: ["Maaf kak, saat ini kami hanya bisa membaca pesan teks dan gambar."],
+    });
+    expect(state).toContain("Balasan yang SUDAH terkirim setelah pesan klien terakhir (jangan ulangi isinya)");
+    expect(state).toContain('"Maaf kak, saat ini kami hanya bisa membaca pesan teks dan gambar."');
+  });
+
+  it("tidak ada → tidak ada baris", () => {
+    expect(buildStateBlock({ intake: null, pendingImageMessageIds: [] })).not.toContain("SUDAH terkirim");
+  });
+});
+
+describe("to the point (kasus Ranie 2026-11-14)", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("kalimat pertama menjawab pertanyaan terakhir klien; info yang sudah disampaikan tidak diulang", () => {
+    expect(prompt).toContain("Kalimat pertama balasan harus menjawab pertanyaan terakhir klien");
+    expect(prompt).toContain("Jangan mengulang informasi yang sudah kamu sampaikan");
+  });
+
+  it("dua layanan sekaligus: satu per satu, urutannya disebut sekali", () => {
+    expect(prompt).toContain("Klien memesan lebih dari satu layanan sekaligus");
+  });
+});

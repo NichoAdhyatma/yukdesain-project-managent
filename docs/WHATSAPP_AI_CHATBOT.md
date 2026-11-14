@@ -491,6 +491,19 @@ Wajib memuat:
   contoh desain masuk referensi. Sebelumnya foto daftar menu tercatat sebagai "Logo Brand".
 - **Penjaga harga/DP:** nomor daftar di awal baris ("6. …") bukan akhir kalimat; baris bernomor yang dibuang hilang
   utuh (ringkasan Mr.K4z sempat jadi "6.7. Sisa foto produk").
+- **To the point, tidak mengulang (2026-11-14, kasus Ranie: "pusing konsultasinya"):** dalam 7 menit "harga spanduk
+  dikirim tim setelah brief lengkap" muncul 4x, harga Poster Menu 2x, pertanyaan jumlah item 3x, pertanyaan "spanduk
+  berapa?" tidak dijawab, dan dua giliran bersamaan saling bertentangan ("logo belum tersimpan" lalu "logo sudah masuk"
+  5 detik kemudian). Perbaikan:
+  - Giliran bot per chat diantrekan (`withConversationLock`, `src/lib/whatsapp/turn-lock.ts`): giliran dari pesan klien
+    dan dari meneruskan jawaban owner tidak lagi berjalan bersamaan.
+  - Balasan yang terkirim setelah pesan klien terakhir (balasan otomatis, jawaban owner, giliran lain) dicantumkan di
+    STATE dengan larangan mengulang isinya.
+  - Penjaga ulangan mengenali kalimat sejenis walau susunan katanya berbeda: penundaan harga ("harga … dikirim tim",
+    "harganya belum bisa saya sebutkan") dan "sudah saya tanyakan/teruskan ke tim" tidak dikirim lagi bila sudah ada di
+    3 pesan keluar terakhir.
+  - Prompt: kalimat pertama menjawab pertanyaan terakhir klien; satu pertanyaan per pesan; info yang sudah disampaikan
+    tidak diulang; pesanan lebih dari satu layanan dikerjakan satu per satu dengan urutan yang disebut sekali.
 - **Sapaan tidak diulang (2026-11-14, kasus Dell dan Ikaika):** pesan keluar terakhir dibaca ulang tepat sebelum kirim
   (balasan giliran lain yang terkirim setelah pesan klien ini tidak ada di riwayat giliran ini). Bila pesan keluar
   terakhir dalam 30 menit sudah dibuka sapaan (bot, sistem, atau sapaan otomatis WA Business dari HP), sapaan di awal
