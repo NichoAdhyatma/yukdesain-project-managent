@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
+import { UPDATE_TEMPLATES, applyTemplate, type UpdateTemplate } from "@/lib/projects/update-templates";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, AlertCircle, Loader2, Send, Eye, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -90,6 +91,14 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
       if (mutation.isError) mutation.reset();
       setter(v);
     };
+  }
+
+  // Template pesan dari owner (lib/projects/update-templates.ts): mengisi catatan; template file final sekaligus
+  // pindah ke kirim hasil akhir (100%).
+  function pickTemplate(template: UpdateTemplate) {
+    edit(setDescription)(applyTemplate(description, template.text));
+    if (template.final && !finalSubmitted) edit(changeProgress)("100");
+    requestAnimationFrame(() => descRef.current?.focus());
   }
 
   // Pindah antara update progres dan hasil akhir: file yang sudah diunggah beda kategori, jadi dikosongkan.
@@ -242,13 +251,32 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
           {finalMode ? "Catatan hasil akhir" : "Catatan"} <span className="text-destructive" aria-hidden>*</span>
           <span className="sr-only">(wajib)</span>
         </Label>
+        <div role="group" aria-labelledby={`${formId}-tpl`} className="space-y-1.5">
+          <p id={`${formId}-tpl`} className="text-xs text-muted-foreground">
+            Pakai template pesan:
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {UPDATE_TEMPLATES.filter((t) => !(t.final && finalSubmitted)).map((t) => (
+              <Button
+                key={t.id}
+                type="button"
+                variant="outline"
+                onClick={() => pickTemplate(t)}
+                disabled={mutation.isPending}
+                className="h-11 px-3 text-xs md:h-9"
+              >
+                {t.label}
+              </Button>
+            ))}
+          </div>
+        </div>
         <Textarea
           ref={descRef}
           id={`${formId}-desc`}
           value={description}
           onChange={(e) => edit(setDescription)(e.target.value)}
           placeholder={finalMode ? "Contoh: Logo final format AI, PNG, dan PDF." : "Contoh: Sketsa logo selesai, lanjut pilih warna."}
-          rows={4}
+          rows={6}
           required
           aria-invalid={triedSubmit && descMissing}
           aria-describedby={`${formId}-desc-help`}
