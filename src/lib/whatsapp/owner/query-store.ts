@@ -33,7 +33,7 @@ export function ownerQuestionText(p: { clientLabel: string; question: string }):
     `Klien: ${p.clientLabel}`,
     `Permintaan: ${p.question}`,
     "",
-    "Bisa dikerjakan? *Reply* pesan ini dengan *BISA* atau *TIDAK*, boleh tambah catatan (mis. harga khusus atau layanan yang dipakai).",
+    "*Reply* pesan ini dengan *BISA* atau *TIDAK* untuk permintaan di atas, boleh tambah catatan (mis. harga khusus atau layanan yang dipakai).",
   ].join("\n");
 }
 

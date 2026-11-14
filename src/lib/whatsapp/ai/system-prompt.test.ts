@@ -272,9 +272,21 @@ describe("tidak bertanya hal yang sama (2026-11-12, kasus Day dan Mif)", () => {
       ...base,
       ownerQueries: [{ question: "Minta ide konsep banner", status: "RELAYED", approved: true, note: "Minta nama brand, menu, ukuran" }],
     });
-    expect(state).toContain('Sudah dijawab tim dan sudah disampaikan ke klien: permintaan "Minta ide konsep banner": BISA dikerjakan');
+    expect(state).toContain('Sudah dijawab tim dan sudah disampaikan ke klien: permintaan "Minta ide konsep banner": BISA');
     expect(state).toContain("Jangan tanyakan ulang ke owner");
     expect(state).not.toContain("Sampaikan ke klien sekarang");
+  });
+
+  // Produksi 14 Nov (Ikaika): klien bertanya "kalau di bawah 35 item harganya turun?", owner menjawab "Tidak… harga
+  // sudah net" (harga tidak turun). Bot membaca "TIDAK bisa dikerjakan" lalu menolak seluruh order Poster Menu.
+  it("jawaban TIDAK hanya untuk hal yang ditanyakan, bukan menolak seluruh order", () => {
+    const state = buildStateBlock({
+      ...base,
+      ownerQueries: [{ question: "Apakah harga turun bila menu di bawah 35 item?", status: "ANSWERED", approved: false, note: "Harga sudah net" }],
+    });
+    expect(state).toContain('untuk permintaan "Apakah harga turun bila menu di bawah 35 item?": TIDAK');
+    expect(state).not.toContain("TIDAK bisa dikerjakan");
+    expect(state).toContain("TIDAK hanya berlaku untuk hal yang ditanyakan");
   });
 
   it("aturan: tidak ask_owner untuk hal yang sudah ditanyakan, tidak menagih pertanyaan yang sama berturut-turut", () => {

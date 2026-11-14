@@ -104,6 +104,13 @@ describe("parseKirimiPayload (docs/WHATSAPP_CHANNEL_KIRIMI.md)", () => {
       to: { waId: "628970000937", lid: null },
       body: "Siap kak, saya cek dulu ya",
       msgId: "3EB0FEDCBA9876543210AB",
+      hasMedia: false,
+    });
+    // Produksi 14 Nov (Mr.K4z): foto + keterangan dari HP admin tersimpan sebagai teks "red velvet" saja.
+    expect(parseKirimiPayload({ ...echo, mediaUrl: "https://cdn.kirimi.id/x.jpg", messageType: "image", message: "red velvet" }, null, now)).toMatchObject({
+      kind: "echo",
+      body: "red velvet",
+      hasMedia: true,
     });
     const viaLid = parseKirimiPayload({ ...echo, from: "123456789012345@lid" }, null, now);
     expect(viaLid).toMatchObject({ kind: "echo", to: { waId: null, lid: "123456789012345" } });

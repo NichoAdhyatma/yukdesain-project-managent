@@ -122,7 +122,9 @@ Cara kerja (`src/lib/whatsapp/phone-takeover.ts`):
     matikan pesan salam di aplikasi WA Business.
   - **Tepat satu chat aktif** → chat itu pindah ke HUMAN dan pesannya dicatat sebagai OUTBOUND
     (`wamid kirimi:phone:<msgId>`, `sentByBot: false`, label **Admin** di Inbox / Order WA, ikut dibaca AI setelah
-    chat dikembalikan ke bot). Foto/stiker dari HP dicatat sebagai "[Media dikirim dari HP admin]".
+    chat dikembalikan ke bot). Foto/stiker dari HP dicatat sebagai "[Media dikirim dari HP admin]"; keterangan fotonya ikut di belakang
+    penanda itu (2026-11-14, kasus Mr.K4z: foto berketerangan "red velvet" sempat tersimpan sebagai teks biasa, seolah
+    admin mengetik "red velvet").
   - **Lebih dari satu** → sistem tidak menebak. Owner menerima notifikasi "Balasan dari HP belum dicocokkan"
     (kejadian "Chat menunggu admin") berisi chat yang masih dipegang bot, lalu menekan **Ambil alih** di Inbox
     pada chat yang dibalas. Sejak 2026-11-11 (produksi 9–10 Nov: ±200 notifikasi per hari):

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DP_PLACEHOLDER, dropRepeatedSentences, stripDpMentions, PRICE_PLACEHOLDER, WA_TEXT_LIMIT, clampReply, mentionsPriceOrDeadline, stripPriceMentions } from "./reply-guard";
+import { DP_PLACEHOLDER, dropRepeatedSentences, stripDpMentions, PRICE_PLACEHOLDER, WA_TEXT_LIMIT, clampReply, mentionsPriceOrDeadline, stripPriceMentions, stripRepeatedGreeting } from "./reply-guard";
 
 describe("mentionsPriceOrDeadline", () => {
   it.each([
@@ -390,5 +390,47 @@ describe("penjaga harga/DP: nomor daftar bukan akhir kalimat", () => {
     const out = stripDpMentions("Rincian:\n1. DP 50%: Rp67.500\n2. Kirim bukti transfer di sini", ["67500"]).text;
     expect(out).toContain("2. Kirim bukti transfer di sini");
     expect(out).not.toMatch(/^1\.\s*$/m);
+  });
+});
+
+// Produksi 13 Nov 22:46 (Dell): dua pesan klien beruntun → dua balasan bot yang sama-sama dibuka "Malam kak 😊", setelah
+// sapaan otomatis WA Business. Kalimat sapaan terlalu pendek untuk penjaga ulangan biasa.
+describe("stripRepeatedGreeting", () => {
+  const now = new Date("2026-11-13T15:46:22Z");
+  const secondsAgo = (s: number) => new Date(now.getTime() - s * 1000);
+  const greeted = { body: "Malam kak 😊 Ada yang bisa kami bantu? Kakak lagi butuh desain apa nih?", createdAt: secondsAgo(8) };
+
+  it("sapaan diulang dalam 30 menit → sapaannya dibuang, isi tetap", () => {
+    expect(stripRepeatedGreeting("Malam kak 😊 Daftar harga lengkap bisa dilihat di katalog ya kak.", greeted, now)).toBe(
+      "Daftar harga lengkap bisa dilihat di katalog ya kak.",
+    );
+  });
+
+  it("berbagai bentuk sapaan", () => {
+    expect(stripRepeatedGreeting("Halo kak, selamat siang 😊 Untuk Poster Menu harganya Rp135.000.", greeted, now)).toBe("Untuk Poster Menu harganya Rp135.000.");
+    expect(stripRepeatedGreeting("Pagi kak! untuk menu minuman bisa ya.", greeted, now)).toBe("Untuk menu minuman bisa ya.");
+    expect(stripRepeatedGreeting("Selamat malam kak 🙏\nAda yang bisa dibantu?", greeted, now)).toBe("Ada yang bisa dibantu?");
+  });
+
+  it("pesan keluar sebelumnya juga sapaan dari HP (WA Business) → tetap dibuang", () => {
+    const waGreeting = { body: "Hai Kak, selamat datang di Yukdesainn! 👋 Untuk pricelist, cek katalog ya.", createdAt: secondsAgo(10) };
+    expect(stripRepeatedGreeting("Malam kak 😊 Mau desain apa nih?", waGreeting, now)).toBe("Mau desain apa nih?");
+  });
+
+  it("sapaan terakhir lebih dari 30 menit lalu / pesan sebelumnya bukan sapaan → apa adanya", () => {
+    const old = { ...greeted, createdAt: secondsAgo(31 * 60) };
+    expect(stripRepeatedGreeting("Malam kak 😊 Mau desain apa?", old, now)).toBe("Malam kak 😊 Mau desain apa?");
+    const plain = { body: "Oke kak, 19 item ya.", createdAt: secondsAgo(10) };
+    expect(stripRepeatedGreeting("Malam kak 😊 Mau desain apa?", plain, now)).toBe("Malam kak 😊 Mau desain apa?");
+    expect(stripRepeatedGreeting("Malam kak 😊 Mau desain apa?", null, now)).toBe("Malam kak 😊 Mau desain apa?");
+  });
+
+  it("bukan sapaan walau diawali kata waktu", () => {
+    expect(stripRepeatedGreeting("Malam ini kami kirim hasilnya ya kak.", greeted, now)).toBe("Malam ini kami kirim hasilnya ya kak.");
+    expect(stripRepeatedGreeting("Siang tadi file sudah kami cek.", greeted, now)).toBe("Siang tadi file sudah kami cek.");
+  });
+
+  it("balasan yang hanya berisi sapaan ulang → kosong (tidak dikirim)", () => {
+    expect(stripRepeatedGreeting("Malam kak 😊", greeted, now)).toBe("");
   });
 });

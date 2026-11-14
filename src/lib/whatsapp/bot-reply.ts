@@ -5,7 +5,7 @@ import { maskPhone } from "./phone";
 import type { MediaRejection } from "./media";
 import { runAiTurn } from "./ai/conversation";
 import { callAdmin, lastOutboundIs } from "./handoff";
-import { clampReply, dropRepeatedSentences, sanitizeReply, stripDpMentions, stripPriceMentions } from "./ai/reply-guard";
+import { clampReply, dropRepeatedSentences, sanitizeReply, stripDpMentions, stripPriceMentions, stripRepeatedGreeting } from "./ai/reply-guard";
 import { AiProviderError, isTechnicalFailure } from "@/lib/ai/client";
 
 // Bagian bersama bot: kirim/simpan balasan dan satu giliran AI → balasan ke klien.
@@ -159,7 +159,19 @@ export async function replyWithAi(
       ? stripDpMentions(sanitized.text, turn.dpGuardNumbers ?? []).text
       : sanitized.text;
   // Kalimat yang sudah dikirim di pesan sebelumnya tidak diulang; balasan yang seluruhnya ulangan tidak dikirim.
-  const fresh = dropRepeatedSentences(safe, turn.recentOutbound ?? []);
+  // Pesan keluar terakhir dibaca ulang sekarang: balasan giliran lain yang terkirim setelah pesan klien ini tidak ada
+  // di riwayat giliran ini (Dell 13 Nov: dua balasan sama-sama dibuka "Malam kak 😊").
+  const latestOut = await prisma.waMessage.findFirst({
+    where: { conversationId: conversation.id, direction: "OUTBOUND", NOT: { deliveryStatus: "failed" } },
+    orderBy: { createdAt: "desc" },
+    select: { body: true, createdAt: true },
+  });
+  const recent = turn.recentOutbound ?? [];
+  const recentWithLatest = latestOut?.body && !recent.includes(latestOut.body) ? [latestOut.body, ...recent] : recent;
+  const fresh = stripRepeatedGreeting(
+    dropRepeatedSentences(safe, recentWithLatest),
+    latestOut?.createdAt ? { body: latestOut.body, createdAt: latestOut.createdAt } : null,
+  );
   if (!fresh) console.warn(`[whatsapp] balasan AI seluruhnya ulangan untuk ${maskPhone(conversation.waId)}, tidak dikirim`);
   // Admin mengambil alih (HP / Ambil alih / portal) atau nomor diblokir selama AI berpikir → balasan tidak dikirim
   // (produksi 2026-11-13, Ketut Edy: balasan bot terkirim 23 detik setelah admin membalas dari HP).

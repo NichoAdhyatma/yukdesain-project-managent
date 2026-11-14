@@ -404,3 +404,13 @@ describe("loadOpenQueries", () => {
     expect(rows.map((r) => r.id)).toEqual(["q_old", "q_mid", "q_new"]);
   });
 });
+
+// Produksi 14 Nov 08:20 (Ikaika): "Tidak, mohon maaf belum bisa, untuk harga sudah net" atas pertanyaan "harga turun
+// bila di bawah 35 item?" dicatat sebagai "Tidak bisa melayani pesanan ini", lalu bot klien menolak order.
+describe("arti BISA/TIDAK dari owner", () => {
+  it("prompt: TIDAK hanya untuk hal yang ditanyakan; jangan menulis pesanan tidak dilayani kecuali owner bilang", () => {
+    const prompt = buildOwnerSystemPrompt("YukDesain");
+    expect(prompt).toContain("approved=false hanya berarti hal yang ditanyakan tidak bisa");
+    expect(prompt).toContain("jangan menulis bahwa pesanan tidak dilayani kecuali owner menyatakannya");
+  });
+});

@@ -242,6 +242,13 @@ const rupiah = formatRupiah;
 const tanggal = formatTanggal;
 
 /** Blok STATE: sumber kebenaran untuk AI, dibangun dari DB setiap pesan (§10.3). */
+/**
+ * Jawaban TIDAK dari tim berlaku untuk hal yang ditanyakan saja (produksi 14 Nov, Ikaika: "harga turun bila di bawah 35
+ * item?" dijawab "Tidak, harga sudah net", lalu bot menolak seluruh order Poster Menu).
+ */
+const NO_ONLY_FOR_QUESTION =
+  " TIDAK hanya berlaku untuk hal yang ditanyakan; order dan layanan katalog tetap bisa dilanjutkan seperti biasa, kecuali catatan tim menyatakan order ini tidak dilayani.";
+
 export function buildStateBlock(input: StateInput): string {
   const lines = ["STATE (dari sistem, bukan dari klien):"];
   const { intake } = input;
@@ -283,11 +290,11 @@ export function buildStateBlock(input: StateInput): string {
       lines.push(`- Menunggu jawaban tim untuk permintaan ${JSON.stringify(q.question)}. Jangan menjanjikan apa pun soal permintaan ini.`);
     } else if (q.status === "RELAYED") {
       lines.push(
-        `- Sudah dijawab tim dan sudah disampaikan ke klien: permintaan ${JSON.stringify(q.question)}: ${q.approved ? "BISA dikerjakan" : "TIDAK bisa dikerjakan"}.${note} Jangan tanyakan ulang ke owner; pakai jawaban ini.`,
+        `- Sudah dijawab tim dan sudah disampaikan ke klien: permintaan ${JSON.stringify(q.question)}: ${q.approved ? "BISA" : "TIDAK"}.${note}${q.approved ? "" : NO_ONLY_FOR_QUESTION} Jangan tanyakan ulang ke owner; pakai jawaban ini.`,
       );
     } else {
       lines.push(
-        `- Jawaban tim (belum disampaikan ke klien) untuk permintaan ${JSON.stringify(q.question)}: ${q.approved ? "BISA dikerjakan" : "TIDAK bisa dikerjakan"}.${note} Sampaikan ke klien sekarang.`,
+        `- Jawaban tim (belum disampaikan ke klien) untuk permintaan ${JSON.stringify(q.question)}: ${q.approved ? "BISA" : "TIDAK"}.${note}${q.approved ? "" : NO_ONLY_FOR_QUESTION} Sampaikan ke klien sekarang.`,
       );
     }
   }

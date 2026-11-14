@@ -31,7 +31,14 @@ export function resetPhoneReplyNotifyThrottle(): void {
 export const PHONE_REPLY_WAMID_PREFIX = "kirimi:phone:";
 export const PHONE_MEDIA_BODY = "[Media dikirim dari HP admin]";
 
-export type KirimiEcho = { to: { waId: string | null; lid: string | null }; body: string; msgId: string | null };
+/** Teks pantulan yang disimpan: media ditandai, keterangannya ikut (bukan seolah admin mengetik keterangan itu). */
+function echoBody(echo: KirimiEcho): string {
+  const caption = echo.body.trim();
+  if (echo.hasMedia) return caption ? `${PHONE_MEDIA_BODY} ${caption}` : PHONE_MEDIA_BODY;
+  return caption ? echo.body : PHONE_MEDIA_BODY;
+}
+
+export type KirimiEcho = { to: { waId: string | null; lid: string | null }; body: string; msgId: string | null; hasMedia?: boolean };
 
 export type EchoOutcome =
   | "bot_off"
@@ -190,7 +197,7 @@ export async function handleKirimiEcho(echo: KirimiEcho, now = new Date()): Prom
         wamid,
         direction: "OUTBOUND",
         type: "text",
-        body: normalize(echo.body) ? echo.body : PHONE_MEDIA_BODY,
+        body: echoBody(echo),
         sentByBot: false,
         deliveryStatus: "sent",
         createdAt: now,
