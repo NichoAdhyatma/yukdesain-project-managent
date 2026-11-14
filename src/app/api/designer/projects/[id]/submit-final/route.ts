@@ -52,20 +52,35 @@ export async function POST(
     if (!description) {
       return NextResponse.json({ error: "Catatan hasil akhir wajib diisi" }, { status: 400 });
     }
-    // Hasil akhir = file yang dibuka klien setelah lunas (2026-11-12); tanpa file tidak ada yang dikirim.
-    if (attachmentIds.length === 0) {
-      return NextResponse.json({ error: "Lampirkan minimal satu file hasil akhir" }, { status: 400 });
+    // Cara kirim (2026-11-14): FILE = unggah (default form lama), LINK = Google Drive dll., WHATSAPP = dikirim langsung
+    // lewat WhatsApp. Ketiganya terkunci untuk klien sampai lunas (link baru terlihat, file WA baru dikirim).
+    const method = body?.method === undefined ? "FILE" : body.method;
+    if (method !== "FILE" && method !== "LINK" && method !== "WHATSAPP") {
+      return NextResponse.json({ error: "Cara kirim hasil akhir tidak dikenal" }, { status: 400 });
     }
-    // Hanya file yang diunggah ke project ini dan belum tertaut ke update lain.
+    let finalLink: string | null = null;
     const ownFiles = { id: { in: attachmentIds }, projectId: id, updateId: null };
-    if ((await prisma.attachment.count({ where: ownFiles })) !== attachmentIds.length) {
-      return NextResponse.json({ error: "File hasil akhir tidak ditemukan untuk project ini. Unggah ulang filenya." }, { status: 400 });
+    if (method === "FILE") {
+      // Hasil akhir = file yang dibuka klien setelah lunas (2026-11-12); tanpa file tidak ada yang dikirim.
+      if (attachmentIds.length === 0) {
+        return NextResponse.json({ error: "Lampirkan minimal satu file hasil akhir" }, { status: 400 });
+      }
+      // Hanya file yang diunggah ke project ini dan belum tertaut ke update lain.
+      if ((await prisma.attachment.count({ where: ownFiles })) !== attachmentIds.length) {
+        return NextResponse.json({ error: "File hasil akhir tidak ditemukan untuk project ini. Unggah ulang filenya." }, { status: 400 });
+      }
+    }
+    if (method === "LINK") {
+      finalLink = parseFinalLink(body?.link);
+      if (!finalLink) {
+        return NextResponse.json({ error: "Isi link file final yang lengkap, diawali https://" }, { status: 400 });
+      }
     }
 
     // Project baru SELESAI setelah klien menyetujui, bukan di sini.
     const updated = await prisma.project.update({
       where: { id },
-      data: { finalSubmittedAt: new Date() },
+      data: { finalSubmittedAt: new Date(), finalDelivery: method, finalLink },
     });
 
     // Tampil di riwayat portal sebagai update 100%; klien dikabari lewat FINAL_SUBMITTED, bukan kabar progres.
@@ -79,7 +94,7 @@ export async function POST(
       },
     });
 
-    await prisma.attachment.updateMany({ where: ownFiles, data: { category: "FINAL" } });
+    if (method === "FILE") await prisma.attachment.updateMany({ where: ownFiles, data: { category: "FINAL" } });
 
     after(() => notifyClientProjectEvent(id, { kind: "FINAL_SUBMITTED" }).then(() => undefined));
 
@@ -90,5 +105,18 @@ export async function POST(
       { error: "Failed to submit final work" },
       { status: 500 }
     );
+  }
+}
+
+/** Link file final: hanya URL http(s) lengkap (bukan javascript:/data:), dibersihkan dari spasi. */
+function parseFinalLink(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const text = value.trim();
+  if (text.length > 2000) return null;
+  try {
+    const url = new URL(text);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
+  } catch {
+    return null;
   }
 }

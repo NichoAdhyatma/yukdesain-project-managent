@@ -1387,6 +1387,28 @@ function FinalApprovalCard({
 
 // ── File final: terkunci sampai lunas (2026-11-12) ────────────────────────────
 
+/** Teks kartu file final per cara kirim (2026-11-14): file di portal, link Drive, atau lewat WhatsApp. */
+const FINAL_COPY: Record<"FILE" | "LINK" | "WHATSAPP", { title: string; lockedTitle: string; afterPaid: string; lockedForTeam: string }> = {
+  FILE: {
+    title: "File final",
+    lockedTitle: "Bisa diunduh setelah pelunasan",
+    afterPaid: "file di bawah langsung bisa diunduh dari halaman ini.",
+    lockedForTeam: "File final terbuka untuk klien setelah pelunasan.",
+  },
+  LINK: {
+    title: "Link file final",
+    lockedTitle: "Link bisa dibuka setelah pelunasan",
+    afterPaid: "link file final langsung muncul di halaman ini.",
+    lockedForTeam: "Link file final terbuka untuk klien setelah pelunasan.",
+  },
+  WHATSAPP: {
+    title: "File final lewat WhatsApp",
+    lockedTitle: "Dikirim lewat WhatsApp setelah pelunasan",
+    afterPaid: "file final kami kirim lewat WhatsApp.",
+    lockedForTeam: "File final dikirim ke klien lewat WhatsApp setelah pelunasan.",
+  },
+};
+
 function FinalFilesCard({
   project,
   formatCurrency,
@@ -1396,8 +1418,8 @@ function FinalFilesCard({
   formatCurrency: (n: number) => string;
   onPaymentClick: () => void;
 }) {
-  const { locked, files } = project.finalFiles;
-  if (!project.finalSubmittedAt || files.length === 0) return null;
+  const { locked, files, method, link } = project.finalFiles;
+  if (!project.finalSubmittedAt || (method === "FILE" && files.length === 0)) return null;
   const balance = Math.max(0, project.agreedPrice - project.paidAmount);
   const approvedAt = project.finalApprovedAt;
 
@@ -1414,25 +1436,53 @@ function FinalFilesCard({
       <CardHeader className="pb-2">
         <CardTitle role="heading" aria-level={3} className="flex items-center gap-2 text-base">
           {locked ? <Lock className="h-4 w-4" aria-hidden /> : <Download className="h-4 w-4" aria-hidden />}
-          File final
+          {FINAL_COPY[method].title}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {locked && project.financeHidden && (
-          <p role="note" className="text-sm text-muted-foreground">File final terbuka untuk klien setelah pelunasan.</p>
+          <p role="note" className="text-sm text-muted-foreground">{FINAL_COPY[method].lockedForTeam}</p>
         )}
         {locked && !project.financeHidden && (
           <div
             role="note"
             className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
           >
-            <p className="text-sm font-medium">Bisa diunduh setelah pelunasan</p>
+            <p className="text-sm font-medium">{FINAL_COPY[method].lockedTitle}</p>
             <p className="mt-0.5 text-xs">
               Sisa pelunasan <span className="font-semibold tabular-nums">{formatCurrency(balance)}</span>. Setelah admin
-              mencatat pelunasan, file di bawah langsung bisa diunduh dari halaman ini.
+              mencatat pelunasan, {FINAL_COPY[method].afterPaid}
             </p>
           </div>
         )}
+        {method === "LINK" &&
+          (link ? (
+            <a
+              href={link}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2 text-sm text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <ExternalLink className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+              <span className="min-w-0">
+                <span className="block font-medium">Buka link file final</span>
+                <span className="block break-all text-xs text-muted-foreground">{link}</span>
+              </span>
+            </a>
+          ) : (
+            <div className="flex min-h-11 items-center gap-2 rounded-lg border border-dashed px-3 text-sm text-muted-foreground">
+              <Lock className="h-4 w-4 shrink-0" aria-hidden />
+              <span>Link file final</span>
+              <span className="sr-only">, terkunci sampai pelunasan</span>
+            </div>
+          ))}
+        {method === "WHATSAPP" && !locked && (
+          <p className="flex items-start gap-2 text-sm text-muted-foreground">
+            <MessageCircle className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
+            File final dikirim tim kami lewat WhatsApp. Belum masuk? Balas chat WhatsApp kami ya.
+          </p>
+        )}
+        {method === "FILE" && (
         <ul className="space-y-2">
           {files.map((f) => (
             <li key={f.id}>
@@ -1458,6 +1508,7 @@ function FinalFilesCard({
             </li>
           ))}
         </ul>
+        )}
         {locked && !project.financeHidden && (
           <Button type="button" variant="outline" className="h-11 w-full rounded-xl" onClick={onPaymentClick}>
             <CreditCard className="mr-2 h-4 w-4" aria-hidden />

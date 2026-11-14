@@ -295,7 +295,7 @@ describe("GET /api/client-links/[token]", () => {
               attachments: [{ id: "att_2", filename: "ref.jpg", storageKey: "revision/proj_1/ref.jpg" }],
             },
           ],
-          finalFiles: { locked: true, files: [{ id: "att_f", filename: "logo-final.ai", storageKey: null }] },
+          finalFiles: { locked: true, method: "FILE", link: null, files: [{ id: "att_f", filename: "logo-final.ai", storageKey: null }] },
           financeHidden: false,
         },
       },
@@ -319,7 +319,7 @@ describe("GET /api/client-links/[token]", () => {
   it("final files: locked without storageKey until PAID, downloadable once PAID", async () => {
     mocks.db.clientLink.findUnique.mockResolvedValue(rawLink("LOCKED"));
     const locked = await (await call()).json();
-    expect(locked.link.project.finalFiles).toEqual({ locked: true, files: [{ id: "att_f", filename: "logo-final.ai", storageKey: null }] });
+    expect(locked.link.project.finalFiles).toEqual({ locked: true, method: "FILE", link: null, files: [{ id: "att_f", filename: "logo-final.ai", storageKey: null }] });
     expect(JSON.stringify(locked)).not.toContain("final/proj_1/logo-final.ai");
 
     const paid = rawLink("LOCKED");
@@ -329,6 +329,8 @@ describe("GET /api/client-links/[token]", () => {
     const open = await (await call()).json();
     expect(open.link.project.finalFiles).toEqual({
       locked: false,
+      method: "FILE",
+      link: null,
       files: [{ id: "att_f", filename: "logo-final.ai", storageKey: "final/proj_1/logo-final.ai" }],
     });
   });

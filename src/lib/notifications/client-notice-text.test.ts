@@ -79,3 +79,42 @@ describe("file final terkunci sampai lunas (2026-11-12)", () => {
     );
   });
 });
+
+// Permintaan owner 14 Nov: desainer bisa mengirim hasil akhir sebagai file, link (Drive), atau lewat WhatsApp langsung;
+// bila belum lunas klien diingatkan melunasi dulu.
+describe("cara kirim hasil akhir: link Drive / WhatsApp", () => {
+  const accounts = [{ name: "BCA", accountNumber: "2141358555", accountHolder: "Mochammad Rizal" }];
+
+  it("link, belum lunas: link file final terbuka setelah pelunasan", () => {
+    const text = clientNoticeText("FINAL_SUBMITTED", { ...base, delivery: "LINK", balance: 200000, accounts });
+    expect(text).toContain("Link file final bisa dibuka setelah pelunasan *Rp200.000*.");
+    expect(text).not.toContain("bisa diunduh");
+  });
+
+  it("link, sudah lunas: buka link filenya di portal", () => {
+    expect(clientNoticeText("FINAL_SUBMITTED", { ...base, delivery: "LINK", balance: 0 })).toContain(
+      "Cek, setujui, dan buka link filenya lewat link ini: https://p/x",
+    );
+  });
+
+  it("WhatsApp, belum lunas: file dikirim lewat WhatsApp setelah pelunasan + cara bayar", () => {
+    const text = clientNoticeText("FINAL_SUBMITTED", { ...base, delivery: "WHATSAPP", balance: 200000, accounts });
+    expect(text).toContain("Cek dan setujui lewat link ini: https://p/x");
+    expect(text).toContain("File final kami kirim lewat WhatsApp setelah pelunasan *Rp200.000*.");
+    expect(text).toContain("• BCA 2141358555 a.n. Mochammad Rizal");
+  });
+
+  it("WhatsApp, sudah lunas: file dikirim lewat chat ini", () => {
+    const text = clientNoticeText("FINAL_SUBMITTED", { ...base, delivery: "WHATSAPP", balance: 0 });
+    expect(text).toContain("Cek dan setujui lewat link ini: https://p/x");
+    expect(text).toContain("File finalnya kami kirim lewat WhatsApp di chat ini ya kak.");
+    expect(text).not.toContain("pelunasan");
+  });
+
+  it("pelunasan diterima: link terbuka / file segera dikirim lewat WhatsApp", () => {
+    expect(clientNoticeText("FILES_UNLOCKED", { ...base, delivery: "LINK" })).toContain("Link file final sudah bisa dibuka.");
+    const wa = clientNoticeText("FILES_UNLOCKED", { ...base, delivery: "WHATSAPP" });
+    expect(wa).toContain("File final segera kami kirim lewat WhatsApp di chat ini.");
+    expect(wa).not.toContain("Unduh di sini");
+  });
+});

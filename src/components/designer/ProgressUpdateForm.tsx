@@ -23,7 +23,26 @@ import type { DesignerProject } from "./types";
 /** Batas file hasil akhir (sama dengan dialog hasil akhir sebelumnya). */
 const MAX_FINAL_FILES = 10;
 
-type Payload = { description: string; progress: number | null; attachmentIds: string[]; notifyClient: boolean; final: boolean };
+type Payload = {
+  description: string;
+  progress: number | null;
+  attachmentIds: string[];
+  notifyClient: boolean;
+  final: boolean;
+  delivery?: FinalDelivery;
+  link?: string;
+};
+
+type FinalDelivery = "FILE" | "LINK" | "WHATSAPP";
+
+// Cara kirim hasil akhir (permintaan owner 2026-11-14). Semuanya terkunci untuk klien sampai lunas.
+const DELIVERY_OPTIONS: { value: FinalDelivery; label: string; hint: string }[] = [
+  { value: "FILE", label: "Unggah file", hint: "Klien unduh di portal setelah lunas." },
+  { value: "LINK", label: "Link (Google Drive)", hint: "Link terbuka untuk klien setelah lunas." },
+  { value: "WHATSAPP", label: "Lewat WhatsApp", hint: "File dikirim dari HP; klien diingatkan melunasi dulu bila belum lunas." },
+];
+
+const LINK_PATTERN = /^https?:\/\/\S+$/i;
 
 /** Progres 100% sebelum hasil akhir dikirim = kirim hasil akhir (satu kabar ke klien, file final terkunci sampai lunas). */
 const isFinalStep = (progress: string, finalSubmitted: boolean) => {
@@ -45,13 +64,16 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
   const [sent, setSent] = useState<{ progress: number | null; notified: boolean; final: boolean } | null>(null);
   // Kabari klien lewat WhatsApp (docs/CLIENT_NOTIFICATIONS.md); default menyala, desainer bisa mematikan per update.
   const [notifyClient, setNotifyClient] = useState(true);
+  const [delivery, setDelivery] = useState<FinalDelivery>("FILE");
+  const [finalLink, setFinalLink] = useState("");
 
   const parsed = parseProgress(progress);
   const progressValue = parsed.ok ? parsed.value : null;
   const descMissing = description.trim() === "";
   const finalSubmitted = !!project.finalSubmittedAt;
   const finalMode = isFinalStep(progress, finalSubmitted);
-  const filesMissing = finalMode && files.length === 0;
+  const filesMissing = finalMode && delivery === "FILE" && files.length === 0;
+  const linkInvalid = finalMode && delivery === "LINK" && !LINK_PATTERN.test(finalLink.trim());
 
   const mutation = useMutation({
     mutationFn: async (payload: Payload) => {
@@ -59,7 +81,12 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
         ? await fetch(`/api/designer/projects/${project.id}/submit-final`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ description: payload.description, attachmentIds: payload.attachmentIds }),
+            body: JSON.stringify({
+              description: payload.description,
+              method: payload.delivery ?? "FILE",
+              attachmentIds: payload.delivery === "FILE" ? payload.attachmentIds : [],
+              link: payload.delivery === "LINK" ? payload.link : undefined,
+            }),
           })
         : await fetch(`/api/designer/projects/${project.id}/updates`, {
             method: "POST",
@@ -77,6 +104,8 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
       setSent({ progress: payload.progress, notified: payload.notifyClient, final: payload.final });
       setDescription("");
       setFiles([]);
+      setFinalLink("");
+      setDelivery("FILE");
       setTriedSubmit(false);
       toast(payload.final ? "Hasil akhir terkirim ke klien" : "Update progres terkirim", "success");
     },
@@ -115,13 +144,15 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
       descRef.current?.focus();
       return;
     }
-    if (filesMissing) return;
+    if (filesMissing || linkInvalid) return;
     mutation.mutate({
       description: description.trim(),
       progress: parsed.value,
       attachmentIds: files.map((f) => f.id),
       notifyClient: finalMode ? true : notifyClient,
       final: finalMode,
+      delivery: finalMode ? delivery : undefined,
+      link: finalMode && delivery === "LINK" ? finalLink.trim() : undefined,
     });
   }
 
@@ -238,8 +269,8 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
           <div className="space-y-1">
             <p className="font-medium">Progres 100% dikirim sebagai hasil akhir</p>
             <p className="text-xs">
-              Klien dikabari sekali lewat WhatsApp, lalu bisa approve atau minta revisi. File hasil akhir baru bisa diunduh
-              klien setelah pelunasan dicatat admin. Hasil akhir hanya dikirim sekali, pastikan sudah final.
+              Klien dikabari sekali lewat WhatsApp, lalu bisa approve atau minta revisi. File atau link hasil akhir baru
+              terbuka untuk klien setelah pelunasan dicatat admin. Hasil akhir hanya dikirim sekali, pastikan sudah final.
             </p>
           </div>
         </div>
@@ -297,6 +328,75 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
       </div>
 
       {/* 3. Lampiran */}
+      {finalMode && (
+        <fieldset className="space-y-2">
+          <legend className="text-sm font-medium">Cara kirim hasil akhir</legend>
+          <div className="grid gap-2">
+            {DELIVERY_OPTIONS.map((option) => (
+              <label
+                key={option.value}
+                className={cn(
+                  "flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border p-3 text-sm has-[:focus-visible]:ring-3 has-[:focus-visible]:ring-ring/50",
+                  delivery === option.value && "border-primary bg-primary/5",
+                )}
+              >
+                <input
+                  type="radio"
+                  name={`${formId}-delivery`}
+                  value={option.value}
+                  checked={delivery === option.value}
+                  onChange={() => edit(setDelivery)(option.value)}
+                  disabled={mutation.isPending}
+                  className="mt-0.5 accent-primary"
+                />
+                <span>
+                  <span className="block font-medium">{option.label}</span>
+                  <span className="block text-xs text-muted-foreground">{option.hint}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      {finalMode && delivery === "LINK" && (
+        <div className="space-y-2">
+          <Label htmlFor={`${formId}-link`}>
+            Link file final <span className="text-destructive" aria-hidden>*</span>
+            <span className="sr-only">(wajib)</span>
+          </Label>
+          <Input
+            id={`${formId}-link`}
+            type="url"
+            inputMode="url"
+            value={finalLink}
+            onChange={(e) => edit(setFinalLink)(e.target.value)}
+            placeholder="https://drive.google.com/…"
+            aria-invalid={triedSubmit && linkInvalid}
+            aria-describedby={`${formId}-link-help`}
+            disabled={mutation.isPending}
+            className="h-11 text-base md:h-9 md:text-sm"
+          />
+          <p
+            id={`${formId}-link-help`}
+            className={cn("text-xs", triedSubmit && linkInvalid ? "text-destructive" : "text-muted-foreground")}
+            role={triedSubmit && linkInvalid ? "alert" : undefined}
+          >
+            {triedSubmit && linkInvalid
+              ? "Isi link lengkap, diawali https://"
+              : "Pastikan akses link dibuka untuk siapa saja yang punya link."}
+          </p>
+        </div>
+      )}
+
+      {finalMode && delivery === "WHATSAPP" && (
+        <p role="note" className="rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+          Kirim file final ke klien lewat WhatsApp dari HP admin. Bila klien belum lunas, kabar ke klien berisi sisa
+          pelunasan dan file dikirim setelah lunas.
+        </p>
+      )}
+
+      {(!finalMode || delivery === "FILE") && (
       <div className="space-y-2">
         <ProgressUploader
           key={finalMode ? "final" : "progress"}
@@ -320,6 +420,7 @@ export function ProgressUpdateForm({ project }: { project: DesignerProject }) {
           </p>
         )}
       </div>
+      )}
 
       {/* 4. Kabari klien (hasil akhir selalu dikabarkan) */}
       {!finalMode && (
