@@ -17,3 +17,11 @@ describe("briefFieldLabel", () => {
     expect(briefFieldLabel("menu_style", "")).toBe("Menu Style");
   });
 });
+
+// Label daftar menu tampil "Menu Items" (bahasa Inggris, dari kunci mentah) di brief internal.
+describe("label daftar JSON", () => {
+  it("daftar menu dan referensi berlabel bahasa Indonesia", () => {
+    expect(briefFieldLabel("menu_items")).toBe("Daftar Menu");
+    expect(briefFieldLabel("kopi_menu_items")).toBe("Menu Kopi");
+  });
+});

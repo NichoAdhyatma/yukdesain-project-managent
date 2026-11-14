@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { OPERATIONS_DEFAULTS } from "@/lib/studio-operations";
-import { buildStateBlock, buildSystemPrompt, renderServiceCatalog, type StateInput } from "./system-prompt";
+import { BRIEF_FIELD_DESCRIPTIONS, buildStateBlock, buildSystemPrompt, renderServiceCatalog, type StateInput } from "./system-prompt";
 
 const quoted = (dpPercent: number): StateInput => ({
   intake: {
@@ -414,5 +414,14 @@ describe("memanggil admin tanpa memindahkan chat (keputusan owner 13 Nov)", () =
     const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
     expect(prompt).toContain("chat tetap kamu layani sampai admin membalas sendiri");
     expect(prompt).toContain('bukan "chat sudah dialihkan"');
+  });
+});
+
+// Produksi 13 Nov (Nurul): instruksi "Hanya nasi goreng, mie goreng, dan minuman dari gambar referensi" tersimpan sebagai
+// item menu, sehingga di brief desainer tampil seperti nama menu.
+describe("deskripsi field daftar menu", () => {
+  it("hanya item menu nyata; instruksi pilih/buang menu lewat add_brief_note", () => {
+    expect(BRIEF_FIELD_DESCRIPTIONS.menu_items_json).toContain("hanya item menu yang dijual");
+    expect(BRIEF_FIELD_DESCRIPTIONS.menu_items_json).toContain("add_brief_note");
   });
 });

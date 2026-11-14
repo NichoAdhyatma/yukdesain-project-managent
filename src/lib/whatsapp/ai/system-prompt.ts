@@ -179,7 +179,8 @@ export const BRIEF_FIELD_DESCRIPTIONS: Record<BriefKey, string> = {
   variant_count: "jumlah varian desain (angka pasti)",
   pose_count: "jumlah pose maskot (angka pasti)",
   brand_logo_url: "logo brand (gambar)",
-  menu_items_json: "daftar item menu: [{id, name, price?, caption?}]",
+  menu_items_json:
+    "daftar item menu: [{id, name, price?, caption?}]; hanya item menu yang dijual. Instruksi seperti \"hanya nasi goreng\" atau \"menu lain tidak dimasukkan\" dicatat dengan add_brief_note, bukan sebagai item",
   box_references_json: "referensi box (gambar)",
   cart_references_json: "referensi gerobak (gambar)",
   cart_sides_json: "sisi gerobak: [{sideName, dimensions, textBrief, imageBrief?}]",

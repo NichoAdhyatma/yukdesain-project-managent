@@ -23,6 +23,12 @@ export const BRIEF_FIELD_LABELS: Record<string, string> = {
   page_count: "Jumlah Halaman",
   variant_count: "Jumlah Varian",
   pose_count: "Jumlah Pose",
+  // Daftar JSON (label dari kunci tanpa akhiran _json)
+  menu_items: "Daftar Menu",
+  kopi_menu_items: "Menu Kopi",
+  box_references: "Referensi Box",
+  cart_references: "Referensi Gerobak",
+  cart_sides: "Sisi Gerobak",
 };
 
 /**
