@@ -315,3 +315,55 @@ export function stripRepeatedGreeting(text: string, lastOutbound: { body: string
   const rest = text.slice(match[0].length).trim();
   return rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : "";
 }
+
+// Gema pesan klien (produksi 14 Nov, Icha): bot mengulang semua isi pesan klien sebelum bilang dicatat. Owner: cukup
+// "Oke kak, noted, sudah saya catat ya". Konfirmasi yang mengulang isi diganti konfirmasi singkat; kalimat lain yang
+// hanya menggemakan pesan klien dibuang. Kalimat berisi angka/harga, pertanyaan, dan ringkasan (daftar) tidak disentuh.
+const ACK_WORDS = /\b(catat|dicatat|catatan|tercatat|masuk|noted|diterima|simpan|disimpan|teruskan|diteruskan)\b/i;
+const ECHO_STOPWORDS = new Set([
+  "yang", "dengan", "untuk", "sudah", "nanti", "juga", "boleh", "kalau", "tetap", "bisa", "akan", "saja", "aja", "pakai",
+  "pake", "seperti", "kayak", "biar", "supaya", "dari", "pada", "atau", "tapi", "tidak", "enggak", "nggak", "mau", "ingin",
+  "kakak", "siap", "oke", "okee", "baik", "untuk", "dalam", "jadi", "lagi", "sama", "ini", "itu", "nya", "ya",
+]);
+export const SHORT_ACK = "Siap kak, sudah saya catat ya";
+const MIN_SHARED_FOR_ACK = 3;
+const ECHO_RATIO = 0.6;
+const TRAILING_EMOJI = /(\p{Extended_Pictographic}[\u{FE0F}\u{200D}\p{Extended_Pictographic}]*\s*)+$/u;
+
+const contentWordsOf = (text: string) => wordsOf(text).filter((w) => w.length >= 4 && !ECHO_STOPWORDS.has(w) && !/\d/.test(w));
+
+export function trimClientEcho(text: string, clientText: string): string {
+  const client = new Set(contentWordsOf(clientText));
+  if (client.size === 0) return text;
+  if (text.split("\n").filter((l) => LIST_MARKER.test(l)).length >= SUMMARY_MIN_LIST_LINES) return text;
+
+  const emoji = text.trim().match(TRAILING_EMOJI)?.[0].trim() ?? "";
+  let acked = false;
+  let changed = false;
+  const parts: string[] = [];
+  for (const part of text.split(SENTENCE_SPLIT)) {
+    const sentence = part.trim();
+    if (!sentence || sentence.endsWith("?") || keyWordsOf(sentence).length > 0) {
+      parts.push(part);
+      continue;
+    }
+    const words = contentWordsOf(sentence);
+    const shared = words.filter((w) => client.has(w)).length;
+    if (ACK_WORDS.test(sentence) && shared >= MIN_SHARED_FOR_ACK) {
+      changed = true;
+      if (!acked) parts.push(`${SHORT_ACK}.`);
+      acked = true;
+      continue;
+    }
+    if (words.length >= 3 && shared / words.length >= ECHO_RATIO) {
+      changed = true;
+      continue;
+    }
+    parts.push(part);
+  }
+  if (!changed) return text;
+  const result = parts.map((p) => p.trim()).filter(Boolean).join(" ").trim();
+  // Konfirmasi singkat yang berdiri sendiri: tanpa titik, emoji penutup balasan asli dipertahankan.
+  if (result === `${SHORT_ACK}.`) return emoji ? `${SHORT_ACK} ${emoji}` : SHORT_ACK;
+  return result;
+}

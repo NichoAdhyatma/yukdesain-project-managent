@@ -456,3 +456,14 @@ describe("to the point (kasus Ranie 2026-11-14)", () => {
     expect(prompt).toContain("Klien memesan lebih dari satu layanan sekaligus");
   });
 });
+
+// Produksi 14 Nov (Icha): konfirmasi mengulang semua isi pesan klien. Owner: "Oke kak, noted, sudah saya catat ya".
+describe("konfirmasi singkat tanpa mengulang isi pesan klien", () => {
+  const prompt = buildSystemPrompt("YukDesain", null, OPERATIONS_DEFAULTS, []);
+
+  it("aturan dan contoh konfirmasi singkat", () => {
+    expect(prompt).toContain("Saat mencatat info dari klien, konfirmasi cukup singkat");
+    expect(prompt).toContain("jangan mengulang isi pesan klien");
+    expect(prompt).toContain("Siap kak, sudah saya catat ya");
+  });
+});

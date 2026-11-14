@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DP_PLACEHOLDER, dropRepeatedSentences, stripDpMentions, PRICE_PLACEHOLDER, WA_TEXT_LIMIT, clampReply, mentionsPriceOrDeadline, stripPriceMentions, stripRepeatedGreeting } from "./reply-guard";
+import { DP_PLACEHOLDER, dropRepeatedSentences, stripDpMentions, PRICE_PLACEHOLDER, WA_TEXT_LIMIT, clampReply, mentionsPriceOrDeadline, stripPriceMentions, stripRepeatedGreeting, trimClientEcho } from "./reply-guard";
 
 describe("mentionsPriceOrDeadline", () => {
   it.each([
@@ -462,5 +462,40 @@ describe("dropRepeatedSentences: kalimat sejenis (harga dikirim tim / ditanyakan
     expect(dropRepeatedSentences(sent, ["Halo kak, mau desain apa?"])).toBe(sent);
     const later = "Untuk spanduk, nominalnya disampaikan tim setelah ukuran jelas ya.";
     expect(dropRepeatedSentences(later, ["a b c d e", "f g h i j", "k l m n o", sent])).toBe(later);
+  });
+});
+
+// Produksi 14 Nov (Icha): klien "Warna banner nya putih pink tp pink nya jgn yg menyala ya ka. Pokoknya ad foto2 daun gt
+// deh ad warna lain selain putih pink gpp ka asal bagus dn menarik" dibalas dengan mengulang semua isinya. Owner: cukup
+// "Oke kak, noted, sudah saya catat ya".
+describe("trimClientEcho", () => {
+  const client =
+    "Warna banner nya putih pink tp pink nya jgn yg menyala ya ka. Pokoknya ad foto2 daun gt deh ad warna lain selain putih pink gpp ka asal bagus dn menarik";
+
+  it("konfirmasi yang mengulang isi klien → konfirmasi singkat; gema lainnya dibuang", () => {
+    const reply =
+      "Oke kak Icha, warna putih pink dengan pink yang tidak menyala dan foto daun sudah masuk catatan untuk tim desain ya. Warna lain juga boleh kalau hasilnya tetap bagus dan menarik 😊";
+    expect(trimClientEcho(reply, client)).toBe("Siap kak, sudah saya catat ya 😊");
+  });
+
+  it("konfirmasi singkat + pertanyaan berikutnya: pertanyaan tetap", () => {
+    const reply = "Oke kak, warna putih pink dan foto daun sudah saya catat ya. Ukuran banner-nya mau berapa kak?";
+    expect(trimClientEcho(reply, client)).toBe("Siap kak, sudah saya catat ya. Ukuran banner-nya mau berapa kak?");
+  });
+
+  it("jawaban yang wajar memakai kata klien (harga, angka) tidak disentuh", () => {
+    const q = "Kalau poster menu harganya berapa ka?";
+    const reply = "Poster Menu harganya *Rp135.000* sudah termasuk 35 item ya kak.";
+    expect(trimClientEcho(reply, q)).toBe(reply);
+  });
+
+  it("ringkasan brief (daftar) tidak disentuh", () => {
+    const summary = "Ini ringkasannya kak:\n1. Warna: putih pink, pink tidak menyala\n2. Foto: daun\n3. Ukuran: A3\n\nSudah sesuai?";
+    expect(trimClientEcho(summary, client)).toBe(summary);
+  });
+
+  it("balasan tanpa kaitan dengan pesan klien tidak disentuh", () => {
+    const reply = "Siap kak, file final kami kirim lewat WhatsApp setelah pelunasan ya.";
+    expect(trimClientEcho(reply, client)).toBe(reply);
   });
 });

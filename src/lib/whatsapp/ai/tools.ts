@@ -373,7 +373,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
 
   async add_brief_note(ctx, input) {
     const result = await addClientBriefNote(ctx.conversationId, input.note);
-    return result.ok ? ok({ ...result, message: "Tambahan sudah masuk brief; sampaikan singkat ke klien." }) : fail(result.error);
+    return result.ok ? ok({ ...result, message: "Tambahan sudah masuk brief; konfirmasi singkat ke klien (mis. \"Siap kak, sudah saya catat ya\") tanpa mengulang isinya." }) : fail(result.error);
   },
 
   async attach_image_to_brief(ctx, input) {
@@ -382,7 +382,7 @@ const handlers: { [K in ToolName]: (ctx: ToolContext, input: z.infer<(typeof inp
     if (!intake) {
       const result = await attachImageToProjectBrief(ctx.conversationId, input.message_id, input.caption);
       return result.ok
-        ? ok({ ...result, attached: true, message: "Gambar masuk referensi brief project dan terlihat oleh desainer; sampaikan singkat ke klien." })
+        ? ok({ ...result, attached: true, message: "Gambar masuk referensi brief project dan terlihat oleh desainer; konfirmasi singkat ke klien tanpa mengulang isinya." })
         : fail(result.error);
     }
     const serviceCode = intake.service?.code;
