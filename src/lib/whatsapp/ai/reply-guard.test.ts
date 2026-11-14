@@ -434,3 +434,33 @@ describe("stripRepeatedGreeting", () => {
     expect(stripRepeatedGreeting("Malam kak 😊", greeted, now)).toBe("");
   });
 });
+
+// Produksi 14 Nov (Ranie, "pusing konsultasinya"): "harga spanduk dikirim tim setelah brief lengkap" muncul 4x dengan
+// susunan kata berbeda, dan "sudah saya tanyakan ke tim" berulang. Kalimat sejenis tidak dikirim lagi bila sudah ada di
+// 3 pesan keluar terakhir.
+describe("dropRepeatedSentences: kalimat sejenis (harga dikirim tim / ditanyakan ke tim)", () => {
+  const sent = "Siap kak, untuk Poster Menu harganya Rp135.000. Untuk Spanduk Ads, harga dan lama pengerjaannya nanti dikirim tim setelah brief lengkap ya kak.";
+
+  it("penundaan harga dengan kata lain → dibuang", () => {
+    const next = "Kak, untuk Spanduk Ads harganya belum bisa saya sebutkan. Nanti dikirim tim setelah brief lengkap ya. Ukuran ketiga spanduknya apa kak?";
+    expect(dropRepeatedSentences(next, [sent])).toBe("Ukuran ketiga spanduknya apa kak?");
+  });
+
+  it("placeholder penjaga harga yang sama di pesan sebelumnya → dibuang", () => {
+    const placeholder = "Soal harga dan lama pengerjaannya nanti dikirim tim setelah brief-nya lengkap ya kak.";
+    expect(dropRepeatedSentences(`Kak, jasa company profile bisa kami kerjakan. ${placeholder}`, [sent])).toBe("Kak, jasa company profile bisa kami kerjakan.");
+  });
+
+  it("'sudah saya tanyakan ke tim' diulang → dibuang", () => {
+    const asked = "Sudah saya tanyakan ke tim, nanti dikabari paling lama 24 jam.";
+    expect(dropRepeatedSentences("Siap kak, permintaannya sudah saya teruskan ke tim, ditunggu ya. Menunya ada berapa item kak?", [asked])).toBe(
+      "Menunya ada berapa item kak?",
+    );
+  });
+
+  it("pertama kali disebut → tetap; sudah lewat 3 pesan → boleh disebut lagi", () => {
+    expect(dropRepeatedSentences(sent, ["Halo kak, mau desain apa?"])).toBe(sent);
+    const later = "Untuk spanduk, nominalnya disampaikan tim setelah ukuran jelas ya.";
+    expect(dropRepeatedSentences(later, ["a b c d e", "f g h i j", "k l m n o", sent])).toBe(later);
+  });
+});

@@ -110,7 +110,13 @@ async function buildMessages(rows: HistoryRow[]) {
   return { messages, pendingImageIds: pending.map((r) => r.id) };
 }
 
-async function buildState(conversationId: string, pendingImageMessageIds: string[], services: BotService[], rows: HistoryRow[]) {
+async function buildState(
+  conversationId: string,
+  pendingImageMessageIds: string[],
+  services: BotService[],
+  rows: HistoryRow[],
+  sentAfterLastClientMessage: string[] = [],
+) {
   const intake = await prisma.waIntake.findFirst({
     where: { conversationId, status: { in: ACTIVE_INTAKE_STATUSES } },
     orderBy: { createdAt: "desc" },
@@ -154,6 +160,7 @@ async function buildState(conversationId: string, pendingImageMessageIds: string
       : [];
   return buildStateBlock({
     now: new Date(),
+    sentAfterLastClientMessage,
     intake: intake && {
       status: intake.status,
       service: intake.service,
@@ -222,6 +229,14 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
     })
   ).reverse();
 
+  // Balasan yang terkirim setelah pesan klien ini (balasan otomatis, jawaban owner, giliran lain): tidak ada di riwayat
+  // di atas, dicantumkan di STATE supaya isinya tidak diulang (Ranie 14 Nov).
+  const sentAfter = await prisma.waMessage.findMany({
+    where: { conversationId: params.conversationId, direction: "OUTBOUND", createdAt: { gt: current.createdAt }, NOT: { deliveryStatus: "failed" } },
+    orderBy: { createdAt: "asc" },
+    take: 3,
+    select: { body: true },
+  });
   const { messages, pendingImageIds } = await buildMessages(rows);
   const studio = await getStudioSettings();
   // Uji bot memakai draft panduan owner; klien sungguhan hanya versi terbit.
@@ -237,7 +252,7 @@ export async function runAiTurn(params: { conversationId: string; messageId: str
   // dan didukung semua model Claude.
   const system: Anthropic.TextBlockParam[] = [
     { type: "text", text: buildSystemPrompt(studio.name, guide, ops, services), cache_control: { type: "ephemeral" } },
-    { type: "text", text: await buildState(params.conversationId, pendingImageIds, services, rows) },
+    { type: "text", text: await buildState(params.conversationId, pendingImageIds, services, rows, sentAfter.map((m) => m.body)) },
   ];
 
   const toolsCalled: string[] = [];

@@ -219,14 +219,24 @@ const sameWords = (a: string, b: string) => {
  * Kalimat pembuka ("…infokan:") ikut dibuang bila daftar di bawahnya habis. Ringkasan bernomor dikirim utuh.
  * Hasil kosong = seluruh balasan ulangan.
  */
+// Kalimat sejenis yang tidak perlu diulang walau susunan katanya berbeda (produksi 14 Nov, Ranie: "harga spanduk
+// dikirim tim setelah brief lengkap" 4x dalam 7 menit, "sudah saya tanyakan ke tim" berulang). Dijaga 3 pesan terakhir.
+const REPEAT_FAMILIES = [
+  /(harga|biaya|total|nominal)[^.!?\n]{0,80}(dikirim|disampaikan|dikabari|menyusul|diinfokan)[^.!?\n]{0,40}\btim\b|(harga|biaya)[^.!?\n]{0,40}belum bisa (saya )?(sebut|hitung|pastikan)|dikirim tim setelah brief/i,
+  /(sudah|saya|aku|kami)[^.!?\n]{0,25}(tanyakan|teruskan|sampaikan)[^.!?\n]{0,15}(ke|kepada) tim|dikabari[^.!?\n]{0,25}(paling lama|paling lambat|maksimal) 24 jam/i,
+];
+const FAMILY_WINDOW = 3;
+
 export function dropRepeatedSentences(text: string, recent: string[]): string {
   if (recent.length === 0) return text;
   if (text.split("\n").filter((l) => LIST_MARKER.test(l)).length >= SUMMARY_MIN_LIST_LINES) return text;
   const lastSentences = sentencesOf(recent[0]);
   const allSentences = recent.flatMap(sentencesOf);
+  const recentFamilies = REPEAT_FAMILIES.filter((family) => recent.slice(0, FAMILY_WINDOW).some((m) => family.test(m)));
   const kept = text.split(SENTENCE_SPLIT).filter((part) => {
     const sentence = part.replace(LIST_MARKER, "").trim();
     if (!sentence || sentence.endsWith(":")) return true;
+    if (recentFamilies.some((family) => family.test(sentence))) return false;
     if (sentence.endsWith("?")) return !lastSentences.some((prev) => sameWords(sentence, prev));
     return !allSentences.some((prev) => isRepeatOf(sentence, prev));
   });
