@@ -491,6 +491,10 @@ Wajib memuat:
   contoh desain masuk referensi. Sebelumnya foto daftar menu tercatat sebagai "Logo Brand".
 - **Penjaga harga/DP:** nomor daftar di awal baris ("6. …") bukan akhir kalimat; baris bernomor yang dibuang hilang
   utuh (ringkasan Mr.K4z sempat jadi "6.7. Sisa foto produk").
+- **Sapaan tidak diulang (2026-11-14, kasus Dell dan Ikaika):** pesan keluar terakhir dibaca ulang tepat sebelum kirim
+  (balasan giliran lain yang terkirim setelah pesan klien ini tidak ada di riwayat giliran ini). Bila pesan keluar
+  terakhir dalam 30 menit sudah dibuka sapaan (bot, sistem, atau sapaan otomatis WA Business dari HP), sapaan di awal
+  balasan baru dibuang (`stripRepeatedGreeting`); kata waktu yang bukan sapaan ("Malam ini kami kirim") tidak dibuang.
 - **Admin mengambil alih saat AI berpikir (2026-11-13, kasus Ketut Edy):** sebelum balasan AI dikirim, mode chat dibaca
   ulang. Chat yang sudah pindah ke mode admin (balasan dari HP, Ambil alih, balasan portal) atau nomor yang diblokir
   tidak menerima balasan itu. Sebelumnya balasan bot tetap terkirim 23 detik setelah admin membalas dari HP.

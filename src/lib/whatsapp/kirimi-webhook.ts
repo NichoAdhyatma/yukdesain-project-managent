@@ -37,7 +37,7 @@ function unwrap(body: KirimiPayload): Obj {
 export type ParsedKirimi =
   | { kind: "message"; device: string | null; message: InboundMessage; lid: string | null }
   /** Pesan keluar dari perangkat (pantulan balasan bot, atau admin mengetik di HP). `to` = nomor 62… atau LID lawan bicara. */
-  | { kind: "echo"; device: string | null; to: { waId: string | null; lid: string | null }; body: string; msgId: string | null }
+  | { kind: "echo"; device: string | null; to: { waId: string | null; lid: string | null }; body: string; msgId: string | null; hasMedia: boolean }
   | { kind: "ignored"; reason: "not_message_event" | "from_me" | "group" | "empty" | "invalid_sender" | "lid" };
 
 /** Angka LID dari "123…@lid"; `plain` = field yang memang berisi LID (originLid dikirim sebagai angka polos). */
@@ -80,6 +80,8 @@ export function parseKirimiPayload(body: KirimiPayload, eventHeader: string | nu
       to: { waId: validWaId, lid },
       body: echoText,
       msgId: str(pick(m, ["msgId", "msg_id", "message_id", "messageId", "key.id"])).trim() || null,
+      // Foto/dokumen dari HP admin: `message` hanya keterangannya (Mr.K4z 14 Nov: tersimpan sebagai teks "red velvet").
+      hasMedia: str(pick(m, ["media_url", "mediaUrl", "media.url", "url", "file_url", "fileUrl", "image.url", "image_url"])).trim() !== "",
     };
   }
 

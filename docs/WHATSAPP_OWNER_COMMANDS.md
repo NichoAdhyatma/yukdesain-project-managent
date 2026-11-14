@@ -50,6 +50,11 @@ diskon Rp50.000, biaya express 50%). Bot tetap tidak boleh menyebut harga layana
    permintaan, lalu bilang ke klien: "Kami cek dulu ke tim ya kak."
 2. Server mengirim pertanyaan ke **semua nomor owner**: "Klien Sari (6281****7890) minta desain kemasan sachet
    kopi, 3 varian. Bisa? Balas pesan ini dengan *BISA* atau *TIDAK* + catatan."
+   Sejak 2026-11-14 kalimat penutupnya: "*Reply* pesan ini dengan *BISA* atau *TIDAK* untuk permintaan di atas…"
+   (bukan "Bisa dikerjakan?"). Jawaban TIDAK berlaku untuk hal yang ditanyakan saja: kasus Ikaika, "harga turun bila di
+   bawah 35 item?" dijawab "Tidak, harga sudah net", dicatat sebagai "tidak bisa melayani pesanan" dan bot klien menolak
+   seluruh order. Asisten owner kini menulis catatan sesuai maksud owner, dan STATE bot klien menulis "TIDAK hanya
+   berlaku untuk hal yang ditanyakan; order dan layanan katalog tetap bisa dilanjutkan".
    - Dalam 24 jam sejak owner terakhir chat ke bot → teks biasa. Di luar itu → **template baru**
      `yd_konfirmasi_owner` (harus diajukan ke Meta, kategori Utility).
 3. Owner membalas (sebaiknya dengan *reply* ke pesan itu; jika tidak dan ada beberapa pertanyaan terbuka, bot

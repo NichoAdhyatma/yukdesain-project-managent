@@ -107,6 +107,19 @@ describe("handleInboundMessage", () => {
     expect(api.sendText).not.toHaveBeenCalled();
   });
 
+  // Produksi 13 Nov 22:46 (Dell): balasan pertama ("Malam kak 😊 Ada yang bisa kami bantu?") terkirim sesaat setelah
+  // pesan kedua klien masuk, sehingga tidak ada di riwayat giliran kedua; balasan kedua kembali dibuka "Malam kak 😊".
+  it("pesan keluar terakhir dibaca ulang saat kirim: sapaan yang sama tidak diulang", async () => {
+    givenMessage("text");
+    db.waMessage.findFirst.mockImplementation(async (args: { where?: { direction?: string } }) =>
+      args?.where?.direction === "OUTBOUND" ? { body: "Malam kak 😊 Ada yang bisa kami bantu?", createdAt: new Date() } : null,
+    );
+    aiReply("Malam kak 😊 Daftar harga lengkap ada di katalog profil kami ya kak.", null);
+    await handleInboundMessage("msg_1");
+    db.waMessage.findFirst.mockReset();
+    expect(sentBodies()).toEqual(["Daftar harga lengkap ada di katalog profil kami ya kak."]);
+  });
+
   it("nomor diblokir selama AI berpikir → balasan bot tidak dikirim", async () => {
     givenMessage("text");
     db.waConversation.findUnique.mockResolvedValueOnce({ mode: "BOT", blockedAt: new Date() });

@@ -285,3 +285,23 @@ export function sanitizeReply(text: string): SanitizedReply {
   if (out.length < 15) return { text: "", rejected: true, changed: true, reason: "too_short" };
   return { text: out, rejected: false, changed: out !== text.trim() };
 }
+
+// Sapaan pembuka ("Malam kak 😊", "Halo kak, selamat siang!"). Kata waktu yang bukan sapaan ("Malam ini kami kirim")
+// tidak cocok karena sapaan harus diakhiri tanda baca, emoji, atau baris baru.
+const GREETING_START =
+  /^\s*(?:halo|hallo|hai|hi|hello|(?:selamat\s+)?(?:pagi|siang|sore|malam))(?:\s+(?:juga|kak|kakak|ka|min))*(?:\s*,?\s*(?:selamat\s+)?(?:pagi|siang|sore|malam)(?:\s+(?:juga|kak|kakak|ka))*)?(?=\s*(?:[!.,]|\p{Extended_Pictographic}|\n|$))[\s!.,]*(?:[\p{Extended_Pictographic}️‍]+[\s!.,]*)*/iu;
+const GREETING_WINDOW_MS = 30 * 60_000;
+
+/**
+ * Sapaan yang diulang dalam 30 menit dibuang dari awal balasan (produksi 13 Nov 22:46, Dell: dua pesan klien beruntun
+ * → dua balasan bot sama-sama dibuka "Malam kak 😊", setelah sapaan otomatis WA Business). `lastOutbound` = pesan keluar
+ * terakhir ke klien ini (bot, sistem, atau HP admin).
+ */
+export function stripRepeatedGreeting(text: string, lastOutbound: { body: string; createdAt: Date } | null, now = new Date()): string {
+  if (!lastOutbound || now.getTime() - lastOutbound.createdAt.getTime() > GREETING_WINDOW_MS) return text;
+  if (!GREETING_START.test(lastOutbound.body)) return text;
+  const match = text.match(GREETING_START);
+  if (!match || match[0].length === 0) return text;
+  const rest = text.slice(match[0].length).trim();
+  return rest ? rest.charAt(0).toUpperCase() + rest.slice(1) : "";
+}

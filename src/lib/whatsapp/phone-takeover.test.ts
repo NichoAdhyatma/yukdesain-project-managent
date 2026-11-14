@@ -140,6 +140,14 @@ describe("handleKirimiEcho: chat aktif + notifikasi (docs/WHATSAPP_CHANNEL_KIRIM
     expect(db.waMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ body: PHONE_MEDIA_BODY }) });
   });
 
+  // Produksi 14 Nov (Mr.K4z): foto berketerangan dari HP admin tersimpan sebagai teks biasa "red velvet", sehingga
+  // riwayat chat (dan bot) membacanya seolah admin mengetik "red velvet".
+  it("media berketerangan dari HP dicatat dengan penanda media + keterangannya", async () => {
+    db.waConversation.findMany.mockResolvedValue([conv("c1")]);
+    await handleKirimiEcho({ ...echo("red velvet"), hasMedia: true }, now);
+    expect(db.waMessage.create).toHaveBeenCalledWith({ data: expect.objectContaining({ body: `${PHONE_MEDIA_BODY} red velvet` }) });
+  });
+
   it("Balas otomatis portal mati (mis. Agen AI Kirimi yang membalas) → pantulan diabaikan, tanpa mode admin / notifikasi", async () => {
     db.studioSettings.findUnique.mockResolvedValue({ waBotEnabled: false });
     db.waConversation.findMany.mockResolvedValue([conv("c1"), conv("c2")]);
