@@ -39,7 +39,9 @@ import { toast } from "@/components/ui/toast";
 import { pdf } from "@react-pdf/renderer";
 import { saveAs } from "file-saver";
 import { ReceiptPDF } from "@/components/invoice/ReceiptPDF";
-import { ImageViewer } from "@/components/ui/image-viewer";
+import { ImageViewer, ImageViewerGroup, ViewableImage } from "@/components/ui/image-viewer";
+import { LatestResultCard } from "@/components/client-portal/LatestResultCard";
+import { isImageFile, pickLatestResult } from "@/lib/client-portal/latest-result";
 import { SubmitProgressOverlay } from "@/components/ui/submit-progress-overlay";
 import { revisionQuotaRemaining } from "@/lib/revisions/quota";
 import { CLIENT_PROJECT_STATUS, workProgressPercent } from "@/lib/client-portal/project-progress";
@@ -352,7 +354,7 @@ function QuickActionCards({ project, paymentPct, remainingQuota, isQuotaExhauste
               <span className="text-2xl font-bold text-foreground tabular-nums">{remainingQuota}</span>
               <span className="text-sm text-muted-foreground">dari {project.revisionQuota}x tersisa</span>
             </div>
-            <p className="text-xs text-muted-foreground">Pakai tombol Minta revisi di bawah bila perlu perubahan.</p>
+            <p className="text-xs text-muted-foreground">Pakai tombol Minta revisi bila perlu perubahan.</p>
           </>
         )}
       </div>
@@ -566,9 +568,22 @@ function TimelineDetail({ events }: { events: TimelineEvent[] }) {
                     </div>
                   </div>
                 )}
-                {event.attachments && event.attachments.length > 0 && (
+                {event.attachments && event.attachments.some((att) => isImageFile(att.filename)) && (
+                  <ImageViewerGroup className="mt-2 grid grid-cols-3 gap-2">
+                    {event.attachments.filter((att) => isImageFile(att.filename)).map((att) => (
+                      <div key={att.id} className="overflow-hidden rounded-md border bg-muted/40">
+                        <ViewableImage
+                          src={`${process.env.NEXT_PUBLIC_STORAGE_URL || ""}/${att.storageKey}`}
+                          alt={`${event.title} ${formatDateShort(event.date)}`}
+                          imgClassName="aspect-square w-full object-cover"
+                        />
+                      </div>
+                    ))}
+                  </ImageViewerGroup>
+                )}
+                {event.attachments && event.attachments.some((att) => !isImageFile(att.filename)) && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
-                    {event.attachments.map((att) => (
+                    {event.attachments.filter((att) => !isImageFile(att.filename)).map((att) => (
                       <a
                         key={att.id}
                         href={`${process.env.NEXT_PUBLIC_STORAGE_URL || ""}/${att.storageKey}`}
@@ -1483,7 +1498,7 @@ function RevisionForm({
   if (!isOpen) return null;
 
   return (
-    <Card>
+    <Card id="revision-form" className="scroll-mt-4">
       <CardHeader className="pb-3">
         <CardTitle role="heading" aria-level={3} className="text-base">Minta revisi</CardTitle>
       </CardHeader>
@@ -1970,6 +1985,13 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
   const revisions = project?.revisions || [];
   const remainingQuota = revisionQuotaRemaining(revisions.length, project.revisionQuota);
   const isQuotaExhausted = remainingQuota === 0;
+  // Hasil desain terbaru di atas halaman (permintaan owner 2026-11-14).
+  const latestResult = pickLatestResult(project.updates || []);
+  const openRevisionForm = () => {
+    setIsRevisionOpen(true);
+    // Form revisi baru dirender setelah state berubah; gulir setelah frame berikutnya.
+    requestAnimationFrame(() => scrollToSection("revision-form"));
+  };
   const latestInvoice = project?.invoices?.[0];
   const statusCfg = projectStatusConfig[project.status] || projectStatusConfig.DRAFT;
   const paymentCfg = paymentStatusConfig[project.paymentStatus] || paymentStatusConfig.UNPAID;
@@ -2027,6 +2049,16 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
           onPayment={() => goToTab("payment")}
           onFinal={() => scrollToSection(project.finalFiles.files.length > 0 && project.finalApprovedAt ? "final-files" : "final-actions")}
         />
+
+        {/* Hasil desain terbaru: tepat di bawah langkah berikutnya, sebelum riwayat (permintaan owner 2026-11-14) */}
+        {latestResult && (
+          <LatestResultCard
+            result={latestResult}
+            canRevise={!project.finalApprovedAt && !isQuotaExhausted}
+            remainingRevisions={remainingQuota}
+            onRevise={openRevisionForm}
+          />
+        )}
 
         {/* Quick Action Cards */}
         <QuickActionCards
@@ -2120,7 +2152,8 @@ export default function ClientTrackingPage({ params }: { params: Promise<{ token
         {/* Final Approval / Revision Actions */}
         <div id="final-actions" className="space-y-3 pt-2 scroll-mt-4">
           {/* Show revision button if not yet final approved, quota available, and has final submission */}
-          {!project.finalApprovedAt && !isQuotaExhausted && (
+          {/* Kartu hasil terbaru sudah punya tombol ini; di sini hanya bila belum ada gambar hasil. */}
+          {!project.finalApprovedAt && !isQuotaExhausted && !latestResult && (
             <Button
               variant="outline"
               className="h-11 w-full rounded-xl text-sm font-medium"
